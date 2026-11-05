@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — Quotes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0;background:#F4F3EE;color:#14161A;font-family:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.nav{color:#B7BCC5;text-decoration:none}.nav:hover{color:#FFFFFF;background:#1C2028}
+.sub{color:#5A5F68;text-decoration:none}.sub:hover{color:#14161A}
+.q:hover{border-color:#14161A !important}
+.go{background:#14161A;color:#fff;text-decoration:none}.go:hover{background:#2846E0;color:#fff}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F3EE">
+
+  <!-- SIDEBAR -->
+  <aside style="flex: 1 1 248px; max-width: 100%; background: #111318; color: #ECEDEF; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #FFFFFF; padding: 4px 8px">
+      <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-dasharray="47 16" stroke-linecap="round"></circle><circle cx="21.1" cy="6.9" r="2.8" fill="#8EA2FF"></circle></svg>
+      <span class="disp" style="font-size: 19px; font-weight: 700">Biz360X</span>
+    </a>
+    <button type="button" style="font: inherit; text-align: left; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; border: 1px solid #2A2E38; background: #181B22; color: #FFFFFF; cursor: pointer; min-height: 52px">
+      <span class="mono" style="width: 32px; height: 32px; border-radius: 8px; background: #2846E0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">NI</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 600">Nimbus Instruments</span><span style="font-size: 12px; color: #9CA3AF">Pvt Ltd · 3 GSTINs</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"></path></svg>
+    </button>
+    <nav aria-label="Workspace" style="display: flex; flex-direction: column; gap: 18px">
+      <sc-for list="{{navGroups}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span class="mono" style="font-size: 11px; color: #8A909A; padding: 0 10px 6px">{{g.h}}</span>
+          <sc-for list="{{g.items}}" as="n" hint-placeholder-count="4">
+            <a class="nav" href="{{n.href}}" aria-current="{{n.cur}}" style="display: flex; align-items: center; gap: 12px; padding: 0 10px; height: 40px; border-radius: 10px; font-size: 14px; {{n.st}}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.icon}}"></path></svg>
+              <span style="flex: 1">{{n.t}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <nav aria-label="Sales & Billing" style="background: #FFFFFF; border-bottom: 1px solid #E2E1DA; padding: 0 32px; display: flex; gap: 4px; flex-wrap: wrap">
+      <sc-for list="{{subnav}}" as="s" hint-placeholder-count="4">
+        <a class="sub" href="{{s.href}}" aria-current="{{s.cur}}" style="font-size: 14px; font-weight: 500; height: 52px; padding: 0 12px; display: inline-flex; align-items: center; {{s.st}}">{{s.t}}</a>
+      </sc-for>
+    </nav>
+    <main style="padding: 32px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box; max-width: 1400px; width: 100%">
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span class="mono" style="font-size: 12px; color: #5A5F68">QUOTES · 14 OPEN · ₹2.86 CR IN PLAY</span>
+          <h1 class="disp" style="margin: 0; font-size: 36px; font-weight: 700; max-width: 900px; text-wrap: balance">Coastal Grid accepted. Lot 2 is ready to bill.</h1>
+        </div>
+        <button type="button" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; border: 0; background: #14161A; color: #FFFFFF; cursor: pointer">New quote</button>
+      </div>
+
+      <section aria-label="Key numbers" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 12px">
+        <sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+          <div style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+            <span style="font-size: 13px; color: #5A5F68">{{k.l}}</span>
+            <span class="disp" style="font-size: 30px; font-weight: 700; line-height: 1; {{k.c}}">{{k.v}}</span>
+            <span style="font-size: 13px; color: #5A5F68">{{k.n}}</span>
+          </div>
+        </sc-for>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <!-- quote list -->
+        <section aria-label="Quotes" style="flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+          <sc-for list="{{quotes}}" as="q" hint-placeholder-count="6">
+            <button type="button" class="q" aria-pressed="{{q.on}}" onClick="{{q.pick}}" style="font: inherit; text-align: left; padding: 14px 16px; border-radius: 14px; cursor: pointer; display: flex; flex-direction: column; gap: 8px; color: #14161A; {{q.box}}">
+              <div style="display: flex; justify-content: space-between; gap: 10px; align-items: center">
+                <span class="mono" style="font-size: 13px; font-weight: 600">{{q.no}} · v{{q.v}}</span>
+                <span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; {{q.ps}}">{{q.s}}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; gap: 10px; align-items: baseline">
+                <span style="font-size: 15px; font-weight: 500">{{q.c}}</span>
+                <span class="mono" style="font-size: 14px; font-weight: 600; white-space: nowrap">{{q.amt}}</span>
+              </div>
+              <span style="font-size: 12px; color: #5A5F68">{{q.meta}}</span>
+            </button>
+          </sc-for>
+        </section>
+
+        <!-- detail -->
+        <section aria-label="Quote detail" style="flex: 2 1 560px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+          <div style="padding: 20px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-bottom: 1px solid #ECEBE5">
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span class="mono" style="font-size: 12px; color: #5A5F68">{{cur.no}} · VERSION {{cur.v}} · VALID TILL {{cur.valid}}</span>
+              <h2 class="disp" style="margin: 0; font-size: 26px; font-weight: 700">{{cur.c}}</h2>
+              <span style="font-size: 14px; color: #3D424B">{{cur.what}}</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px">
+              <span class="disp" style="font-size: 28px; font-weight: 700">{{cur.amt}}</span>
+              <span style="font-size: 12px; color: #5A5F68">{{cur.tax}}</span>
+            </div>
+          </div>
+
+          <!-- flow -->
+          <div style="padding: 20px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid #ECEBE5">
+            <h3 style="margin: 0; font-size: 14px; font-weight: 600">From quote to cash</h3>
+            <ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr)); gap: 8px">
+              <sc-for list="{{cur.flow}}" as="f" hint-placeholder-count="5">
+                <li style="display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; {{f.box}}">
+                  <span style="width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; {{f.dot}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{f.icon}}"></path></svg></span>
+                  <span style="font-size: 13px; font-weight: 600; line-height: 1.3">{{f.t}}</span>
+                  <span class="mono" style="font-size: 11px; color: #5A5F68">{{f.d}}</span>
+                </li>
+              </sc-for>
+            </ol>
+          </div>
+
+          <!-- lines -->
+          <div style="overflow-x: auto">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; min-width: 520px">
+              <thead><tr style="text-align: left; font-size: 12px; color: #5A5F68; background: #FAFAF7"><th scope="col" style="padding: 10px 20px; font-weight: 500">Item</th><th scope="col" style="padding: 10px 8px; font-weight: 500; text-align: right">Quoted</th><th scope="col" style="padding: 10px 8px; font-weight: 500; text-align: right">Invoiced</th><th scope="col" style="padding: 10px 20px; font-weight: 500; text-align: right">Left to bill</th></tr></thead>
+              <tbody>
+                <sc-for list="{{cur.lines}}" as="l" hint-placeholder-count="3">
+                  <tr style="border-top: 1px solid #ECEBE5">
+                    <td style="padding: 12px 20px"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">{{l.n}}</span><span class="mono" style="font-size: 12px; color: #5A5F68">{{l.rate}}</span></div></td>
+                    <td class="mono" style="padding: 12px 8px; text-align: right">{{l.q}}</td>
+                    <td class="mono" style="padding: 12px 8px; text-align: right; color: #3D424B">{{l.i}}</td>
+                    <td class="mono" style="padding: 12px 20px; text-align: right; font-weight: 600">{{l.left}}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="padding: 16px 20px; border-top: 1px solid #ECEBE5; display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+            <sc-if value="{{canConvert}}" hint-placeholder-val="{{ true }}">
+              <button type="button" onClick="{{convert}}" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; border: 0; background: #14161A; color: #FFFFFF; cursor: pointer">{{cur.cta}}</button>
+            </sc-if>
+            <sc-if value="{{converted}}" hint-placeholder-val="{{ false }}">
+              <span style="font-size: 14px; font-weight: 600; color: #14692F; display: inline-flex; gap: 6px; align-items: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Draft invoice created from the quote</span>
+              <a class="go" href="InvoiceEditor.dc.html" style="font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; display: inline-flex; align-items: center">Open draft invoice</a>
+            </sc-if>
+            <button type="button" style="font: inherit; font-size: 14px; height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #C9C8C0; background: #FFFFFF; color: #14161A; cursor: pointer">Compare versions</button>
+            <span style="font-size: 13px; color: {{cur.noteColor}}; flex: 1 1 260px">{{cur.note}}</span>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sel: 'q418', converted: {} }; }
+  renderVals() {
+    const active = 'Sales & Billing';
+    const I = {
+      today: 'M3 12l9-8 9 8M5 10v10h14V10', shield: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4',
+      spark: 'M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z', book: 'M4 4h16v16H4zM4 10h16M10 4v16',
+      bill: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3', gst: 'M7 3h10l2 4H5zM5 7v14h14V7M9 13h6M9 17h4',
+      people: 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0', legal: 'M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z',
+      folder: 'M3 7h6l2 2h10v11H3z', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'
+    };
+    const mk = (t, icon, href) => ({ t, icon, href, cur: t === active ? 'page' : 'false', st: t === active ? 'background:#22262F;color:#FFFFFF' : '' });
+    const sub = (t, href, on) => ({ t, href, cur: on ? 'page' : 'false', st: on ? 'color:#14161A;box-shadow:inset 0 -2px 0 #14161A' : '' });
+    const P = { due: 'background:#FDF0E1;color:#9A4508', ok: 'background:#E6F4EA;color:#14692F', wait: 'background:#E8ECFF;color:#1A31A8', idle: 'background:#EFEEE8;color:#3D424B', late: 'background:#14161A;color:#FFFFFF' };
+    const step = (t, d, s) => ({ t, d,
+      box: s === 'done' ? 'background:#FAFAF7;border:1px solid #ECEBE5' : s === 'now' ? 'background:#E8ECFF;border:1px solid #2846E0' : 'background:#FFFFFF;border:1px dashed #C9C8C0',
+      dot: s === 'done' ? 'background:#14692F;color:#FFFFFF' : s === 'now' ? 'background:#2846E0;color:#FFFFFF' : 'background:#E2E1DA;color:#3D424B',
+      icon: s === 'done' ? 'M5 12l5 5 9-10' : 'M12 7v5l3 2' });
+    const Q = [
+      { id: 'q418', no: 'Q-0418', v: 2, c: 'Coastal Grid Utilities', amt: '₹7,55,200', s: 'Accepted', ps: P.ok, meta: 'Accepted 21 Oct · PO CGU/PUR/2611', valid: '30 Nov',
+        what: '40 pressure transmitters with NABL certificates · delivered in 2 lots', tax: '₹6,40,000 + IGST ₹1,15,200',
+        flow: [step('Quote v2 accepted', '21 Oct', 'done'), step('Sales order SO-0233', '21 Oct', 'done'), step('Lot 1 · invoiced NI/KA/212', '29 Oct · ₹4,72,000', 'done'), step('Lot 2 dispatch', 'Ready 04 Nov', 'now'), step('Lot 2 invoice', '₹2,83,200', 'next')],
+        lines: [{ n: 'Pressure transmitter PT-400', rate: '₹14,500 each', q: '40', i: '25', left: '15' }, { n: 'NABL calibration certificate', rate: '₹1,200 each', q: '40', i: '25', left: '15' }, { n: 'Freight and transit insurance', rate: 'Per lot', q: '₹12,000', i: '₹7,500', left: '₹4,500' }],
+        cta: 'Invoice lot 2 · ₹2,83,200', note: 'Lot 2 quantities and freight are prefilled. The invoice references the PO automatically.', noteColor: '#3D424B', convertible: true },
+      { id: 'q427', no: 'Q-0427', v: 2, c: 'Deccan Motors', amt: '₹14,63,200', s: 'Negotiating', ps: P.wait, meta: 'v2 sent 26 Oct · 6% discount on v1', valid: '25 Nov',
+        what: 'EV battery-pack pressure sensors · pilot of 80 units', tax: '₹12,40,000 + CGST/SGST ₹2,23,200',
+        flow: [step('Quote v1 sent', '14 Oct', 'done'), step('Revised to v2', '26 Oct', 'done'), step('Customer review', 'Viewed 3 times', 'now'), step('Sales order', '—', 'next'), step('Invoice', '—', 'next')],
+        lines: [{ n: 'EV pressure sensor PS-EV2', rate: '₹14,100 each', q: '80', i: '0', left: '80' }, { n: 'Integration support', rate: '₹1,12,000 fixed', q: '1', i: '0', left: '1' }],
+        cta: '', note: 'Deccan Motors has ₹2.2 L overdue for 88 days. Consider an advance before accepting the order.', noteColor: '#9A4508', convertible: false },
+      { id: 'q425', no: 'Q-0425', v: 1, c: 'Sahyadri Agro Industries', amt: '₹3,96,480', s: 'Sent', ps: P.wait, meta: 'Sent 24 Oct · viewed twice', valid: '08 Nov',
+        what: 'Flow meters for cold-storage line', tax: '₹3,36,000 + CGST/SGST ₹60,480',
+        flow: [step('Quote sent', '24 Oct', 'done'), step('Customer review', 'Expires 08 Nov', 'now'), step('Sales order', '—', 'next'), step('Invoice', '—', 'next')],
+        lines: [{ n: 'Electromagnetic flow meter FM-50', rate: '₹28,000 each', q: '12', i: '0', left: '12' }],
+        cta: '', note: 'Sahyadri has ₹1.86 L overdue. Terms on this quote ask for 50% advance.', noteColor: '#9A4508', convertible: false },
+      { id: 'q421', no: 'Q-0421', v: 1, c: 'Vistara Labs', amt: '₹58,410', s: 'Accepted', ps: P.ok, meta: 'Accepted 27 Oct · email', valid: '15 Nov',
+        what: 'Calibration of 18 lab gauges', tax: '₹49,500 + CGST/SGST ₹8,910',
+        flow: [step('Quote accepted', '27 Oct', 'done'), step('Service performed', '28 Oct', 'done'), step('Invoice', 'Not started', 'now')],
+        lines: [{ n: 'Gauge calibration with certificate', rate: '₹2,750 each', q: '18', i: '0', left: '18' }],
+        cta: 'Convert to invoice', note: 'Service is complete — the invoice should be issued now.', noteColor: '#3D424B', convertible: true },
+      { id: 'q409', no: 'Q-0409', v: 1, c: 'Meridian Appliances Ltd', amt: '₹48.0 L / yr', s: 'Draft', ps: P.idle, meta: 'Price revision for 2027 · linked to contract renewal', valid: '—',
+        what: '2027 price list with raw-material escalation clause', tax: 'Annual estimate, before GST',
+        flow: [step('Draft', 'In progress', 'now'), step('Internal approval', '—', 'next'), step('Send with renewal notice', 'By 01 Nov', 'next')],
+        lines: [{ n: 'Revised price list · 14 SKUs', rate: '+6.5% average', q: '—', i: '—', left: '—' }],
+        cta: '', note: 'Send with the renegotiation notice before the 01 Nov notice window closes.', noteColor: '#9A4508', convertible: false },
+      { id: 'q398', no: 'Q-0398', v: 1, c: 'Konkan Water Board', amt: '₹6,79,680', s: 'Expired', ps: P.late, meta: 'Expired 20 Oct · no response', valid: '20 Oct',
+        what: 'Level transmitters for 4 pumping stations', tax: '₹5,76,000 + IGST ₹1,03,680',
+        flow: [step('Quote sent', '20 Sep', 'done'), step('Follow-ups', '2 sent', 'done'), step('Expired', '20 Oct', 'now')],
+        lines: [{ n: 'Level transmitter LT-200', rate: '₹24,000 each', q: '24', i: '0', left: '24' }],
+        cta: '', note: 'Re-issue as v2 with a fresh validity date, or mark as lost.', noteColor: '#3D424B', convertible: false }
+    ];
+    const cur = Q.find((q) => q.id === this.state.sel) || Q[0];
+    const isConv = !!this.state.converted[cur.id];
+    return {
+      navGroups: [
+        { h: 'WORKSPACE', items: [mk('Today', I.today, 'Dashboard.dc.html'), mk('Compliance', I.shield, 'Compliance.dc.html'), mk('Copilot', I.spark, 'Copilot.dc.html'), mk('Documents', I.folder, 'Documents.dc.html')] },
+        { h: 'RUN', items: [mk('Sales & Billing', I.bill, 'Billing.dc.html'), mk('Finance & Books', I.book, 'Finance.dc.html'), mk('GST & Tax', I.gst, 'GST.dc.html'), mk('Payroll & HR', I.people, 'Payroll.dc.html'), mk('Legal & Contracts', I.legal, 'Legal.dc.html')] },
+        { h: 'MORE', items: [mk('All modules', I.grid, 'Modules.dc.html')] },
+        { h: 'ADMIN', items: [mk('Group view', 'M3 21V9l6-4 6 4v12M15 21V13h6v8M7 13h4M7 17h4', 'Group.dc.html'), mk('Settings', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L10 21h4l.5-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z', 'Settings.dc.html')] }
+      ],
+      subnav: [sub('Invoices', 'Billing.dc.html', false), sub('Quotes', 'Quotes.dc.html', true), sub('Credit notes', 'CreditNote.dc.html', false), sub('New invoice', 'InvoiceEditor.dc.html', false)],
+      kpis: [
+        { l: 'Open quotes', v: '14', n: '₹2.86 Cr including GST', c: '' },
+        { l: 'Win rate · 90 days', v: '38%', n: '11 won of 29 decided', c: '' },
+        { l: 'Days to accept', v: '9', n: 'Median, last 90 days', c: '' },
+        { l: 'Expiring in 10 days', v: '3', n: 'Sahyadri on 08 Nov', c: 'color:#9A4508' }
+      ],
+      quotes: Q.map((q) => ({ ...q, v: String(q.v), on: q.id === cur.id, pick: () => this.setState({ sel: q.id }),
+        box: q.id === cur.id ? 'background:#FFFFFF;border:1.5px solid #14161A' : 'background:#FFFFFF;border:1px solid #E2E1DA' })),
+      cur: { ...cur, v: String(cur.v) },
+      canConvert: cur.convertible && !isConv, converted: isConv,
+      convert: () => this.setState({ converted: { ...this.state.converted, [cur.id]: true } })
+    };
+  }
+}
+</script>
+</body>
+</html>

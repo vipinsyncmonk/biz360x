@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — GST &amp; Tax</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0;background:#F4F3EE;color:#14161A;font-family:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.nav{color:#B7BCC5;text-decoration:none}.nav:hover{color:#FFFFFF;background:#1C2028}
+.cat:hover{border-color:#14161A !important}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F3EE">
+
+  <!-- SIDEBAR -->
+  <aside style="flex: 1 1 248px; max-width: 100%; background: #111318; color: #ECEDEF; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #FFFFFF; padding: 4px 8px">
+      <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-dasharray="47 16" stroke-linecap="round"></circle><circle cx="21.1" cy="6.9" r="2.8" fill="#8EA2FF"></circle></svg>
+      <span class="disp" style="font-size: 19px; font-weight: 700">Biz360X</span>
+    </a>
+    <button type="button" style="font: inherit; text-align: left; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; border: 1px solid #2A2E38; background: #181B22; color: #FFFFFF; cursor: pointer; min-height: 52px">
+      <span class="mono" style="width: 32px; height: 32px; border-radius: 8px; background: #2846E0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">NI</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 600">Nimbus Instruments</span><span style="font-size: 12px; color: #9CA3AF">Pvt Ltd · 3 GSTINs</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"></path></svg>
+    </button>
+    <nav aria-label="Workspace" style="display: flex; flex-direction: column; gap: 18px">
+      <sc-for list="{{navGroups}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span class="mono" style="font-size: 11px; color: #8A909A; padding: 0 10px 6px">{{g.h}}</span>
+          <sc-for list="{{g.items}}" as="n" hint-placeholder-count="4">
+            <a class="nav" href="{{n.href}}" aria-current="{{n.cur}}" style="display: flex; align-items: center; gap: 12px; padding: 0 10px; height: 40px; border-radius: 10px; font-size: 14px; {{n.st}}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.icon}}"></path></svg>
+              <span style="flex: 1">{{n.t}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <main style="padding: 32px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box; max-width: 1400px; width: 100%">
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span class="mono" style="font-size: 12px; color: #5A5F68">GST &amp; TAX · OCTOBER 2026 · MONTHLY FILER</span>
+          <h1 class="disp" style="margin: 0; font-size: 36px; font-weight: 700; max-width: 900px; text-wrap: balance">GSTR-1 is ready. GSTR-3B is waiting on ₹1.86 L of supplier credit.</h1>
+        </div>
+        <div role="group" aria-label="GSTIN" style="display: flex; gap: 4px; padding: 4px; background: #E9E8E1; border-radius: 12px; flex-wrap: wrap">
+          <sc-for list="{{gstinTabs}}" as="t" hint-placeholder-count="4">
+            <button type="button" aria-pressed="{{t.on}}" onClick="{{t.pick}}" style="font: inherit; font-size: 14px; height: 40px; padding: 0 14px; border: 0; border-radius: 9px; cursor: pointer; {{t.st}}">{{t.t}}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- return cards -->
+      <section aria-label="Returns" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 12px">
+        <sc-for list="{{returns}}" as="r" hint-placeholder-count="4">
+          <article style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+            <div style="display: flex; justify-content: space-between; gap: 8px; align-items: center">
+              <h2 style="margin: 0; font-size: 16px; font-weight: 600">{{r.t}}</h2>
+              <span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; {{r.ps}}">{{r.s}}</span>
+            </div>
+            <span class="disp" style="font-size: 28px; font-weight: 700; line-height: 1">{{r.v}}</span>
+            <span style="font-size: 13px; color: #3D424B; line-height: 1.45">{{r.d}}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid #ECEBE5">
+              <span class="mono" style="font-size: 12px; color: #5A5F68">Due {{r.due}}</span>
+              <a href="#return" style="font-size: 13px; font-weight: 500">{{r.cta}}</a>
+            </div>
+          </article>
+        </sc-for>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <!-- matching -->
+        <section style="flex: 2 1 600px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+          <div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 4px">
+            <h2 style="margin: 0; font-size: 17px; font-weight: 600">Purchase register vs GSTR-2A · all GSTINs</h2>
+            <span style="font-size: 13px; color: #5A5F68">174 purchase invoices · refreshed 09:10 · October GSTR-2B generates on 14 Nov</span>
+          </div>
+          <div role="group" aria-label="Match category" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 8px; padding: 0 20px 18px">
+            <sc-for list="{{cats}}" as="c" hint-placeholder-count="4">
+              <button type="button" class="cat" aria-pressed="{{c.on}}" onClick="{{c.pick}}" style="font: inherit; text-align: left; padding: 12px; border-radius: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 80px; {{c.st}}">
+                <span style="font-size: 13px; font-weight: 500">{{c.t}}</span>
+                <span class="mono" style="font-size: 18px; font-weight: 600">{{c.v}}</span>
+                <span style="font-size: 12px; {{c.sub}}">{{c.n}} invoices</span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="overflow-x: auto">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; min-width: 620px">
+              <thead><tr style="text-align: left; font-size: 12px; color: #5A5F68; background: #FAFAF7"><th scope="col" style="padding: 10px 20px; font-weight: 500">Supplier</th><th scope="col" style="padding: 10px 8px; font-weight: 500">What we found</th><th scope="col" style="padding: 10px 8px; font-weight: 500; text-align: right">ITC</th><th scope="col" style="padding: 10px 20px; font-weight: 500"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Action</span></th></tr></thead>
+              <tbody>
+                <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+                  <tr style="border-top: 1px solid #ECEBE5">
+                    <td style="padding: 12px 20px"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">{{r.n}}</span><span class="mono" style="font-size: 12px; color: #5A5F68">{{r.g}}</span></div></td>
+                    <td style="padding: 12px 8px; color: #3D424B">{{r.f}}</td>
+                    <td class="mono" style="padding: 12px 8px; text-align: right; font-weight: 600">{{r.a}}</td>
+                    <td style="padding: 12px 20px; text-align: right"><button type="button" style="font: inherit; font-size: 13px; font-weight: 500; height: 36px; padding: 0 12px; border-radius: 9px; border: 1px solid #C9C8C0; background: #FFFFFF; color: #14161A; cursor: pointer; white-space: nowrap">{{r.cta}}</button></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+          <div style="padding: 12px 20px; border-top: 1px solid #ECEBE5; font-size: 13px; color: #3D424B">{{catNote}}</div>
+        </section>
+
+        <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+          <!-- credit ledger -->
+          <section style="background: #111318; color: #ECEDEF; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <h2 style="margin: 0; font-size: 17px; font-weight: 600">Electronic credit ledger</h2>
+              <span style="font-size: 13px; color: #B7BCC5">Opening balance for October · all GSTINs</span>
+            </div>
+            <sc-for list="{{ledger}}" as="l" hint-placeholder-count="3">
+              <div style="display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid #23272F; font-size: 14px"><span>{{l.t}}</span><span class="mono">{{l.v}}</span></div>
+            </sc-for>
+            <span style="font-size: 13px; line-height: 1.5; color: #B7BCC5">IGST credit is used first, against IGST, then CGST and SGST — the draft 3B already applies the order.</span>
+          </section>
+
+          <!-- direct tax -->
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+            <div style="padding: 18px 20px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">Direct tax &amp; TDS</h2></div>
+            <sc-for list="{{direct}}" as="d" hint-placeholder-count="5">
+              <div style="display: flex; gap: 12px; align-items: center; padding: 12px 20px; border-top: 1px solid #ECEBE5">
+                <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 500">{{d.t}}</span><span style="font-size: 12px; color: #5A5F68">{{d.s}}</span></span>
+                <span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px"><span class="mono" style="font-size: 13px; font-weight: 600">{{d.a}}</span><span class="mono" style="font-size: 12px; {{d.dc}}">{{d.d}}</span></span>
+              </div>
+            </sc-for>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { g: 'All', cat: 'missing' }; }
+  renderVals() {
+    const active = 'GST & Tax';
+    const I = {
+      today: 'M3 12l9-8 9 8M5 10v10h14V10', shield: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4',
+      spark: 'M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z', book: 'M4 4h16v16H4zM4 10h16M10 4v16',
+      gst: 'M7 3h10l2 4H5zM5 7v14h14V7M9 13h6M9 17h4', people: 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0',
+      legal: 'M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z',
+      rocket: 'M5 15c-1 1-2 5-2 5s4-1 5-2M9 15l-3-3c1-4 5-9 12-9 0 7-5 11-9 12zM14 10h.01', factory: 'M3 21V10l6 4V10l6 4V6h6v15z',
+      folder: 'M3 7h6l2 2h10v11H3z', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'
+    };
+    const mk = (t, icon, href) => ({ t, icon, href, cur: t === active ? 'page' : 'false', st: t === active ? 'background:#22262F;color:#FFFFFF' : '' });
+    const P = { due: 'background:#FDF0E1;color:#9A4508', ok: 'background:#E6F4EA;color:#14692F', wait: 'background:#E8ECFF;color:#1A31A8', prep: 'background:#EFEEE8;color:#3D424B' };
+    const G = {
+      All: { inv: 212, irn: 198, out: '₹14.62 L', cash: '₹4.68 L', after: '₹2.82 L', ewb: 64 },
+      KA: { inv: 142, irn: 133, out: '₹9.80 L', cash: '₹3.09 L', after: '₹1.85 L', ewb: 38 },
+      TN: { inv: 46, irn: 43, out: '₹3.12 L', cash: '₹0.91 L', after: '₹0.49 L', ewb: 17 },
+      MH: { inv: 24, irn: 22, out: '₹1.70 L', cash: '₹0.68 L', after: '₹0.48 L', ewb: 9 }
+    };
+    const g = G[this.state.g];
+    const on = 'background:#FFFFFF;color:#14161A;box-shadow:0 1px 2px rgba(20,22,26,0.12)';
+    const C = {
+      matched: { t: 'Matched', v: '₹9.13 L', n: 161, note: 'Matched on GSTIN, invoice number, date and tax amount. Claimable once in GSTR-2B.', rows: [
+        { n: 'Bharat Bearings', g: '29AAACB…1ZK', f: '14 invoices · all fields match', a: '₹1,12,480', cta: 'View' },
+        { n: 'Deccan Freight Lines', g: '29AAFCD…1Z2', f: '9 invoices · all fields match', a: '₹48,960', cta: 'View' },
+        { n: 'Orion Calibration Labs', g: '33AACCO…1ZP', f: '6 invoices · all fields match', a: '₹36,720', cta: 'View' }
+      ] },
+      mismatch: { t: 'Amount differs', v: '₹0.81 L', n: 3, note: 'Supplier reported a different tax amount. Claim the lower figure or ask the supplier to amend in their next GSTR-1.', rows: [
+        { n: 'Sigma Plastics', g: '29AAGCS…1ZB', f: 'Books ₹14,580 · 2A ₹12,780 · rate 12% vs 18%', a: '₹12,780', cta: 'Ask to amend' },
+        { n: 'Bharat Bearings', g: '29AAACB…1ZK', f: 'Books ₹48,600 · 2A ₹46,800 · 1 line short', a: '₹46,800', cta: 'Ask to amend' },
+        { n: 'Kumar Tooling', g: '29AAJFK…1Z9', f: 'Books ₹21,420 · 2A ₹21,240 · rounding', a: '₹21,240', cta: 'Accept 2A' }
+      ] },
+      missing: { t: 'Not in 2A yet', v: '₹1.86 L', n: 7, note: 'If these suppliers file GSTR-1 by 11 Nov, the credit lands in October GSTR-2B and can be used in the 3B due 20 Nov.', rows: [
+        { n: 'Shakti Castings', g: '29AAKFS…1ZQ', f: '2 invoices · supplier hasn’t filed GSTR-1', a: '₹74,300', cta: 'Remind' },
+        { n: 'Vega Electro Components', g: '33AAFCV…1Z7', f: '3 invoices · supplier hasn’t filed GSTR-1', a: '₹58,920', cta: 'Remind' },
+        { n: 'Deccan Freight Lines', g: '29AAFCD…1Z2', f: '1 invoice · filed, but not this invoice', a: '₹31,500', cta: 'Remind' },
+        { n: 'Orion Calibration Labs', g: '33AACCO…1ZP', f: '1 invoice · supplier hasn’t filed GSTR-1', a: '₹21,280', cta: 'Remind' }
+      ] },
+      extra: { t: 'In 2A, not in books', v: '₹0.18 L', n: 3, note: 'Suppliers reported invoices you haven’t booked. Book them if genuine — or flag misuse of your GSTIN.', rows: [
+        { n: 'Prime Logistics', g: '27AAHCP…1ZM', f: 'Freight bill not received', a: '₹9,450', cta: 'Request copy' },
+        { n: 'Kumar Stationers', g: '29ABCPK…1ZD', f: 'Office supplies · likely unbooked', a: '₹3,120', cta: 'Book bill' },
+        { n: 'Unknown supplier', g: '07AAXCR…1ZT', f: 'No purchase order or GRN found', a: '₹5,430', cta: 'Investigate' }
+      ] }
+    };
+    const order = ['matched', 'mismatch', 'missing', 'extra'];
+    const cur = C[this.state.cat];
+    return {
+      navGroups: [
+        { h: 'WORKSPACE', items: [mk('Today', I.today, 'Dashboard.dc.html'), mk('Compliance', I.shield, 'Compliance.dc.html'), mk('Copilot', I.spark, 'Copilot.dc.html'), mk('Documents', I.folder, 'Documents.dc.html')] },
+        { h: 'RUN', items: [mk('Sales & Billing', 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3', 'Billing.dc.html'), mk('Finance & Books', I.book, 'Finance.dc.html'), mk('GST & Tax', I.gst, 'GST.dc.html'), mk('Payroll & HR', I.people, 'Payroll.dc.html'), mk('Legal & Contracts', I.legal, 'Legal.dc.html')] },
+        { h: 'TRACKS', items: [mk('Startup', I.rocket, 'Startup.dc.html'), mk('MSME', I.factory, 'MSME.dc.html'), mk('All modules', I.grid, 'Modules.dc.html')] },
+        { h: 'ADMIN', items: [mk('Group view', 'M3 21V9l6-4 6 4v12M15 21V13h6v8M7 13h4M7 17h4', 'Group.dc.html'), mk('Settings', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L10 21h4l.5-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z', 'Settings.dc.html')] }
+      ],
+      gstinTabs: [['All', 'All GSTINs'], ['KA', 'Karnataka'], ['TN', 'Tamil Nadu'], ['MH', 'Maharashtra']].map(([k, t]) => ({ t, on: this.state.g === k, st: this.state.g === k ? on : 'background:transparent;color:#3D424B', pick: () => this.setState({ g: k }) })),
+      returns: [
+        { t: 'GSTR-1 · October', s: 'Ready', ps: P.wait, v: g.out, d: g.inv + ' invoices · ' + g.irn + ' e-invoices with IRN · HSN summary built', due: '11 Nov', cta: 'Review & file' },
+        { t: 'GSTR-3B · October', s: 'Drafting', ps: P.prep, v: g.cash, d: 'Cash due today · ' + g.after + ' if pending supplier credit lands', due: '20 Nov', cta: 'Open draft' },
+        { t: 'E-way bills · October', s: 'In sync', ps: P.ok, v: String(g.ewb), d: 'Generated from dispatch orders · 0 expiring in 24 h', due: 'per movement', cta: 'View register' },
+        { t: 'GSTR-9 and 9C · FY 2025–26', s: 'Start soon', ps: P.due, v: '7 of 19', d: 'Tables prefilled from monthly returns · 9C reconciliation applies above ₹5 Cr', due: '31 Dec', cta: 'Continue' }
+      ],
+      cats: order.map((k) => ({ t: C[k].t, v: C[k].v, n: String(C[k].n), on: this.state.cat === k,
+        st: this.state.cat === k ? 'border:1px solid #14161A;background:#14161A;color:#FFFFFF' : 'border:1px solid #E2E1DA;background:#FAFAF7;color:#14161A',
+        sub: this.state.cat === k ? 'color:#C7CBD2' : 'color:#5A5F68', pick: () => this.setState({ cat: k }) })),
+      rows: cur.rows, catNote: cur.note,
+      ledger: [{ t: 'IGST', v: '₹1,42,600' }, { t: 'CGST', v: '₹38,250' }, { t: 'SGST', v: '₹38,250' }],
+      direct: [
+        { t: 'TDS deposit · October', s: '192, 194C, 194J · Challan 281', a: '₹2.94 L', d: '07 Nov', dc: 'color:#9A4508' },
+        { t: 'Form 16A · Q2', s: 'TDS certificates to 18 vendors', a: '18 certs', d: '15 Nov', dc: 'color:#3D424B' },
+        { t: 'Advance tax · 3rd instalment', s: '75% of estimated tax, cumulative', a: '₹6.8 L', d: '15 Dec', dc: 'color:#3D424B' },
+        { t: 'TDS return · Q2', s: '24Q and 26Q · awaiting director approval', a: 'Approve', d: '31 Oct', dc: 'color:#9A4508' },
+        { t: 'ITR · AY 2026–27', s: 'Company · audited · acknowledged', a: 'Filed', d: '27 Oct', dc: 'color:#14692F' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

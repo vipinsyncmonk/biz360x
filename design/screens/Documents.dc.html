@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — Document Vault</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0;background:#F4F3EE;color:#14161A;font-family:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.nav{color:#B7BCC5;text-decoration:none}.nav:hover{color:#FFFFFF;background:#1C2028}
+.fold:hover{background:#ECEBE5}
+.frow:hover{background:#FAFAF7}
+input:focus{outline:2px solid #2846E0;outline-offset:1px}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F3EE">
+
+  <!-- SIDEBAR -->
+  <aside style="flex: 1 1 248px; max-width: 100%; background: #111318; color: #ECEDEF; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #FFFFFF; padding: 4px 8px">
+      <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-dasharray="47 16" stroke-linecap="round"></circle><circle cx="21.1" cy="6.9" r="2.8" fill="#8EA2FF"></circle></svg>
+      <span class="disp" style="font-size: 19px; font-weight: 700">Biz360X</span>
+    </a>
+    <button type="button" style="font: inherit; text-align: left; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; border: 1px solid #2A2E38; background: #181B22; color: #FFFFFF; cursor: pointer; min-height: 52px">
+      <span class="mono" style="width: 32px; height: 32px; border-radius: 8px; background: #2846E0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">NI</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 600">Nimbus Instruments</span><span style="font-size: 12px; color: #9CA3AF">Pvt Ltd · 3 GSTINs</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"></path></svg>
+    </button>
+    <nav aria-label="Workspace" style="display: flex; flex-direction: column; gap: 18px">
+      <sc-for list="{{navGroups}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span class="mono" style="font-size: 11px; color: #8A909A; padding: 0 10px 6px">{{g.h}}</span>
+          <sc-for list="{{g.items}}" as="n" hint-placeholder-count="4">
+            <a class="nav" href="{{n.href}}" aria-current="{{n.cur}}" style="display: flex; align-items: center; gap: 12px; padding: 0 10px; height: 40px; border-radius: 10px; font-size: 14px; {{n.st}}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.icon}}"></path></svg>
+              <span style="flex: 1">{{n.t}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <main style="padding: 32px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box; max-width: 1400px; width: 100%">
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span class="mono" style="font-size: 12px; color: #5A5F68">DOCUMENT VAULT · 1,284 FILES · 71% CAPTURED AUTOMATICALLY</span>
+          <h1 class="disp" style="margin: 0; font-size: 36px; font-weight: 700; max-width: 900px; text-wrap: balance">Every certificate, return and acknowledgement, filed where your auditor will look.</h1>
+        </div>
+        <button type="button" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; border: 0; background: #14161A; color: #FFFFFF; cursor: pointer">Upload</button>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+        <label for="ds" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search documents</label>
+        <div style="flex: 1 1 360px; display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 14px; border: 1px solid #C9C8C0; border-radius: 12px; background: #FFFFFF">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A5F68" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+          <input id="ds" type="text" placeholder="Try “GST certificate Tamil Nadu” or “challan September”" style="flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; font-size: 15px; color: #14161A">
+        </div>
+        <span style="font-size: 13px; color: #5A5F68">Searches inside scanned PDFs too</span>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <!-- folders -->
+        <nav aria-label="Folders" style="flex: 1 1 220px; max-width: 100%; display: flex; flex-direction: column; gap: 2px">
+          <sc-for list="{{folders}}" as="f" hint-placeholder-count="8">
+            <button type="button" class="fold" aria-pressed="{{f.on}}" onClick="{{f.pick}}" style="font: inherit; text-align: left; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; cursor: pointer; {{f.st}}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h6l2 2h10v11H3z"></path></svg>
+              <span style="flex: 1; font-size: 14px">{{f.t}}</span>
+              <span class="mono" style="font-size: 12px; opacity: 0.75">{{f.n}}</span>
+            </button>
+          </sc-for>
+        </nav>
+
+        <!-- files -->
+        <section style="flex: 999 1 520px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+          <div style="padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">{{folderTitle}}</h2><span class="mono" style="font-size: 12px; color: #5A5F68">Newest first</span></div>
+          <div style="overflow-x: auto">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; min-width: 620px">
+              <thead><tr style="text-align: left; font-size: 12px; color: #5A5F68; background: #FAFAF7"><th scope="col" style="padding: 10px 20px; font-weight: 500">Document</th><th scope="col" style="padding: 10px 8px; font-weight: 500">Source</th><th scope="col" style="padding: 10px 8px; font-weight: 500">Linked to</th><th scope="col" style="padding: 10px 20px; font-weight: 500; text-align: right">Added</th></tr></thead>
+              <tbody>
+                <sc-for list="{{files}}" as="d" hint-placeholder-count="6">
+                  <tr class="frow" style="border-top: 1px solid #ECEBE5">
+                    <td style="padding: 12px 20px"><div style="display: flex; gap: 12px; align-items: center">
+                      <span class="mono" style="width: 40px; height: 40px; flex: none; border-radius: 9px; background: #F4F3EE; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: #3D424B">{{d.ext}}</span>
+                      <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><a href="#file" style="font-weight: 500; color: #14161A; text-decoration: none">{{d.n}}</a><span style="font-size: 12px; color: #5A5F68">{{d.m}}</span></span>
+                    </div></td>
+                    <td style="padding: 12px 8px"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; {{d.ps}}">{{d.src}}</span></td>
+                    <td style="padding: 12px 8px; color: #3D424B">{{d.l}}</td>
+                    <td class="mono" style="padding: 12px 20px; text-align: right; color: #3D424B; white-space: nowrap">{{d.a}}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- right rail -->
+        <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+            <div style="padding: 16px 20px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">Expiring soon</h2></div>
+            <sc-for list="{{expiring}}" as="e" hint-placeholder-count="4">
+              <div style="display: flex; gap: 12px; align-items: center; padding: 12px 20px; border-top: 1px solid #ECEBE5">
+                <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 500">{{e.t}}</span><span style="font-size: 12px; color: #5A5F68">{{e.s}}</span></span>
+                <span class="mono" style="font-size: 12px; white-space: nowrap; {{e.dc}}">{{e.d}}</span>
+              </div>
+            </sc-for>
+          </section>
+
+          <section style="background: #111318; color: #ECEDEF; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+            <h2 style="margin: 0; font-size: 17px; font-weight: 600">Requests from advisors</h2>
+            <sc-for list="{{requests}}" as="r" hint-placeholder-count="2">
+              <div style="display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid #23272F">
+                <span style="font-size: 14px; font-weight: 600">{{r.t}}</span>
+                <span style="font-size: 13px; color: #B7BCC5">{{r.s}}</span>
+                <button type="button" style="font: inherit; align-self: flex-start; font-size: 13px; font-weight: 500; height: 36px; padding: 0 12px; border-radius: 9px; border: 0; background: #FFFFFF; color: #14161A; cursor: pointer">{{r.cta}}</button>
+              </div>
+            </sc-for>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { f: 'recent' }; }
+  renderVals() {
+    const active = 'Documents';
+    const I = {
+      today: 'M3 12l9-8 9 8M5 10v10h14V10', shield: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4',
+      spark: 'M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z', book: 'M4 4h16v16H4zM4 10h16M10 4v16',
+      gst: 'M7 3h10l2 4H5zM5 7v14h14V7M9 13h6M9 17h4', people: 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0',
+      legal: 'M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z',
+      rocket: 'M5 15c-1 1-2 5-2 5s4-1 5-2M9 15l-3-3c1-4 5-9 12-9 0 7-5 11-9 12zM14 10h.01', factory: 'M3 21V10l6 4V10l6 4V6h6v15z',
+      folder: 'M3 7h6l2 2h10v11H3z', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'
+    };
+    const mk = (t, icon, href) => ({ t, icon, href, cur: t === active ? 'page' : 'false', st: t === active ? 'background:#22262F;color:#FFFFFF' : '' });
+    const S = { gstn: ['GSTN', 'background:#E8ECFF;color:#1A31A8'], mca: ['MCA', 'background:#E8ECFF;color:#1A31A8'], it: ['Income Tax', 'background:#E8ECFF;color:#1A31A8'], epfo: ['EPFO', 'background:#E8ECFF;color:#1A31A8'], bz: ['Biz360X', 'background:#E6F4EA;color:#14692F'], up: ['Uploaded', 'background:#EFEEE8;color:#3D424B'] };
+    const f = (n, m, ext, src, l, a) => ({ n, m, ext, src: S[src][0], ps: S[src][1], l, a });
+    const F = {
+      inc: { t: 'Incorporation & registrations', files: [
+        f('GST registration · Tamil Nadu', 'REG-06 · 33AAHCN1234Q1Z4', 'PDF', 'gstn', 'GSTIN TN', '12 Mar 2024'),
+        f('Memorandum & Articles · amended', 'Special resolution · object clause', 'PDF', 'mca', 'MGT-14', '04 Jan 2024'),
+        f('Shops & Establishments certificate', 'Karnataka · Peenya', 'PDF', 'up', 'Licence register', '20 Sep 2019'),
+        f('Certificate of Incorporation', 'U26510KA2019PTC123456', 'PDF', 'mca', 'Entity profile', '14 Aug 2019'),
+        f('PAN and TAN allotment', 'Issued with SPICe+', 'PDF', 'it', 'Entity profile', '14 Aug 2019')
+      ] },
+      tax: { t: 'Tax returns & challans', files: [
+        f('ITR acknowledgement · AY 2026–27', 'ITR-6 · audited', 'PDF', 'it', 'Income tax return', '27 Oct'),
+        f('GSTR-3B acknowledgement · Sep', '3 GSTINs · ARN stored', 'PDF', 'gstn', 'GSTR-3B Sep', '18 Oct'),
+        f('GSTR-1 acknowledgement · Sep', '3 GSTINs', 'PDF', 'gstn', 'GSTR-1 Sep', '11 Oct'),
+        f('Challan 281 · TDS September', 'CIN · BSR code matched', 'PDF', 'it', 'TDS deposit Sep', '06 Oct'),
+        f('Form 16A · Q1', '18 vendor certificates', 'ZIP', 'it', 'TDS Q1', '14 Aug')
+      ] },
+      mca: { t: 'MCA filings', files: [
+        f('MSME-1 · Apr–Sep 2026', 'SRN acknowledged', 'PDF', 'mca', 'MSME-1 H1', '27 Oct'),
+        f('AOC-4 · draft with attachments', 'Awaiting director DSC', 'PDF', 'bz', 'AOC-4 FY 25–26', '28 Oct'),
+        f('DIR-3 KYC · 3 directors', 'Web KYC completed', 'PDF', 'mca', 'DIR-3 KYC', '18 Sep'),
+        f('ADT-1 · auditor appointment', 'Mehta & Co · 5-year term', 'PDF', 'mca', 'Auditor', '14 Oct 2024')
+      ] },
+      payroll: { t: 'Payroll & labour', files: [
+        f('Payslips · October', '38 employees', 'ZIP', 'bz', 'October payroll', '31 Oct'),
+        f('PF ECR · September', 'TRRN and challan', 'PDF', 'epfo', 'PF Sep', '13 Oct'),
+        f('ESI challan · September', '11 employees', 'PDF', 'up', 'ESI Sep', '13 Oct'),
+        f('Professional tax return · Sep', 'Karnataka', 'PDF', 'up', 'PT Sep', '19 Oct')
+      ] },
+      contracts: { t: 'Contracts', files: [
+        f('Supply agreement · Meridian Appliances', 'Signed · e-stamped', 'PDF', 'up', 'Legal & Contracts', '02 Jan 2025'),
+        f('Factory lease · Peenya', 'Registered deed', 'PDF', 'up', 'Legal & Contracts', '28 Mar 2022'),
+        f('Mutual NDA · Deccan Motors', 'Aadhaar eSign', 'PDF', 'bz', 'Legal & Contracts', '12 Feb 2025')
+      ] },
+      board: { t: 'Board & secretarial', files: [
+        f('Minutes · AGM 30 Sep 2026', 'Signed by chair', 'PDF', 'bz', 'AGM', '05 Oct'),
+        f('Minutes · Board meeting 29 Sep', '4 resolutions', 'PDF', 'bz', 'Board meeting Q2', '03 Oct'),
+        f('Register of members', 'Statutory register · Sec 88', 'XLSX', 'bz', 'Registers', 'Live')
+      ] }
+    };
+    const recent = [F.tax.files[0], F.mca.files[1], F.payroll.files[0], F.mca.files[0], F.board.files[0], F.tax.files[1]];
+    const defs = [['recent', 'Recent', 1284, null], ['inc', 'Incorporation & registrations', 46], ['tax', 'Tax returns & challans', 512], ['mca', 'MCA filings', 88], ['payroll', 'Payroll & labour', 402], ['contracts', 'Contracts', 41], ['board', 'Board & secretarial', 64], ['bank', 'Bank & finance', 131]];
+    const cur = this.state.f;
+    const list = cur === 'recent' ? recent : (F[cur] ? F[cur].files : []);
+    const title = cur === 'recent' ? 'Recently added' : cur === 'bank' ? 'Bank & finance' : F[cur].t;
+    return {
+      navGroups: [
+        { h: 'WORKSPACE', items: [mk('Today', I.today, 'Dashboard.dc.html'), mk('Compliance', I.shield, 'Compliance.dc.html'), mk('Copilot', I.spark, 'Copilot.dc.html'), mk('Documents', I.folder, 'Documents.dc.html')] },
+        { h: 'RUN', items: [mk('Sales & Billing', 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3', 'Billing.dc.html'), mk('Finance & Books', I.book, 'Finance.dc.html'), mk('GST & Tax', I.gst, 'GST.dc.html'), mk('Payroll & HR', I.people, 'Payroll.dc.html'), mk('Legal & Contracts', I.legal, 'Legal.dc.html')] },
+        { h: 'TRACKS', items: [mk('Startup', I.rocket, 'Startup.dc.html'), mk('MSME', I.factory, 'MSME.dc.html'), mk('All modules', I.grid, 'Modules.dc.html')] },
+        { h: 'ADMIN', items: [mk('Group view', 'M3 21V9l6-4 6 4v12M15 21V13h6v8M7 13h4M7 17h4', 'Group.dc.html'), mk('Settings', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L10 21h4l.5-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z', 'Settings.dc.html')] }
+      ],
+      folders: defs.map(([id, t, n]) => ({ t, n: n.toLocaleString('en-IN'), on: cur === id, pick: () => this.setState({ f: id }),
+        st: cur === id ? 'background:#14161A;color:#FFFFFF' : 'background:transparent;color:#14161A' })),
+      folderTitle: title,
+      files: cur === 'bank' ? [
+        f('Bank statements · October', '3 accounts via Account Aggregator', 'PDF', 'bz', 'Bank reconciliation', '29 Oct'),
+        f('Sanction letter · term loan', 'Calibration rig financing', 'PDF', 'up', 'Finance & Books', '08 Aug'),
+        f('Fixed asset register · FY 2025–26', 'Requested by Mehta & Co', 'XLSX', 'bz', 'Audit', '22 Oct')
+      ] : list,
+      expiring: [
+        { t: 'Ananya Rao · DSC', s: 'Class 3 · needed for AOC-4 and MGT-7', d: '14 Jan 2027', dc: 'color:#9A4508;font-weight:600' },
+        { t: 'Factory licence', s: 'Karnataka Factories Act', d: '31 Dec 2026', dc: 'color:#9A4508;font-weight:600' },
+        { t: 'ISO 9001 surveillance audit', s: 'Certificate stays valid if passed', d: '[DATE]', dc: 'color:#3D424B' },
+        { t: 'Fire NOC', s: 'Peenya unit', d: '[DATE]', dc: 'color:#3D424B' }
+      ],
+      requests: [
+        { t: 'Mehta & Co · statutory auditor', s: 'Bank confirmations for 31 Mar 2026 — 3 accounts', cta: 'Share 3 files' },
+        { t: 'HDFC Bank · working-capital renewal', s: 'Audited financials FY 25–26 and last 12 GSTR-3Bs', cta: 'Share 13 files' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

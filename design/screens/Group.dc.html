@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — Group view</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0;background:#F4F3EE;color:#14161A;font-family:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.nav{color:#B7BCC5;text-decoration:none}.nav:hover{color:#FFFFFF;background:#1C2028}
+.trow{cursor:pointer}.trow:hover{background:#FAFAF7}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F3EE">
+
+  <!-- SIDEBAR (firm) -->
+  <aside style="flex: 1 1 248px; max-width: 100%; background: #111318; color: #ECEDEF; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #FFFFFF; padding: 4px 8px">
+      <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-dasharray="47 16" stroke-linecap="round"></circle><circle cx="21.1" cy="6.9" r="2.8" fill="#8EA2FF"></circle></svg>
+      <span class="disp" style="font-size: 19px; font-weight: 700">Biz360X</span>
+    </a>
+    <button type="button" style="font: inherit; text-align: left; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; border: 1px solid #2A2E38; background: #181B22; color: #FFFFFF; cursor: pointer; min-height: 52px">
+      <span class="mono" style="width: 32px; height: 32px; border-radius: 8px; background: #FFFFFF; color: #14161A; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">MC</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 600">Mehta &amp; Co</span><span style="font-size: 12px; color: #9CA3AF">CA firm · Group plan</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"></path></svg>
+    </button>
+    <nav aria-label="Firm" style="display: flex; flex-direction: column; gap: 18px">
+      <sc-for list="{{navGroups}}" as="g" hint-placeholder-count="2">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span class="mono" style="font-size: 11px; color: #8A909A; padding: 0 10px 6px">{{g.h}}</span>
+          <sc-for list="{{g.items}}" as="n" hint-placeholder-count="4">
+            <a class="nav" href="{{n.href}}" aria-current="{{n.cur}}" style="display: flex; align-items: center; gap: 12px; padding: 0 10px; height: 40px; border-radius: 10px; font-size: 14px; {{n.st}}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.icon}}"></path></svg>
+              <span style="flex: 1">{{n.t}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+    <div style="margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px; border-top: 1px solid #23272F">
+      <span style="width: 32px; height: 32px; border-radius: 50%; background: #2A2E38; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">RM</span>
+      <span style="display: flex; flex-direction: column"><span style="font-size: 14px">Rohan Mehta</span><span style="font-size: 12px; color: #9CA3AF">Partner</span></span>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <main style="padding: 32px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box; max-width: 1400px; width: 100%">
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span class="mono" style="font-size: 12px; color: #5A5F68">GROUP VIEW · 46 CLIENT ENTITIES · WEEK OF 26 OCT</span>
+          <h1 class="disp" style="margin: 0; font-size: 36px; font-weight: 700; max-width: 900px; text-wrap: balance">31 filings due this week. 9 are stuck waiting on clients.</h1>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap">
+          <button type="button" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #C9C8C0; background: #FFFFFF; color: #14161A; cursor: pointer">Add client</button>
+          <button type="button" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; border: 0; background: #14161A; color: #FFFFFF; cursor: pointer">Chase 9 clients</button>
+        </div>
+      </div>
+
+      <section aria-label="Key numbers" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 12px">
+        <sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+          <div style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+            <span style="font-size: 13px; color: #5A5F68">{{k.l}}</span>
+            <span class="disp" style="font-size: 30px; font-weight: 700; line-height: 1; {{k.c}}">{{k.v}}</span>
+            <span style="font-size: 13px; color: #5A5F68">{{k.n}}</span>
+          </div>
+        </sc-for>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <!-- matrix -->
+        <section style="flex: 2 1 640px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+          <div style="padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+            <h2 style="margin: 0; font-size: 17px; font-weight: 600">Clients × authorities</h2>
+            <div role="group" aria-label="Filter clients" style="display: flex; gap: 6px; flex-wrap: wrap">
+              <sc-for list="{{filters}}" as="f" hint-placeholder-count="3">
+                <button type="button" aria-pressed="{{f.on}}" onClick="{{f.pick}}" style="font: inherit; font-size: 13px; height: 36px; padding: 0 12px; border-radius: 999px; cursor: pointer; {{f.st}}">{{f.t}}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="overflow-x: auto">
+            <table style="width: 100%; border-collapse: separate; border-spacing: 0 4px; font-size: 13px; min-width: 720px; padding: 0 12px 8px">
+              <thead><tr style="font-size: 12px; color: #5A5F68"><th scope="col" style="padding: 6px 8px; font-weight: 500; text-align: left">Client</th><sc-for list="{{cols}}" as="c" hint-placeholder-count="5"><th scope="col" style="padding: 6px 4px; font-weight: 500; text-align: left">{{c}}</th></sc-for><th scope="col" style="padding: 6px 8px; font-weight: 500; text-align: left">Owner</th></tr></thead>
+              <tbody>
+                <sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+                  <tr class="trow" onClick="{{r.pick}}" style="{{r.sel}}">
+                    <td style="padding: 8px; border-radius: 10px 0 0 10px"><button type="button" onClick="{{r.pick}}" style="font: inherit; text-align: left; border: 0; background: transparent; padding: 0; cursor: pointer; color: #14161A; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 500">{{r.n}}</span><span style="font-size: 12px; color: #5A5F68">{{r.t}}</span></button></td>
+                    <sc-for list="{{r.cells}}" as="x" hint-placeholder-count="5">
+                      <td style="padding: 4px"><span style="display: block; text-align: center; font-size: 12px; font-weight: 600; padding: 7px 4px; border-radius: 8px; {{x.st}}">{{x.l}}</span></td>
+                    </sc-for>
+                    <td style="padding: 8px; color: #3D424B; border-radius: 0 10px 10px 0">{{r.o}}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+          <div style="padding: 12px 20px; border-top: 1px solid #ECEBE5; display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #3D424B">
+            <sc-for list="{{legend}}" as="l" hint-placeholder-count="5"><span style="display: flex; align-items: center; gap: 6px"><span style="padding: 2px 8px; border-radius: 6px; font-weight: 600; {{l.st}}">{{l.l}}</span>{{l.d}}</span></sc-for>
+          </div>
+        </section>
+
+        <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+          <!-- client detail -->
+          <section style="background: #111318; color: #ECEDEF; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+            <span class="mono" style="font-size: 11px; color: #8A909A">OPEN ITEMS</span>
+            <h2 class="disp" style="margin: 0; font-size: 22px; font-weight: 700">{{cur.n}}</h2>
+            <sc-for list="{{cur.items}}" as="i" hint-placeholder-count="3">
+              <div style="display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid #23272F; font-size: 14px">
+                <span style="display: flex; flex-direction: column; gap: 2px"><span>{{i.t}}</span><span style="font-size: 12px; color: #9CA3AF">{{i.s}}</span></span>
+                <span class="mono" style="font-size: 12px; white-space: nowrap; {{i.dc}}">{{i.d}}</span>
+              </div>
+            </sc-for>
+            <a href="{{cur.href}}" style="align-self: flex-start; height: 40px; padding: 0 14px; border-radius: 10px; background: #FFFFFF; color: #14161A; display: inline-flex; align-items: center; font-size: 14px; font-weight: 500; text-decoration: none">Open workspace</a>
+          </section>
+
+          <!-- team load -->
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+            <div style="display: flex; justify-content: space-between; align-items: baseline"><h2 style="margin: 0; font-size: 17px; font-weight: 600">Team load this week</h2><span style="font-size: 13px; color: #5A5F68">filings assigned</span></div>
+            <sc-for list="{{team}}" as="t" hint-placeholder-count="5">
+              <div style="display: grid; grid-template-columns: 110px minmax(0, 1fr) 28px; gap: 10px; align-items: center">
+                <span style="font-size: 13px">{{t.n}}</span>
+                <div style="height: 10px; background: #F4F3EE; border-radius: 0 4px 4px 0"><div title="{{t.n}}: {{t.v}} filings" style="height: 100%; border-radius: 0 4px 4px 0; background: #2846E0; width: {{t.w}}"></div></div>
+                <span class="mono" style="font-size: 13px; font-weight: 600; text-align: right">{{t.v}}</span>
+              </div>
+            </sc-for>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { f: 'All', sel: 'nimbus' }; }
+  renderVals() {
+    const active = 'All clients';
+    const I = {
+      grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', cal: 'M4 5h16v15H4zM4 10h16M9 3v4M15 3v4',
+      inbox: 'M3 13h5l2 3h4l2-3h5M5 5h14l2 8v6H3v-6z', people: 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0',
+      gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L10 21h4l.5-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z'
+    };
+    const mk = (t, icon, href) => ({ t, icon, href, cur: t === active ? 'page' : 'false', st: t === active ? 'background:#22262F;color:#FFFFFF' : '' });
+    const C = {
+      ok: ['Clear', 'background:#E6F4EA;color:#14692F'],
+      due: ['Due', 'background:#E8ECFF;color:#1A31A8'],
+      act: ['Client', 'background:#FDF0E1;color:#9A4508'],
+      late: ['Overdue', 'background:#14161A;color:#FFFFFF'],
+      na: ['—', 'background:#F4F3EE;color:#5A5F68']
+    };
+    const cols = ['MCA', 'GST', 'TDS', 'EPFO · ESIC', 'Income Tax'];
+    const clients = [
+      { id: 'nimbus', n: 'Nimbus Instruments', t: 'Pvt Ltd · 3 GSTINs', s: ['act', 'due', 'act', 'due', 'ok'], o: 'Priya S', href: 'Dashboard.dc.html',
+        items: [{ t: 'AOC-4 · director DSC', s: 'Waiting on Ananya R', d: '30 Oct', dc: 'color:#FFC58A' }, { t: 'TDS return Q2 · approval', s: 'Ready since 27 Oct', d: '31 Oct', dc: 'color:#FFC58A' }, { t: 'GSTR-1 · October', s: 'Draft ready', d: '11 Nov', dc: 'color:#C7CBD2' }] },
+      { id: 'orbitly', n: 'Orbitly Labs', t: 'Pvt Ltd · DPIIT startup', s: ['due', 'ok', 'due', 'ok', 'ok'], o: 'Arvind T', href: 'Startup.dc.html',
+        items: [{ t: 'MGT-14 · special resolution', s: 'Seed extension approvals', d: '13 Nov', dc: 'color:#C7CBD2' }, { t: 'TDS deposit · October', s: 'Scheduled', d: '07 Nov', dc: 'color:#C7CBD2' }] },
+      { id: 'kaveri', n: 'Kaveri Polymers', t: 'LLP · Udyam Small', s: ['ok', 'due', 'ok', 'due', 'act'], o: 'Sana K', href: 'MSME.dc.html',
+        items: [{ t: 'Advance tax estimate', s: 'Waiting on Q2 sales figures', d: '15 Dec', dc: 'color:#FFC58A' }, { t: 'GSTR-1 · October', s: '146 e-way bills matched', d: '11 Nov', dc: 'color:#C7CBD2' }] },
+      { id: 'saffron', n: 'Saffron Table Foods', t: 'Pvt Ltd · FSSAI', s: ['late', 'due', 'ok', 'ok', 'ok'], o: 'Priya S', href: '#client',
+        items: [{ t: 'DIR-3 KYC · 1 director', s: 'DIN deactivated · ₹5,000 fee to reactivate', d: '30 Sep', dc: 'color:#FFC58A;font-weight:600' }, { t: 'FSSAI licence renewal', s: 'Documents received', d: '18 Nov', dc: 'color:#C7CBD2' }] },
+      { id: 'arka', n: 'Arka Solar Systems', t: 'Pvt Ltd · 2 GSTINs', s: ['due', 'act', 'due', 'due', 'ok'], o: 'Arvind T', href: '#client',
+        items: [{ t: 'Purchase bills for 2B match', s: '23 bills not uploaded', d: '05 Nov', dc: 'color:#FFC58A' }, { t: 'AOC-4', s: 'Audit report pending', d: '30 Oct', dc: 'color:#C7CBD2' }] },
+      { id: 'varuna', n: 'Varuna Logistics', t: 'LLP', s: ['ok', 'ok', 'due', 'act', 'ok'], o: 'Sana K', href: '#client',
+        items: [{ t: 'ESI · new joiners', s: 'Aadhaar details for 4 drivers', d: '15 Nov', dc: 'color:#FFC58A' }] },
+      { id: 'indus', n: 'Indus Weaves', t: 'Partnership firm', s: ['na', 'due', 'ok', 'na', 'ok'], o: 'Neha R', href: '#client',
+        items: [{ t: 'GSTR-3B · October', s: 'Composition opt-out review', d: '20 Nov', dc: 'color:#C7CBD2' }] },
+      { id: 'neelam', n: 'Neelam Exports', t: 'Proprietorship · IEC', s: ['na', 'act', 'ok', 'na', 'late'], o: 'Neha R', href: '#client',
+        items: [{ t: 'ITR · AY 2026–27', s: 'Audit case · bank statements missing', d: '31 Oct', dc: 'color:#FFC58A;font-weight:600' }, { t: 'LUT for exports', s: 'Renewal for FY 26–27 pending', d: 'Overdue', dc: 'color:#FFC58A;font-weight:600' }] }
+    ];
+    const f = this.state.f;
+    const rowsF = clients.filter((c) => f === 'All' || (f === 'Waiting on client' && c.s.indexOf('act') >= 0) || (f === 'Overdue' && c.s.indexOf('late') >= 0));
+    const cur = clients.find((c) => c.id === this.state.sel) || clients[0];
+    const team = [['Priya S', 9], ['Arvind T', 8], ['Sana K', 6], ['Neha R', 5], ['Rohan M', 3]];
+    return {
+      navGroups: [
+        { h: 'FIRM', items: [mk('All clients', I.grid, 'Group.dc.html'), mk('Filing calendar', I.cal, '#calendar'), mk('Client requests', I.inbox, '#requests'), mk('Team', I.people, '#team')] },
+        { h: 'ADMIN', items: [mk('Settings', I.gear, 'Settings.dc.html')] }
+      ],
+      kpis: [
+        { l: 'Client entities', v: '46', n: '31 companies · 9 LLPs · 6 others', c: '' },
+        { l: 'Due this week', v: '31', n: '22 ready to file', c: '' },
+        { l: 'Waiting on clients', v: '9', n: 'Signatures, bills, approvals', c: 'color:#9A4508' },
+        { l: 'Overdue', v: '2', n: 'Late fees running', c: 'color:#9A4508' }
+      ],
+      filters: ['All', 'Waiting on client', 'Overdue'].map((t) => ({ t, on: f === t, pick: () => this.setState({ f: t }),
+        st: f === t ? 'border:1px solid #14161A;background:#14161A;color:#FFFFFF' : 'border:1px solid #C9C8C0;background:#FFFFFF;color:#14161A' })),
+      cols,
+      rows: rowsF.map((c) => ({ n: c.n, t: c.t, o: c.o, sel: c.id === cur.id ? 'background:#EEF1FF' : '',
+        cells: c.s.map((k) => ({ l: C[k][0], st: C[k][1] })), pick: () => this.setState({ sel: c.id }) })),
+      legend: [
+        { l: 'Clear', st: C.ok[1], d: 'Nothing due in 7 days' }, { l: 'Due', st: C.due[1], d: 'Due in 7 days, on track' },
+        { l: 'Client', st: C.act[1], d: 'Waiting on the client' }, { l: 'Overdue', st: C.late[1], d: 'Past due' }, { l: '—', st: C.na[1], d: 'Not applicable' }
+      ],
+      cur,
+      team: team.map(([n, v]) => ({ n, v: String(v), w: Math.round((v / 10) * 100) + '%' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

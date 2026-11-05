@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — New GST invoice</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0;background:#F4F3EE;color:#14161A;font-family:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.opt:hover{border-color:#14161A !important}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F4F3EE; display: flex; flex-direction: column">
+
+  <!-- top bar -->
+  <header style="background: #FFFFFF; border-bottom: 1px solid #E2E1DA">
+    <div style="max-width: 1360px; margin: 0 auto; padding: 12px 24px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center">
+      <a href="Billing.dc.html" style="display: inline-flex; align-items: center; gap: 6px; font-size: 14px; text-decoration: none; color: #3D424B; min-height: 44px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>Sales &amp; Billing</a>
+      <span style="color: #C9C8C0" aria-hidden="true">/</span>
+      <h1 style="margin: 0; font-size: 17px; font-weight: 600">New tax invoice <span class="mono" style="font-weight: 500; color: #5A5F68">{{invNo}}</span></h1>
+      <div style="margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+        <sc-if value="{{saved}}" hint-placeholder-val="{{ false }}"><span style="font-size: 13px; font-weight: 600; color: #14692F; display: inline-flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>IRN generated · sent to customer</span></sc-if>
+        <button type="button" style="font: inherit; font-size: 14px; height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #C9C8C0; background: #FFFFFF; color: #14161A; cursor: pointer">Save draft</button>
+        <button type="button" onClick="{{save}}" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; border: 0; background: #14161A; color: #FFFFFF; cursor: pointer">Generate IRN &amp; send</button>
+      </div>
+    </div>
+  </header>
+
+  <main style="max-width: 1360px; width: 100%; margin: 0 auto; padding: 28px 24px 56px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start">
+
+    <!-- FORM -->
+    <div style="flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+      <fieldset style="border: 1px solid #E2E1DA; border-radius: 16px; background: #FFFFFF; margin: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+        <legend style="font-size: 14px; font-weight: 600; padding: 0 6px">Bill from</legend>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 8px">
+          <sc-for list="{{sups}}" as="s" hint-placeholder-count="3">
+            <button type="button" class="opt" aria-pressed="{{s.on}}" onClick="{{s.pick}}" style="font: inherit; text-align: left; padding: 10px 12px; border-radius: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-height: 56px; {{s.st}}">
+              <span style="font-size: 14px; font-weight: 600">{{s.t}}</span><span class="mono" style="font-size: 11px; {{s.sub}}">{{s.g}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </fieldset>
+
+      <fieldset style="border: 1px solid #E2E1DA; border-radius: 16px; background: #FFFFFF; margin: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+        <legend style="font-size: 14px; font-weight: 600; padding: 0 6px">Bill to</legend>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <sc-for list="{{custs}}" as="c" hint-placeholder-count="3">
+            <button type="button" class="opt" aria-pressed="{{c.on}}" onClick="{{c.pick}}" style="font: inherit; text-align: left; padding: 12px 14px; border-radius: 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; align-items: center; min-height: 56px; {{c.st}}">
+              <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">{{c.n}}</span><span style="font-size: 12px; {{c.sub}}">{{c.city}} · <span class="mono">{{c.g}}</span></span></span>
+              <span style="font-size: 12px; white-space: nowrap; {{c.sub}}">{{c.tag}}</span>
+            </button>
+          </sc-for>
+        </div>
+        <span style="font-size: 13px; color: #14692F; display: flex; gap: 6px; align-items: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>GSTIN active on GSTN · regular taxpayer · checked just now</span>
+      </fieldset>
+
+      <section style="border: 1px solid #E2E1DA; border-radius: 16px; background: #FFFFFF; overflow: hidden">
+        <div style="padding: 16px 20px; display: flex; justify-content: space-between; gap: 10px; align-items: baseline"><h2 style="margin: 0; font-size: 14px; font-weight: 600">Items</h2><span style="font-size: 12px; color: #5A5F68">6-digit HSN/SAC — required above ₹5 Cr turnover</span></div>
+        <div style="overflow-x: auto">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px">
+            <thead><tr style="text-align: left; font-size: 12px; color: #5A5F68; background: #FAFAF7"><th scope="col" style="padding: 10px 20px; font-weight: 500">Item</th><th scope="col" style="padding: 10px 8px; font-weight: 500">HSN/SAC</th><th scope="col" style="padding: 10px 8px; font-weight: 500; text-align: center">Qty</th><th scope="col" style="padding: 10px 8px; font-weight: 500; text-align: right">Rate</th><th scope="col" style="padding: 10px 20px; font-weight: 500; text-align: right">Taxable</th></tr></thead>
+            <tbody>
+              <sc-for list="{{lines}}" as="l" hint-placeholder-count="3">
+                <tr style="border-top: 1px solid #ECEBE5">
+                  <td style="padding: 12px 20px"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">{{l.n}}</span><span style="font-size: 12px; color: #5A5F68">GST {{l.r}}%</span></div></td>
+                  <td class="mono" style="padding: 12px 8px; color: #3D424B">{{l.h}}</td>
+                  <td style="padding: 12px 8px">
+                    <sc-if value="{{l.editable}}" hint-placeholder-val="{{ false }}">
+                      <div style="display: flex; align-items: center; justify-content: center; gap: 6px">
+                        <button type="button" aria-label="Decrease quantity" onClick="{{dec}}" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid #C9C8C0; background: #FFFFFF; cursor: pointer; font-size: 16px; color: #14161A">−</button>
+                        <span class="mono" style="min-width: 28px; text-align: center; font-weight: 600">{{l.q}}</span>
+                        <button type="button" aria-label="Increase quantity" onClick="{{inc}}" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid #C9C8C0; background: #FFFFFF; cursor: pointer; font-size: 16px; color: #14161A">+</button>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{l.fixed}}" hint-placeholder-val="{{ true }}"><span class="mono" style="display: block; text-align: center">{{l.q}}</span></sc-if>
+                  </td>
+                  <td class="mono" style="padding: 12px 8px; text-align: right">{{l.rate}}</td>
+                  <td class="mono" style="padding: 12px 20px; text-align: right; font-weight: 600">{{l.amt}}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <div style="padding: 12px 20px; border-top: 1px solid #ECEBE5"><button type="button" style="font: inherit; font-size: 14px; border: 0; background: transparent; color: #2846E0; cursor: pointer; padding: 0; min-height: 36px">+ Add item from catalogue</button></div>
+      </section>
+
+      <fieldset style="border: 1px solid #E2E1DA; border-radius: 16px; background: #FFFFFF; margin: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+        <legend style="font-size: 14px; font-weight: 600; padding: 0 6px">Payment terms</legend>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap">
+          <sc-for list="{{termOpts}}" as="t" hint-placeholder-count="3">
+            <button type="button" aria-pressed="{{t.on}}" onClick="{{t.pick}}" style="font: inherit; font-size: 14px; height: 44px; padding: 0 16px; border-radius: 999px; cursor: pointer; {{t.st}}">{{t.t}}</button>
+          </sc-for>
+        </div>
+        <span style="font-size: 13px; color: #3D424B">Due {{dueDate}} · collections sequence starts 3 days before</span>
+        <sc-if value="{{longTerms}}" hint-placeholder-val="{{ false }}"><span style="font-size: 13px; line-height: 1.5; color: #9A4508">Longer than 45 days. Once Nimbus is Udyam-registered, buyers must pay within 45 days whatever the invoice says.</span></sc-if>
+      </fieldset>
+
+      <!-- checks -->
+      <section aria-label="Pre-send checks" style="background: #111318; color: #ECEDEF; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 4px">
+        <h2 style="margin: 0 0 6px; font-size: 14px; font-weight: 600">Checks before this invoice goes out</h2>
+        <sc-for list="{{checks}}" as="c" hint-placeholder-count="5">
+          <div style="display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid #23272F; font-size: 14px; line-height: 1.45">
+            <span style="width: 18px; height: 18px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-top: 1px; {{c.dot}}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{c.icon}}"></path></svg></span>
+            <span><strong style="font-weight: 600">{{c.t}}</strong> <span style="color: #B7BCC5">{{c.d}}</span></span>
+          </div>
+        </sc-for>
+      </section>
+    </div>
+
+    <!-- PREVIEW -->
+    <aside aria-label="Invoice preview" style="flex: 1 1 520px; min-width: 0; position: sticky; top: 16px">
+      <div style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 6px; box-shadow: 0 24px 48px -28px rgba(20,22,26,0.35); padding: 32px; display: flex; flex-direction: column; gap: 20px; font-size: 13px">
+        <div style="display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <span class="disp" style="font-size: 20px; font-weight: 700">Nimbus Instruments Pvt Ltd</span>
+            <span style="color: #3D424B">{{supAddr}}</span>
+            <span class="mono" style="color: #3D424B">GSTIN {{supG}} · CIN U26510KA2019PTC123456</span>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px">
+            <span class="mono" style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em">TAX INVOICE</span>
+            <span class="mono">{{invNo}}</span>
+            <span style="color: #3D424B">29 Oct 2026 · due {{dueDate}}</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap; padding: 14px 0; border-top: 1px solid #ECEBE5; border-bottom: 1px solid #ECEBE5">
+          <div style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 3px">
+            <span class="mono" style="font-size: 11px; color: #5A5F68">BILL TO</span>
+            <span style="font-weight: 600">{{cust.legal}}</span>
+            <span style="color: #3D424B">{{cust.city}}</span>
+            <span class="mono" style="color: #3D424B">GSTIN {{cust.g}}</span>
+          </div>
+          <div style="flex: 1 1 160px; display: flex; flex-direction: column; gap: 3px">
+            <span class="mono" style="font-size: 11px; color: #5A5F68">PLACE OF SUPPLY</span>
+            <span style="font-weight: 600">{{pos}}</span>
+            <span style="color: #3D424B">{{supplyType}}</span>
+          </div>
+          <div aria-label="E-invoice QR code placeholder" style="width: 84px; height: 84px; flex: none; border: 1px dashed #C9C8C0; border-radius: 6px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 10px; color: #5A5F68; padding: 6px; box-sizing: border-box">{{qrText}}</div>
+        </div>
+        <table style="width: 100%; border-collapse: collapse">
+          <thead><tr style="font-size: 11px; color: #5A5F68; text-align: left"><th scope="col" style="padding: 6px 0; font-weight: 500">Description</th><th scope="col" style="padding: 6px 4px; font-weight: 500">HSN/SAC</th><th scope="col" style="padding: 6px 4px; font-weight: 500; text-align: right">Qty</th><th scope="col" style="padding: 6px 0; font-weight: 500; text-align: right">Taxable ₹</th></tr></thead>
+          <tbody>
+            <sc-for list="{{lines}}" as="l" hint-placeholder-count="3">
+              <tr style="border-top: 1px solid #ECEBE5"><td style="padding: 8px 0">{{l.n}}</td><td class="mono" style="padding: 8px 4px">{{l.h}}</td><td class="mono" style="padding: 8px 4px; text-align: right">{{l.q}}</td><td class="mono" style="padding: 8px 0; text-align: right">{{l.amtPlain}}</td></tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div style="display: flex; justify-content: flex-end">
+          <dl style="margin: 0; width: 100%; max-width: 300px; display: flex; flex-direction: column">
+            <sc-for list="{{totals}}" as="t" hint-placeholder-count="4">
+              <div style="display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; {{t.st}}"><dt>{{t.k}}</dt><dd class="mono" style="margin: 0">{{t.v}}</dd></div>
+            </sc-for>
+          </dl>
+        </div>
+        <span style="color: #3D424B; font-style: italic">{{words}}</span>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid #ECEBE5; color: #3D424B; line-height: 1.5">
+          <span style="flex: 1 1 200px">Pay by NEFT/RTGS to virtual account <span class="mono">[VA NUMBER]</span> · [BANK NAME] · IFSC <span class="mono">[IFSC]</span></span>
+          <span style="flex: 1 1 160px">Or pay online: <a href="CustomerPay.dc.html">pay.[YOUR DOMAIN]/{{invShort}}</a></span>
+        </div>
+        <span style="font-size: 11px; color: #5A5F68">{{tdsLine}}</span>
+      </div>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sup: 'KA', cust: 'coastal', q: 20, terms: 30, saved: false }; }
+  renderVals() {
+    const st = this.state;
+    const inr = (n) => n.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+    const A = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const B = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const two = (n) => n < 20 ? A[n] : B[Math.floor(n / 10)] + (n % 10 ? ' ' + A[n % 10] : '');
+    const three = (n) => (Math.floor(n / 100) ? A[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' : '') : '') + (n % 100 ? two(n % 100) : '');
+    const words = (n) => { let s = ''; const cr = Math.floor(n / 1e7); n %= 1e7; const lk = Math.floor(n / 1e5); n %= 1e5; const th = Math.floor(n / 1e3); n %= 1e3;
+      if (cr) s += two(cr) + ' Crore '; if (lk) s += two(lk) + ' Lakh '; if (th) s += two(th) + ' Thousand '; if (n) s += three(n); return 'Rupees ' + s.trim() + ' only'; };
+    const S = {
+      KA: { t: 'Bengaluru', code: '29', g: '29AAHCN1234Q1Z8', addr: 'Peenya Industrial Area, Bengaluru, Karnataka', pre: 'NI/KA/' },
+      TN: { t: 'Chennai', code: '33', g: '33AAHCN1234Q1Z4', addr: 'Ambattur, Chennai, Tamil Nadu', pre: 'NI/TN/' },
+      MH: { t: 'Pune', code: '27', g: '27AAHCN1234Q1ZC', addr: 'Chakan, Pune, Maharashtra', pre: 'NI/MH/' }
+    };
+    const C = {
+      coastal: { n: 'Coastal Grid Utilities', legal: 'Coastal Grid Utilities Ltd', city: 'Kochi, Kerala', g: '32AABCC4521R1ZR', code: '32', state: 'Kerala', tds: true, tag: 'Deducts TDS · 194Q' },
+      sahyadri: { n: 'Sahyadri Agro Industries', legal: 'Sahyadri Agro Industries', city: 'Nashik, Maharashtra', g: '27AAECS7810K1Z3', code: '27', state: 'Maharashtra', tds: false, tag: '1 overdue invoice' },
+      deccan: { n: 'Deccan Motors', legal: 'Deccan Motors Pvt Ltd', city: 'Bengaluru, Karnataka', g: '29AAFCD3390L1ZK', code: '29', state: 'Karnataka', tds: true, tag: 'Deducts TDS · 194Q' }
+    };
+    const sup = S[st.sup], cust = C[st.cust];
+    const nextNo = { KA: 213, TN: 47, MH: 20 }[st.sup];
+    const invNo = sup.pre + String(nextNo).padStart(3, '0');
+    const q = st.q;
+    const L = [
+      { n: 'Precision pressure transmitter PT-400', h: '902620', q, rate: 14500, r: 18, editable: true },
+      { n: 'NABL calibration certificate · per unit', h: '998346', q, rate: 1200, r: 18, editable: false },
+      { n: 'Freight and transit insurance', h: '996511', q: 1, rate: 6500, r: 18, editable: false }
+    ];
+    const taxable = L.reduce((s, l) => s + l.q * l.rate, 0);
+    const gst = Math.round(taxable * 0.18);
+    const intra = sup.code === cust.code;
+    const total = taxable + gst;
+    const goodsValue = Math.round(L[0].q * L[0].rate * 1.18);
+    const tds = cust.tds ? Math.round(taxable * 0.001) : 0;
+    const dueMap = { 30: '28 Nov 2026', 45: '13 Dec 2026', 60: '28 Dec 2026' };
+    const selSt = 'border:1px solid #14161A;background:#14161A;color:#FFFFFF';
+    const offSt = 'border:1px solid #E2E1DA;background:#FFFFFF;color:#14161A';
+    const ok = { dot: 'background:#1E3A28;color:#9BE3B0', icon: 'M5 12l5 5 9-10' };
+    const info = { dot: 'background:#1E2647;color:#C9D3FF', icon: 'M12 8v.01M12 11v5' };
+    const totals = intra
+      ? [{ k: 'Taxable value', v: inr(taxable), st: '' }, { k: 'CGST 9%', v: inr(gst / 2), st: '' }, { k: 'SGST 9%', v: inr(gst / 2), st: '' }, { k: 'Invoice total', v: '₹' + inr(total), st: 'font-weight:700;font-size:15px;border-top:1px solid #14161A;padding-top:10px;margin-top:4px' }]
+      : [{ k: 'Taxable value', v: inr(taxable), st: '' }, { k: 'IGST 18%', v: inr(gst), st: '' }, { k: 'Invoice total', v: '₹' + inr(total), st: 'font-weight:700;font-size:15px;border-top:1px solid #14161A;padding-top:10px;margin-top:4px' }];
+    return {
+      invNo, invShort: invNo.replace(/\//g, '').toLowerCase(), saved: st.saved,
+      save: () => this.setState({ saved: true }),
+      sups: Object.keys(S).map((k) => ({ t: S[k].t, g: S[k].g, on: st.sup === k, st: st.sup === k ? selSt : offSt, sub: st.sup === k ? 'color:#C7CBD2' : 'color:#5A5F68', pick: () => this.setState({ sup: k, saved: false }) })),
+      custs: Object.keys(C).map((k) => ({ ...C[k], on: st.cust === k, st: st.cust === k ? selSt : offSt, sub: st.cust === k ? 'color:#C7CBD2' : 'color:#5A5F68', pick: () => this.setState({ cust: k, saved: false }) })),
+      lines: L.map((l) => ({ ...l, q: String(l.q), rate: '₹' + inr(l.rate), amt: '₹' + inr(l.q * l.rate), amtPlain: inr(l.q * l.rate), fixed: !l.editable })),
+      inc: () => this.setState({ q: Math.min(st.q + 1, 999), saved: false }),
+      dec: () => this.setState({ q: Math.max(st.q - 1, 1), saved: false }),
+      termOpts: [30, 45, 60].map((d) => ({ t: d + ' days', on: st.terms === d, pick: () => this.setState({ terms: d }), st: st.terms === d ? 'border:1px solid #14161A;background:#14161A;color:#FFFFFF' : 'border:1px solid #C9C8C0;background:#FFFFFF;color:#14161A' })),
+      dueDate: dueMap[st.terms], longTerms: st.terms > 45,
+      checks: [
+        { ...ok, t: intra ? 'Intra-state supply.' : 'Inter-state supply.', d: (intra ? 'CGST + SGST, because ' : 'IGST, because ') + 'you ship from ' + sup.t + ' (' + sup.code + ') to ' + cust.state + ' (' + cust.code + ').' },
+        { ...ok, t: 'E-invoice required.', d: 'Turnover is above ₹5 Cr — the IRN and QR are generated when you send.' },
+        goodsValue > 50000 ? { ...ok, t: 'E-way bill required.', d: 'Goods worth ₹' + inr(goodsValue) + ' cross ₹50,000. Part A fills from this invoice; add the vehicle number at dispatch.' } : { ...info, t: 'E-way bill not needed.', d: 'Goods value ₹' + inr(goodsValue) + ' is under ₹50,000.' },
+        cust.tds ? { ...info, t: 'Customer deducts TDS.', d: '0.1% under Sec 194Q — expect ₹' + inr(total - tds) + ' and claim ₹' + inr(tds) + ' from Form 26AS.' } : { ...ok, t: 'No TDS expected.', d: 'Full ₹' + inr(total) + ' due.' },
+        { ...ok, t: 'GSTR-1 ready.', d: 'Dated 29 Oct, so it lands in the October GSTR-1 draft, due 11 Nov.' }
+      ],
+      supAddr: sup.addr, supG: sup.g, cust,
+      pos: cust.state + ' (' + cust.code + ')', supplyType: intra ? 'Intra-state · CGST + SGST' : 'Inter-state · IGST',
+      qrText: st.saved ? 'IRN · signed QR' : 'QR appears on IRN',
+      totals, words: words(total),
+      tdsLine: cust.tds ? 'Buyer may deduct TDS at 0.1% under Sec 194Q. Credit appears in Form 26AS.' : 'Computer-generated invoice under the e-invoice system. No signature required.'
+    };
+  }
+}
+</script>
+</body>
+</html>

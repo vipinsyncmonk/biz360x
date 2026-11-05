@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — Startup workspace</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0;background:#F4F3EE;color:#14161A;font-family:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.nav{color:#B7BCC5;text-decoration:none}.nav:hover{color:#FFFFFF;background:#1C2028}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F3EE">
+
+  <!-- SIDEBAR -->
+  <aside style="flex: 1 1 248px; max-width: 100%; background: #111318; color: #ECEDEF; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #FFFFFF; padding: 4px 8px">
+      <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-dasharray="47 16" stroke-linecap="round"></circle><circle cx="21.1" cy="6.9" r="2.8" fill="#8EA2FF"></circle></svg>
+      <span class="disp" style="font-size: 19px; font-weight: 700">Biz360X</span>
+    </a>
+    <button type="button" style="font: inherit; text-align: left; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; border: 1px solid #2A2E38; background: #181B22; color: #FFFFFF; cursor: pointer; min-height: 52px">
+      <span class="mono" style="width: 32px; height: 32px; border-radius: 8px; background: #2846E0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">OL</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 600">Orbitly Labs</span><span style="font-size: 12px; color: #9CA3AF">Pvt Ltd · DPIIT startup</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"></path></svg>
+    </button>
+    <nav aria-label="Workspace" style="display: flex; flex-direction: column; gap: 18px">
+      <sc-for list="{{navGroups}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span class="mono" style="font-size: 11px; color: #8A909A; padding: 0 10px 6px">{{g.h}}</span>
+          <sc-for list="{{g.items}}" as="n" hint-placeholder-count="4">
+            <a class="nav" href="{{n.href}}" aria-current="{{n.cur}}" style="display: flex; align-items: center; gap: 12px; padding: 0 10px; height: 40px; border-radius: 10px; font-size: 14px; {{n.st}}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.icon}}"></path></svg>
+              <span style="flex: 1">{{n.t}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+    <div style="margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px; border-top: 1px solid #23272F">
+      <span style="width: 32px; height: 32px; border-radius: 50%; background: #2A2E38; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">KM</span>
+      <span style="display: flex; flex-direction: column"><span style="font-size: 14px">Karthik M</span><span style="font-size: 12px; color: #9CA3AF">Co-founder · CEO</span></span>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <main style="padding: 32px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box; max-width: 1400px; width: 100%">
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span class="mono" style="font-size: 12px; color: #5A5F68">STARTUP TRACK · SEED · INCORPORATED MAR 2024</span>
+          <h1 class="disp" style="margin: 0; font-size: 36px; font-weight: 700">Seed extension is 4 steps from money in the bank.</h1>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap">
+          <button type="button" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #C9C8C0; background: #FFFFFF; color: #14161A; cursor: pointer">Share data room</button>
+          <button type="button" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; border: 0; background: #14161A; color: #FFFFFF; cursor: pointer">Draft investor update</button>
+        </div>
+      </div>
+
+      <section aria-label="Key numbers" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px">
+        <sc-for list="{{kpis}}" as="k" hint-placeholder-count="5">
+          <div style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+            <span style="font-size: 13px; color: #5A5F68">{{k.l}}</span>
+            <span class="disp" style="font-size: 30px; font-weight: 700; line-height: 1">{{k.v}}</span>
+            <span style="font-size: 13px; color: #5A5F68">{{k.n}}</span>
+          </div>
+        </sc-for>
+      </section>
+
+      <!-- round tracker -->
+      <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 18px">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 600">Seed extension · [ROUND SIZE] · CCPS</h2>
+          <span style="font-size: 13px; color: #5A5F68">Private placement under Sec 42 · 1 foreign investor</span>
+        </div>
+        <ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 10px">
+          <sc-for list="{{round}}" as="r" hint-placeholder-count="6">
+            <li style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px; {{r.box}}">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span class="mono" style="width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; {{r.dot}}">{{r.n}}</span>
+                <span class="mono" style="font-size: 11px; {{r.sc}}">{{r.s}}</span>
+              </div>
+              <span style="font-size: 14px; font-weight: 600; line-height: 1.3">{{r.t}}</span>
+              <span style="font-size: 12px; line-height: 1.45; {{r.bc}}">{{r.b}}</span>
+            </li>
+          </sc-for>
+        </ol>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <!-- cap table -->
+        <section style="flex: 3 1 520px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+          <div style="padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+            <h2 style="margin: 0; font-size: 17px; font-weight: 600">Cap table · fully diluted</h2>
+            <div role="group" aria-label="Scenario" style="display: flex; gap: 4px; padding: 4px; background: #E9E8E1; border-radius: 10px">
+              <button type="button" aria-pressed="{{preOn}}" onClick="{{toPre}}" style="font: inherit; font-size: 13px; height: 34px; padding: 0 12px; border: 0; border-radius: 7px; cursor: pointer; {{preSt}}">Today</button>
+              <button type="button" aria-pressed="{{postOn}}" onClick="{{toPost}}" style="font: inherit; font-size: 13px; height: 34px; padding: 0 12px; border: 0; border-radius: 7px; cursor: pointer; {{postSt}}">Post extension</button>
+            </div>
+          </div>
+          <div style="overflow-x: auto">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; min-width: 520px">
+              <thead><tr style="text-align: left; font-size: 12px; color: #5A5F68"><th scope="col" style="padding: 10px 20px; font-weight: 500">Holder</th><th scope="col" style="padding: 10px 8px; font-weight: 500">Instrument</th><th scope="col" style="padding: 10px 8px; font-weight: 500; width: 40%">Ownership</th><th scope="col" style="padding: 10px 20px; font-weight: 500; text-align: right">%</th></tr></thead>
+              <tbody>
+                <sc-for list="{{cap}}" as="c" hint-placeholder-count="6">
+                  <tr style="border-top: 1px solid #ECEBE5">
+                    <td style="padding: 12px 20px; font-weight: 500">{{c.h}}</td>
+                    <td style="padding: 12px 8px; color: #3D424B">{{c.i}}</td>
+                    <td style="padding: 12px 8px"><div title="{{c.h}}: {{c.p}}" style="height: 10px; border-radius: 0 4px 4px 0; background: #2846E0; width: {{c.w}}"></div></td>
+                    <td class="mono" style="padding: 12px 20px; text-align: right; font-weight: 600">{{c.p}}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Startup India -->
+        <section style="flex: 2 1 340px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+          <div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 4px">
+            <h2 style="margin: 0; font-size: 17px; font-weight: 600">Startup India benefits</h2>
+            <span style="font-size: 13px; color: #5A5F68">DPIIT certificate · [DPIIT NUMBER]</span>
+          </div>
+          <sc-for list="{{benefits}}" as="b" hint-placeholder-count="4">
+            <div style="display: flex; gap: 12px; align-items: flex-start; padding: 14px 20px; border-top: 1px solid #ECEBE5">
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                <span style="font-size: 14px; font-weight: 600">{{b.t}}</span>
+                <span style="font-size: 13px; line-height: 1.45; color: #3D424B">{{b.d}}</span>
+              </div>
+              <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; white-space: nowrap; {{b.ps}}">{{b.s}}</span>
+            </div>
+          </sc-for>
+        </section>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <!-- investor update -->
+        <section style="flex: 3 1 520px; min-width: 0; background: #111318; color: #ECEDEF; border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8EA2FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"></path></svg>
+              <h2 style="margin: 0; font-size: 17px; font-weight: 600">October investor update — drafted from your books</h2>
+            </div>
+            <span class="mono" style="font-size: 12px; color: #9CA3AF">To: 7 investors</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 10px">
+            <sc-for list="{{update}}" as="u" hint-placeholder-count="4">
+              <div style="border: 1px solid #2A2E38; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px">
+                <span style="font-size: 12px; color: #9CA3AF">{{u.l}}</span>
+                <span class="mono" style="font-size: 18px; font-weight: 600; color: #FFFFFF">{{u.v}}</span>
+              </div>
+            </sc-for>
+          </div>
+          <label for="note" style="font-size: 13px; color: #B7BCC5">Founder note</label>
+          <textarea id="note" rows="3" style="font: inherit; font-size: 14px; line-height: 1.5; padding: 12px; border-radius: 12px; border: 1px solid #2A2E38; background: #181B22; color: #FFFFFF; resize: vertical">[Highlights, asks and hires — written by you; numbers above come from the ledger]</textarea>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap">
+            <button type="button" style="font: inherit; font-size: 14px; font-weight: 500; height: 40px; padding: 0 14px; border-radius: 10px; border: 0; background: #FFFFFF; color: #14161A; cursor: pointer">Preview email</button>
+            <button type="button" style="font: inherit; font-size: 14px; height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #3A3F4A; background: transparent; color: #FFFFFF; cursor: pointer">Attach MIS pack</button>
+          </div>
+        </section>
+
+        <!-- upcoming -->
+        <section style="flex: 2 1 340px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 600">Founder calendar</h2>
+          <sc-for list="{{upcoming}}" as="u" hint-placeholder-count="5">
+            <div style="display: flex; gap: 14px; align-items: flex-start">
+              <div class="mono" style="width: 48px; flex: none; display: flex; flex-direction: column; align-items: center; padding: 6px 0; border-radius: 10px; background: #F4F3EE; font-size: 11px; color: #5A5F68"><span style="font-size: 17px; font-weight: 600; color: #14161A">{{u.d}}</span>{{u.m}}</div>
+              <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">{{u.t}}</span><span style="font-size: 13px; color: #5A5F68; line-height: 1.4">{{u.b}}</span></div>
+            </div>
+          </sc-for>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { post: false }; }
+  renderVals() {
+    const active = 'Startup';
+    const I = {
+      today: 'M3 12l9-8 9 8M5 10v10h14V10', shield: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4',
+      book: 'M4 4h16v16H4zM4 10h16M10 4v16', gst: 'M7 3h10l2 4H5zM5 7v14h14V7M9 13h6M9 17h4',
+      people: 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0', legal: 'M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z',
+      rocket: 'M5 15c-1 1-2 5-2 5s4-1 5-2M9 15l-3-3c1-4 5-9 12-9 0 7-5 11-9 12zM14 10h.01', factory: 'M3 21V10l6 4V10l6 4V6h6v15z',
+      folder: 'M3 7h6l2 2h10v11H3z', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+      pie: 'M12 3a9 9 0 1 0 9 9h-9z', mail: 'M3 6h18v12H3zM3 6l9 7 9-7'
+    };
+    const mk = (t, icon, href) => ({ t, icon, href, cur: t === active ? 'page' : 'false', st: t === active ? 'background:#22262F;color:#FFFFFF' : '' });
+    const P = { ok: 'background:#E6F4EA;color:#14692F', wait: 'background:#E8ECFF;color:#1A31A8', due: 'background:#FDF0E1;color:#9A4508', idle: 'background:#EFEEE8;color:#3D424B' };
+    const step = (n, t, b, s) => {
+      const done = s === 'DONE', now = s === 'IN PROGRESS';
+      return { n, t, b, s,
+        box: now ? 'background:#E8ECFF;border:1px solid #2846E0' : 'background:#FAFAF7;border:1px solid #ECEBE5',
+        dot: done ? 'background:#14692F;color:#FFFFFF' : now ? 'background:#2846E0;color:#FFFFFF' : 'background:#E2E1DA;color:#3D424B',
+        sc: done ? 'color:#14692F' : now ? 'color:#1A31A8' : 'color:#5A5F68',
+        bc: 'color:#3D424B' };
+    };
+    const pre = [['Karthik M', 'Equity', 34.2], ['Divya N', 'Equity', 30.8], ['Seed investors', 'CCPS', 18.5], ['Angel syndicate', 'CCPS', 6.1], ['ESOP pool', 'Options', 10.4]];
+    const post = [['Karthik M', 'Equity', 30.1], ['Divya N', 'Equity', 27.1], ['Seed investors', 'CCPS', 16.3], ['Extension lead', 'CCPS', 12.0], ['Angel syndicate', 'CCPS', 5.4], ['ESOP pool', 'Options', 9.1]];
+    const src = this.state.post ? post : pre;
+    const on = 'background:#FFFFFF;color:#14161A;box-shadow:0 1px 2px rgba(20,22,26,0.12)';
+    const off = 'background:transparent;color:#3D424B';
+    return {
+      navGroups: [
+        { h: 'WORKSPACE', items: [mk('Today', I.today, 'Dashboard.dc.html'), mk('Compliance', I.shield, 'Compliance.dc.html'), mk('Documents', I.folder, 'Documents.dc.html')] },
+        { h: 'STARTUP', items: [mk('Startup', I.rocket, 'Startup.dc.html'), mk('Cap table & ESOP', I.pie, '#cap'), mk('Investor updates', I.mail, '#updates'), mk('Finance & Books', I.book, 'Finance.dc.html')] },
+        { h: 'TRACKS', items: [mk('MSME', I.factory, 'MSME.dc.html'), mk('All modules', I.grid, 'Modules.dc.html')] },
+        { h: 'ADMIN', items: [mk('Group view', 'M3 21V9l6-4 6 4v12M15 21V13h6v8M7 13h4M7 17h4', 'Group.dc.html'), mk('Settings', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L10 21h4l.5-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z', 'Settings.dc.html')] }
+      ],
+      kpis: [
+        { l: 'Bank balance', v: '₹4.2 Cr', n: 'HDFC + 2 FD sweeps' },
+        { l: 'Net burn', v: '₹22 L / mo', n: '3-month average' },
+        { l: 'Runway', v: '19 mo', n: 'Before the extension closes' },
+        { l: 'Team', v: '24', n: '21 full-time · 3 interns' },
+        { l: 'ESOP pool', v: '10.4%', n: '6.2% granted · 4.2% free' }
+      ],
+      round: [
+        step('1', 'Term sheet', 'Signed 14 Oct · lead investor', 'DONE'),
+        step('2', 'Due diligence', 'Data room 84% complete · 6 requests open', 'IN PROGRESS'),
+        step('3', 'Board & EGM approvals', 'Sec 42 / 62 special resolution · MGT-14 within 30 days', 'NEXT'),
+        step('4', 'SSA, SHA and PAS-4', 'Offer letter to identified investors', 'NEXT'),
+        step('5', 'Allotment · PAS-3', 'Within 60 days of money received; return in 15 days', 'NEXT'),
+        step('6', 'FC-GPR on FIRMS', 'Within 30 days of allotment to the foreign investor', 'NEXT')
+      ],
+      preOn: !this.state.post, postOn: this.state.post,
+      preSt: this.state.post ? off : on, postSt: this.state.post ? on : off,
+      toPre: () => this.setState({ post: false }), toPost: () => this.setState({ post: true }),
+      cap: src.map(([h, i, p]) => ({ h, i, p: p.toFixed(1) + '%', w: Math.round((p / 40) * 100) + '%' })),
+      benefits: [
+        { t: 'DPIIT recognition', d: 'Recognised startup — unlocks the benefits below', s: 'Active', ps: P.ok },
+        { t: 'Tax holiday · Sec 80-IAC', d: '3 consecutive years out of the first 10 · Form 1 for IMB certification', s: 'Applied', ps: P.wait },
+        { t: 'Labour law self-certification', d: 'Self-certify under listed labour and environment laws', s: 'Eligible', ps: P.idle },
+        { t: 'Patent fee rebate', d: 'Rebate on patent filing fees with fast-tracked examination', s: '1 filing', ps: P.wait }
+      ],
+      update: [
+        { l: 'Revenue · Oct', v: '₹38.6 L' }, { l: 'MoM growth', v: '+11.2%' }, { l: 'Gross margin', v: '71%' }, { l: 'Runway', v: '19 mo' }
+      ],
+      upcoming: [
+        { d: '05', m: 'NOV', t: 'Board meeting · Q3', b: 'Gap since last meeting: 98 days of the 120 allowed' },
+        { d: '12', m: 'NOV', t: 'ESOP vesting · 4 employees', b: '1-year cliff · 18,400 options vest' },
+        { d: '20', m: 'NOV', t: 'DD call with lead investor', b: 'Legal and tax diligence review' },
+        { d: '15', m: 'DEC', t: 'Advance tax · 3rd instalment', b: '75% of estimated tax, cumulative' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

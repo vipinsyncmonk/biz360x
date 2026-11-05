@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0;background:#F4F3EE;color:#14161A;font-family:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.nav{color:#B7BCC5;text-decoration:none}.nav:hover{color:#FFFFFF;background:#1C2028}
+.tab:hover{color:#14161A !important}
+input:focus{outline:2px solid #2846E0;outline-offset:1px}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F3EE">
+
+  <!-- SIDEBAR -->
+  <aside style="flex: 1 1 248px; max-width: 100%; background: #111318; color: #ECEDEF; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #FFFFFF; padding: 4px 8px">
+      <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-dasharray="47 16" stroke-linecap="round"></circle><circle cx="21.1" cy="6.9" r="2.8" fill="#8EA2FF"></circle></svg>
+      <span class="disp" style="font-size: 19px; font-weight: 700">Biz360X</span>
+    </a>
+    <button type="button" style="font: inherit; text-align: left; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; border: 1px solid #2A2E38; background: #181B22; color: #FFFFFF; cursor: pointer; min-height: 52px">
+      <span class="mono" style="width: 32px; height: 32px; border-radius: 8px; background: #2846E0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">NI</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 600">Nimbus Instruments</span><span style="font-size: 12px; color: #9CA3AF">Pvt Ltd · 3 GSTINs</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"></path></svg>
+    </button>
+    <nav aria-label="Workspace" style="display: flex; flex-direction: column; gap: 18px">
+      <sc-for list="{{navGroups}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span class="mono" style="font-size: 11px; color: #8A909A; padding: 0 10px 6px">{{g.h}}</span>
+          <sc-for list="{{g.items}}" as="n" hint-placeholder-count="4">
+            <a class="nav" href="{{n.href}}" aria-current="{{n.cur}}" style="display: flex; align-items: center; gap: 12px; padding: 0 10px; height: 40px; border-radius: 10px; font-size: 14px; {{n.st}}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.icon}}"></path></svg>
+              <span style="flex: 1">{{n.t}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <main style="padding: 32px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box; max-width: 1200px; width: 100%">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span class="mono" style="font-size: 12px; color: #5A5F68">SETTINGS · NIMBUS INSTRUMENTS PVT LTD</span>
+        <h1 class="disp" style="margin: 0; font-size: 36px; font-weight: 700">Who can see, prepare, approve and sign.</h1>
+      </div>
+
+      <div role="tablist" aria-label="Settings sections" style="display: flex; gap: 4px; border-bottom: 1px solid #DCDBD3; flex-wrap: wrap">
+        <sc-for list="{{tabs}}" as="t" hint-placeholder-count="6">
+          <button type="button" role="tab" class="tab" aria-selected="{{t.on}}" onClick="{{t.pick}}" style="font: inherit; font-size: 15px; font-weight: 500; height: 48px; padding: 0 14px; border: 0; background: transparent; cursor: pointer; margin-bottom: -1px; {{t.st}}">{{t.t}}</button>
+        </sc-for>
+      </div>
+
+      <!-- TEAM -->
+      <sc-if value="{{isTeam}}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 24px">
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+            <div style="padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap"><h2 style="margin: 0; font-size: 17px; font-weight: 600">People · 6</h2><button type="button" style="font: inherit; font-size: 14px; font-weight: 500; height: 40px; padding: 0 14px; border-radius: 10px; border: 0; background: #14161A; color: #FFFFFF; cursor: pointer">Invite teammate</button></div>
+            <div style="overflow-x: auto">
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px">
+                <thead><tr style="text-align: left; font-size: 12px; color: #5A5F68; background: #FAFAF7"><th scope="col" style="padding: 10px 20px; font-weight: 500">Person</th><th scope="col" style="padding: 10px 8px; font-weight: 500">Role</th><th scope="col" style="padding: 10px 8px; font-weight: 500">Modules</th><th scope="col" style="padding: 10px 20px; font-weight: 500">Sign-in</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{people}}" as="p" hint-placeholder-count="6">
+                    <tr style="border-top: 1px solid #ECEBE5">
+                      <td style="padding: 12px 20px"><div style="display: flex; gap: 10px; align-items: center"><span style="width: 32px; height: 32px; flex: none; border-radius: 50%; background: #ECEBE5; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">{{p.i}}</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">{{p.n}}</span><span style="font-size: 12px; color: #5A5F68">{{p.e}}</span></span></div></td>
+                      <td style="padding: 12px 8px"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; {{p.rs}}">{{p.r}}</span></td>
+                      <td style="padding: 12px 8px; color: #3D424B">{{p.m}}</td>
+                      <td style="padding: 12px 20px; color: #3D424B; font-size: 13px">{{p.s}}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+            <h2 style="margin: 0; font-size: 17px; font-weight: 600">Approval rules</h2>
+            <sc-for list="{{rules}}" as="r" hint-placeholder-count="3">
+              <label style="display: flex; gap: 14px; align-items: flex-start; padding-top: 14px; border-top: 1px solid #ECEBE5; cursor: pointer">
+                <input type="checkbox" checked="{{r.on}}" onChange="{{r.toggle}}" style="width: 18px; height: 18px; margin-top: 2px; accent-color: #14161A; flex: none">
+                <span style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 500">{{r.t}}</span><span style="font-size: 13px; color: #5A5F68">{{r.d}}</span></span>
+              </label>
+            </sc-for>
+          </section>
+        </div>
+      </sc-if>
+
+      <!-- ADVISORS -->
+      <sc-if value="{{isAdv}}" hint-placeholder-val="{{ false }}">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px">
+          <sc-for list="{{advisors}}" as="a" hint-placeholder-count="3">
+            <article style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+              <div style="display: flex; justify-content: space-between; gap: 10px; align-items: flex-start">
+                <div style="display: flex; flex-direction: column; gap: 3px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">{{a.n}}</h2><span style="font-size: 13px; color: #5A5F68">{{a.r}}</span></div>
+                <span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; {{a.ps}}">{{a.s}}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <sc-for list="{{a.scope}}" as="x" hint-placeholder-count="3">
+                  <div style="display: flex; justify-content: space-between; gap: 10px; font-size: 14px; padding-top: 8px; border-top: 1px solid #ECEBE5"><span>{{x.m}}</span><span style="color: #3D424B">{{x.p}}</span></div>
+                </sc-for>
+              </div>
+              <span style="font-size: 12px; color: #5A5F68">{{a.exp}}</span>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap"><button type="button" style="font: inherit; font-size: 13px; height: 36px; padding: 0 12px; border-radius: 9px; border: 1px solid #C9C8C0; background: #FFFFFF; color: #14161A; cursor: pointer">Edit access</button><button type="button" style="font: inherit; font-size: 13px; height: 36px; padding: 0 12px; border-radius: 9px; border: 1px solid #C9C8C0; background: #FFFFFF; color: #B42318; cursor: pointer">Revoke</button></div>
+            </article>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- SIGNING -->
+      <sc-if value="{{isSign}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 16px">
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+            <div style="padding: 18px 20px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">Digital signature certificates</h2></div>
+            <sc-for list="{{dscs}}" as="d" hint-placeholder-count="3">
+              <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 14px 20px; border-top: 1px solid #ECEBE5">
+                <span style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">{{d.n}}</span><span style="font-size: 13px; color: #5A5F68">{{d.c}}</span></span>
+                <span style="display: flex; flex-direction: column; gap: 2px; min-width: 160px"><span style="font-size: 12px; color: #5A5F68">Used for</span><span style="font-size: 13px">{{d.u}}</span></span>
+                <span class="mono" style="font-size: 13px; white-space: nowrap; {{d.dc}}">{{d.e}}</span>
+              </div>
+            </sc-for>
+          </section>
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+            <h2 style="margin: 0; font-size: 17px; font-weight: 600">E-sign</h2>
+            <span style="font-size: 14px; line-height: 1.55; color: #3D424B">Aadhaar eSign is on for contracts, offer letters and board resolutions. Statutory e-forms that need a DSC (MCA, income-tax audit reports) always route to a DSC holder.</span>
+          </section>
+        </div>
+      </sc-if>
+
+      <!-- PORTALS -->
+      <sc-if value="{{isPortals}}" hint-placeholder-val="{{ false }}">
+        <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+          <div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 4px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">Connected portals</h2><span style="font-size: 13px; color: #5A5F68">Credentials are never stored in plain text. Sessions that need an OTP ask the named owner to renew.</span></div>
+          <sc-for list="{{portals}}" as="p" hint-placeholder-count="7">
+            <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 14px 20px; border-top: 1px solid #ECEBE5">
+              <span style="flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">{{p.n}}</span><span style="font-size: 13px; color: #5A5F68">{{p.d}}</span></span>
+              <span style="font-size: 13px; color: #3D424B; min-width: 120px">Owner · {{p.o}}</span>
+              <span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; {{p.ps}}">{{p.s}}</span>
+              <button type="button" style="font: inherit; font-size: 13px; height: 36px; padding: 0 12px; border-radius: 9px; border: 1px solid #C9C8C0; background: #FFFFFF; color: #14161A; cursor: pointer">{{p.cta}}</button>
+            </div>
+          </sc-for>
+        </section>
+      </sc-if>
+
+      <!-- NOTIFICATIONS -->
+      <sc-if value="{{isNotif}}" hint-placeholder-val="{{ false }}">
+        <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+          <div style="padding: 18px 20px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">Notify me about</h2></div>
+          <div style="overflow-x: auto">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px">
+              <thead><tr style="font-size: 12px; color: #5A5F68; background: #FAFAF7"><th scope="col" style="padding: 10px 20px; font-weight: 500; text-align: left">Event</th><sc-for list="{{channels}}" as="c" hint-placeholder-count="3"><th scope="col" style="padding: 10px 8px; font-weight: 500; text-align: center; width: 110px">{{c}}</th></sc-for></tr></thead>
+              <tbody>
+                <sc-for list="{{events}}" as="e" hint-placeholder-count="6">
+                  <tr style="border-top: 1px solid #ECEBE5">
+                    <th scope="row" style="padding: 12px 20px; text-align: left; font-weight: 400"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">{{e.t}}</span><span style="font-size: 12px; color: #5A5F68">{{e.d}}</span></span></th>
+                    <sc-for list="{{e.ch}}" as="c" hint-placeholder-count="3">
+                      <td style="padding: 12px 8px; text-align: center"><input type="checkbox" aria-label="{{c.label}}" checked="{{c.on}}" onChange="{{c.toggle}}" style="width: 18px; height: 18px; accent-color: #14161A"></td>
+                    </sc-for>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- BILLING -->
+      <sc-if value="{{isBill}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+          <section style="flex: 1 1 320px; min-width: 0; background: #111318; color: #ECEDEF; border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 12px">
+            <span class="mono" style="font-size: 11px; color: #8A909A">CURRENT PLAN</span>
+            <span class="disp" style="font-size: 32px; font-weight: 700">Grow</span>
+            <span style="font-size: 14px; color: #B7BCC5">[₹ PRICE] per entity per month · 1 entity · unlimited teammates and advisors</span>
+            <a href="Main.dc.html#pricing" style="align-self: flex-start; height: 40px; padding: 0 14px; border-radius: 10px; background: #FFFFFF; color: #14161A; display: inline-flex; align-items: center; font-size: 14px; font-weight: 500; text-decoration: none">Compare plans</a>
+          </section>
+          <section style="flex: 2 1 420px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+            <div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 4px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">Invoices</h2><span style="font-size: 13px; color: #5A5F68">GST tax invoices to 29AAHCN1234Q1Z8 · ITC flows into your GSTR-2B</span></div>
+            <sc-for list="{{invoices}}" as="i" hint-placeholder-count="3">
+              <div style="display: flex; gap: 14px; align-items: center; padding: 12px 20px; border-top: 1px solid #ECEBE5; font-size: 14px">
+                <span class="mono" style="flex: 1">{{i.n}}</span><span style="color: #3D424B">{{i.p}}</span><span class="mono">[₹ AMOUNT]</span><a href="#invoice" style="font-size: 13px">PDF</a>
+              </div>
+            </sc-for>
+          </section>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"startTab":{"editor":"enum","options":["team","advisors","signing","portals","notifications","billing"],"default":"team"},"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: null, rules: { two: true, pay: true, file: true }, notif: { d7: [true, false, true], d1: [true, true, true], appr: [true, false, true], notice: [true, true, true], thr: [true, false, false], copilot: [false, false, true] } };
+  }
+  renderVals() {
+    const active = 'Settings';
+    const I = {
+      today: 'M3 12l9-8 9 8M5 10v10h14V10', shield: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4',
+      spark: 'M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z', folder: 'M3 7h6l2 2h10v11H3z',
+      grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', group: 'M3 21V9l6-4 6 4v12M15 21V13h6v8M7 13h4M7 17h4',
+      gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L10 21h4l.5-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z'
+    };
+    const mk = (t, icon, href) => ({ t, icon, href, cur: t === active ? 'page' : 'false', st: t === active ? 'background:#22262F;color:#FFFFFF' : '' });
+    const tab = this.state.tab ?? (this.props.startTab ?? 'team');
+    const P = { ok: 'background:#E6F4EA;color:#14692F', due: 'background:#FDF0E1;color:#9A4508', wait: 'background:#E8ECFF;color:#1A31A8', idle: 'background:#EFEEE8;color:#3D424B' };
+    const R = { Owner: 'background:#14161A;color:#FFFFFF', Approver: P.wait, Maker: P.idle, Viewer: 'background:#F4F3EE;color:#5A5F68' };
+    const tabDefs = [['team', 'Team & roles'], ['advisors', 'Advisors'], ['signing', 'Signing'], ['portals', 'Connected portals'], ['notifications', 'Notifications'], ['billing', 'Billing']];
+    const rules = this.state.rules;
+    const ruleDefs = [
+      { id: 'two', t: 'Two people on every statutory filing', d: 'The person who prepares a return can’t also approve it.' },
+      { id: 'pay', t: 'Second approver for payments above [₹ LIMIT]', d: 'Applies to vendor runs, tax challans and payroll bank files.' },
+      { id: 'file', t: 'Copilot can draft, never file', d: 'Actions proposed by Copilot always wait for a named approver.' }
+    ];
+    const channels = ['Email', 'WhatsApp', 'Mobile push'];
+    const evDefs = [
+      ['d7', 'Due in 7 days', 'Weekly digest of upcoming filings'], ['d1', 'Due tomorrow', 'Anything not yet filed'],
+      ['appr', 'Approval requested', 'When something waits on you'], ['notice', 'Notice received', 'GST, Income Tax or MCA'],
+      ['thr', 'Threshold crossed', 'New obligation switched on'], ['copilot', 'Copilot suggestions', 'Savings and risks it spots']
+    ];
+    const notif = this.state.notif;
+    return {
+      navGroups: [
+        { h: 'WORKSPACE', items: [mk('Today', I.today, 'Dashboard.dc.html'), mk('Compliance', I.shield, 'Compliance.dc.html'), mk('Copilot', I.spark, 'Copilot.dc.html'), mk('Documents', I.folder, 'Documents.dc.html')] },
+        { h: 'ADMIN', items: [mk('Settings', I.gear, 'Settings.dc.html'), mk('Group view', I.group, 'Group.dc.html'), mk('All modules', I.grid, 'Modules.dc.html')] }
+      ],
+      tabs: tabDefs.map(([id, t]) => ({ t, on: tab === id, pick: () => this.setState({ tab: id }),
+        st: tab === id ? 'color:#14161A;border-bottom:2px solid #14161A' : 'color:#5A5F68;border-bottom:2px solid transparent' })),
+      isTeam: tab === 'team', isAdv: tab === 'advisors', isSign: tab === 'signing', isPortals: tab === 'portals', isNotif: tab === 'notifications', isBill: tab === 'billing',
+      people: [
+        { i: 'AR', n: 'Ananya Rao', e: 'ananya@[DOMAIN]', r: 'Owner', m: 'All modules', s: 'SSO · 2FA' },
+        { i: 'RK', n: 'Ravi Kumar', e: 'ravi@[DOMAIN]', r: 'Approver', m: 'Compliance, Finance, GST & Tax', s: 'SSO · 2FA' },
+        { i: 'MI', n: 'Meera Iyer', e: 'meera@[DOMAIN]', r: 'Approver', m: 'Payroll & HR, Legal', s: 'SSO · 2FA' },
+        { i: 'PS', n: 'Priya S', e: 'priya@[DOMAIN]', r: 'Maker', m: 'Finance, GST & Tax', s: 'Password · 2FA' },
+        { i: 'KM', n: 'Kavya M', e: 'kavya@[DOMAIN]', r: 'Maker', m: 'Payroll & HR', s: 'Password · 2FA' },
+        { i: 'VB', n: 'Board observer', e: 'observer@[DOMAIN]', r: 'Viewer', m: 'Board pack, MIS', s: 'Invited · not joined' }
+      ].map((p) => ({ ...p, rs: R[p.r] })),
+      rules: ruleDefs.map((r) => ({ ...r, on: !!rules[r.id], toggle: () => this.setState({ rules: { ...rules, [r.id]: !rules[r.id] } }) })),
+      advisors: [
+        { n: 'Mehta & Co', r: 'Chartered accountants · statutory auditor', s: 'Active', ps: P.ok, exp: 'Access reviews every 12 months · next 14 Oct 2027',
+          scope: [{ m: 'Finance & Books', p: 'Read' }, { m: 'GST & Tax', p: 'Prepare' }, { m: 'MCA financial filings', p: 'Prepare & certify' }] },
+        { n: '[COMPANY SECRETARY]', r: 'Practising company secretary', s: 'Invite pending', ps: P.due, exp: 'Needed to certify MGT-7 by 29 Nov',
+          scope: [{ m: 'Board & Secretarial', p: 'Prepare' }, { m: 'MCA annual filings', p: 'Prepare & certify' }, { m: 'Documents', p: 'Board folder only' }] },
+        { n: '[LAW FIRM]', r: 'External counsel', s: 'Active', ps: P.ok, exp: 'Scoped to 3 contracts · ends with the matter',
+          scope: [{ m: 'Legal & Contracts', p: 'Comment' }, { m: 'Documents', p: 'Contracts folder only' }] }
+      ],
+      dscs: [
+        { n: 'Ananya Rao', c: 'Class 3 · signing · USB token', u: 'AOC-4, MGT-7, ITR', e: 'Expires 14 Jan 2027', dc: 'color:#9A4508;font-weight:600' },
+        { n: 'Ravi Kumar', c: 'Class 3 · signing · USB token', u: 'MCA forms, GST', e: 'Expires [DATE]', dc: 'color:#3D424B' },
+        { n: 'Meera Iyer', c: 'Not registered', u: '—', e: 'Add DSC', dc: 'color:#2846E0' }
+      ],
+      portals: [
+        { n: 'GSTN · 3 GSTINs', d: 'API access via GST Suvidha Provider', o: 'Priya S', s: 'Renew in 6 days', ps: P.due, cta: 'Renew with OTP' },
+        { n: 'MCA V3', d: 'Company login · e-forms and master data', o: 'Ananya R', s: 'Connected', ps: P.ok, cta: 'Manage' },
+        { n: 'Income Tax & TRACES', d: 'PAN and TAN · returns, 26AS, Form 16A', o: 'Ravi K', s: 'Connected', ps: P.ok, cta: 'Manage' },
+        { n: 'EPFO', d: 'Employer login · ECR upload', o: 'Kavya M', s: 'Connected', ps: P.ok, cta: 'Manage' },
+        { n: 'ESIC', d: 'Employer login · contributions', o: 'Kavya M', s: 'Connected', ps: P.ok, cta: 'Manage' },
+        { n: 'Account Aggregator', d: 'Consent for 3 bank accounts', o: 'Ananya R', s: 'Consent till [DATE]', ps: P.wait, cta: 'View consent' },
+        { n: 'Karnataka professional tax', d: 'Employer registration', o: 'Kavya M', s: 'Not connected', ps: P.idle, cta: 'Connect' }
+      ],
+      channels,
+      events: evDefs.map(([id, t, d]) => ({ t, d, ch: channels.map((c, i) => ({ label: t + ' by ' + c, on: !!notif[id][i],
+        toggle: () => { const next = notif[id].slice(); next[i] = !next[i]; this.setState({ notif: { ...notif, [id]: next } }); } })) })),
+      invoices: [{ n: 'BZX/26-27/1043', p: 'October 2026' }, { n: 'BZX/26-27/0921', p: 'September 2026' }, { n: 'BZX/26-27/0807', p: 'August 2026' }]
+    };
+  }
+}
+</script>
+</body>
+</html>

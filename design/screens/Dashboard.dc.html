@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — Command Center</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0;background:#F4F3EE;color:#14161A;font-family:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.nav{color:#B7BCC5;text-decoration:none}.nav:hover{color:#FFFFFF;background:#1C2028}
+.row:hover{background:#FAFAF7}
+.bar:hover{background:#1A31A8 !important}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F3EE">
+
+  <!-- SIDEBAR -->
+  <aside style="flex: 1 1 248px; max-width: 100%; background: #111318; color: #ECEDEF; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #FFFFFF; padding: 4px 8px">
+      <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-dasharray="47 16" stroke-linecap="round"></circle><circle cx="21.1" cy="6.9" r="2.8" fill="#8EA2FF"></circle></svg>
+      <span class="disp" style="font-size: 19px; font-weight: 700">Biz360X</span>
+    </a>
+    <button type="button" style="font: inherit; text-align: left; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; border: 1px solid #2A2E38; background: #181B22; color: #FFFFFF; cursor: pointer; min-height: 52px">
+      <span class="mono" style="width: 32px; height: 32px; border-radius: 8px; background: #2846E0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">NI</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 600">Nimbus Instruments</span><span style="font-size: 12px; color: #9CA3AF">Pvt Ltd · 3 GSTINs</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"></path></svg>
+    </button>
+    <nav aria-label="Workspace" style="display: flex; flex-direction: column; gap: 18px">
+      <sc-for list="{{navGroups}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span class="mono" style="font-size: 11px; color: #8A909A; padding: 0 10px 6px">{{g.h}}</span>
+          <sc-for list="{{g.items}}" as="n" hint-placeholder-count="4">
+            <a class="nav" href="{{n.href}}" aria-current="{{n.cur}}" style="display: flex; align-items: center; gap: 12px; padding: 0 10px; height: 40px; border-radius: 10px; font-size: 14px; {{n.st}}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.icon}}"></path></svg>
+              <span style="flex: 1">{{n.t}}</span>
+              <sc-if value="{{n.badge}}" hint-placeholder-val="{{ false }}"><span class="mono" style="font-size: 11px; background: #3A2612; color: #FFC58A; border-radius: 999px; padding: 2px 8px">{{n.badge}}</span></sc-if>
+            </a>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+    <div style="margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px; border-top: 1px solid #23272F">
+      <span style="width: 32px; height: 32px; border-radius: 50%; background: #2A2E38; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">AR</span>
+      <span style="display: flex; flex-direction: column"><span style="font-size: 14px">Ananya Rao</span><span style="font-size: 12px; color: #9CA3AF">Director · Approver</span></span>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <!-- top bar -->
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 32px; border-bottom: 1px solid #E2E1DA; background: #FFFFFF">
+      <label for="q" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search or ask</label>
+      <div style="flex: 1 1 320px; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border: 1px solid #DCDBD3; border-radius: 12px; background: #F8F8F5">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A5F68" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+        <input id="q" type="text" placeholder="Search filings, invoices, people — or ask a question" style="flex: 1; min-width: 0; border: 0; background: transparent; font: inherit; font-size: 15px; color: #14161A; outline: none">
+        <span class="mono" style="font-size: 12px; color: #5A5F68; border: 1px solid #DCDBD3; border-radius: 6px; padding: 2px 6px">⌘K</span>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center">
+        <button type="button" aria-label="Notifications" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid #DCDBD3; background: #FFFFFF; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#14161A" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"></path></svg></button>
+        <button type="button" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; border: 0; background: #14161A; color: #FFFFFF; cursor: pointer">+ New</button>
+      </div>
+    </header>
+
+    <main style="padding: 32px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box; max-width: 1400px; width: 100%">
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 14px; color: #5A5F68">Thursday, 29 October 2026 · FY 2026–27, Q3</span>
+          <h1 class="disp" style="margin: 0; font-size: 36px; font-weight: 700">Good morning, Ananya. 4 things need you today.</h1>
+        </div>
+        <div role="group" aria-label="View" style="display: flex; gap: 4px; padding: 4px; background: #E9E8E1; border-radius: 12px">
+          <button type="button" style="font: inherit; font-size: 14px; height: 36px; padding: 0 14px; border: 0; border-radius: 9px; background: #FFFFFF; color: #14161A; cursor: pointer">This entity</button>
+          <button type="button" style="font: inherit; font-size: 14px; height: 36px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent; color: #3D424B; cursor: pointer">All entities</button>
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <section aria-label="Key numbers" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px">
+        <sc-for list="{{kpis}}" as="k" hint-placeholder-count="5">
+          <div style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+            <span style="font-size: 13px; color: #5A5F68">{{k.l}}</span>
+            <span class="disp" style="font-size: 32px; font-weight: 700; line-height: 1">{{k.v}}</span>
+            <span style="font-size: 13px; {{k.ns}}">{{k.n}}</span>
+          </div>
+        </sc-for>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <!-- left column -->
+        <div style="flex: 2 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; gap: 12px">
+              <h2 style="margin: 0; font-size: 17px; font-weight: 600">Waiting on you</h2>
+              <a href="Compliance.dc.html" style="font-size: 14px">Open Compliance Engine</a>
+            </div>
+            <sc-for list="{{approvals}}" as="a" hint-placeholder-count="4">
+              <div class="row" style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 14px 20px; border-top: 1px solid #ECEBE5">
+                <span style="width: 40px; height: 40px; border-radius: 10px; flex: none; display: flex; align-items: center; justify-content: center; {{a.ic}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{a.icon}}"></path></svg></span>
+                <div style="flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                  <span style="font-size: 15px; font-weight: 500">{{a.t}}</span>
+                  <span style="font-size: 13px; color: #5A5F68">{{a.s}}</span>
+                </div>
+                <span class="mono" style="font-size: 13px; {{a.ds}}">{{a.due}}</span>
+                <button type="button" style="font: inherit; font-size: 14px; font-weight: 500; height: 40px; padding: 0 16px; border-radius: 10px; cursor: pointer; {{a.bs}}">{{a.cta}}</button>
+              </div>
+            </sc-for>
+          </section>
+
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+              <h2 style="margin: 0; font-size: 17px; font-weight: 600">Next 30 days</h2>
+              <div style="display: flex; gap: 14px; font-size: 13px; color: #3D424B; flex-wrap: wrap">
+                <span style="display: flex; gap: 6px; align-items: center"><span style="width: 10px; height: 10px; border-radius: 3px; background: #14692F"></span>Filed</span>
+                <span style="display: flex; gap: 6px; align-items: center"><span style="width: 10px; height: 10px; border-radius: 3px; background: #2846E0"></span>Ready / scheduled</span>
+                <span style="display: flex; gap: 6px; align-items: center"><span style="width: 10px; height: 10px; border-radius: 3px; background: #C2570C"></span>Needs action</span>
+              </div>
+            </div>
+            <div style="overflow-x: auto">
+              <div style="min-width: 640px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px">
+                <sc-for list="{{weeks}}" as="w" hint-placeholder-count="5">
+                  <div style="display: flex; flex-direction: column; gap: 8px">
+                    <span class="mono" style="font-size: 12px; color: #5A5F68; padding-bottom: 6px; border-bottom: 1px solid #E2E1DA">{{w.h}}</span>
+                    <sc-for list="{{w.items}}" as="i" hint-placeholder-count="2">
+                      <div title="{{i.tip}}" style="padding: 10px; border-radius: 10px; background: #F8F8F5; display: flex; flex-direction: column; gap: 4px">
+                        <span class="mono" style="font-size: 12px; color: #5A5F68; display: flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; border-radius: 2px; flex: none; background: {{i.bl}}"></span>{{i.d}} · {{i.tip}}</span>
+                        <span style="font-size: 13px; font-weight: 500; line-height: 1.35">{{i.t}}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+            <div style="padding: 18px 20px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">Standing with each authority</h2></div>
+            <div style="overflow-x: auto">
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px">
+                <thead><tr style="text-align: left; font-size: 12px; color: #5A5F68"><th scope="col" style="padding: 10px 20px; font-weight: 500">Authority</th><th scope="col" style="padding: 10px 8px; font-weight: 500">Last filed</th><th scope="col" style="padding: 10px 8px; font-weight: 500">Open items</th><th scope="col" style="padding: 10px 20px; font-weight: 500">Status</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{auth}}" as="r" hint-placeholder-count="6">
+                    <tr style="border-top: 1px solid #ECEBE5">
+                      <td style="padding: 12px 20px; font-weight: 500">{{r.a}}</td>
+                      <td style="padding: 12px 8px; color: #3D424B">{{r.l}}</td>
+                      <td class="mono" style="padding: 12px 8px">{{r.o}}</td>
+                      <td style="padding: 12px 20px"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; {{r.ps}}"><span style="width: 6px; height: 6px; border-radius: 50%; background: currentColor"></span>{{r.s}}</span></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <!-- right column -->
+        <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+            <div style="display: flex; justify-content: space-between; align-items: baseline">
+              <h2 style="margin: 0; font-size: 17px; font-weight: 600">Cash in bank</h2>
+              <span style="font-size: 13px; color: #5A5F68">month-end, ₹ lakh</span>
+            </div>
+            <div style="display: flex; align-items: flex-end; gap: 10px; height: 160px; border-bottom: 1px solid #DCDBD3; padding-top: 18px">
+              <sc-for list="{{cash}}" as="c" hint-placeholder-count="6">
+                <div style="flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px">
+                  <sc-if value="{{c.last}}" hint-placeholder-val="{{ false }}"><span class="mono" style="font-size: 12px; font-weight: 600">{{c.v}}</span></sc-if>
+                  <div class="bar" title="{{c.m}}: ₹{{c.v}} L" style="width: 100%; max-width: 28px; border-radius: 4px 4px 0 0; background: #2846E0; height: {{c.h}}"></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display: flex; gap: 10px">
+              <sc-for list="{{cash}}" as="c" hint-placeholder-count="6"><span class="mono" style="flex: 1; text-align: center; font-size: 11px; color: #5A5F68">{{c.m}}</span></sc-for>
+            </div>
+          </section>
+
+          <section style="background: #111318; color: #ECEDEF; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8EA2FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"></path></svg>
+              <h2 style="margin: 0; font-size: 17px; font-weight: 600">Copilot</h2>
+            </div>
+            <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #C7CBD2">GSTR-2B for October shows ₹1.86 L of ITC from 4 suppliers who haven’t filed GSTR-1 yet. Want me to send them a reminder?</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px">
+              <button type="button" style="font: inherit; font-size: 13px; font-weight: 500; height: 36px; padding: 0 12px; border-radius: 9px; border: 0; background: #FFFFFF; color: #14161A; cursor: pointer">Send reminders</button>
+              <button type="button" style="font: inherit; font-size: 13px; height: 36px; padding: 0 12px; border-radius: 9px; border: 1px solid #3A3F4A; background: transparent; color: #FFFFFF; cursor: pointer">Show suppliers</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #23272F; padding-top: 14px">
+              <span class="mono" style="font-size: 11px; color: #8A909A">TRY ASKING</span>
+              <sc-for list="{{prompts}}" as="p" hint-placeholder-count="3">
+                <button type="button" style="font: inherit; text-align: left; font-size: 14px; min-height: 40px; padding: 8px 12px; border-radius: 9px; border: 1px solid #2A2E38; background: #181B22; color: #ECEDEF; cursor: pointer">{{p}}</button>
+              </sc-for>
+            </div>
+          </section>
+
+          <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+            <h2 style="margin: 0; font-size: 17px; font-weight: 600">Audit trail</h2>
+            <sc-for list="{{log}}" as="l" hint-placeholder-count="5">
+              <div style="display: flex; gap: 12px; font-size: 14px; line-height: 1.45">
+                <span class="mono" style="width: 44px; flex: none; color: #5A5F68; font-size: 12px; padding-top: 2px">{{l.t}}</span>
+                <span><strong style="font-weight: 600">{{l.w}}</strong> {{l.e}}</span>
+              </div>
+            </sc-for>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const active = 'Today';
+    const I = {
+      today: 'M3 12l9-8 9 8M5 10v10h14V10',
+      shield: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4',
+      book: 'M4 4h16v16H4zM4 10h16M10 4v16',
+      gst: 'M7 3h10l2 4H5zM5 7v14h14V7M9 13h6M9 17h4',
+      people: 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0',
+      legal: 'M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z',
+      rocket: 'M5 15c-1 1-2 5-2 5s4-1 5-2M9 15l-3-3c1-4 5-9 12-9 0 7-5 11-9 12zM14 10h.01',
+      factory: 'M3 21V10l6 4V10l6 4V6h6v15z',
+      folder: 'M3 7h6l2 2h10v11H3z',
+      grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'
+    };
+    const mk = (t, icon, href, badge) => ({ t, icon, href, badge: badge || false, cur: t === active ? 'page' : 'false', st: t === active ? 'background:#22262F;color:#FFFFFF' : '' });
+    const pillDue = 'background:#FDF0E1;color:#9A4508';
+    const pillOk = 'background:#E6F4EA;color:#14692F';
+    const pillWait = 'background:#E8ECFF;color:#1A31A8';
+    const bDue = '#C2570C';
+    const bOk = '#14692F';
+    const bWait = '#2846E0';
+    const cashRaw = [['May', 61.4], ['Jun', 57.9], ['Jul', 55.2], ['Aug', 58.8], ['Sep', 51.6], ['Oct', 48.2]];
+    const max = 70;
+    return {
+      navGroups: [
+        { h: 'WORKSPACE', items: [mk('Today', I.today, 'Dashboard.dc.html'), mk('Compliance', I.shield, 'Compliance.dc.html', '5'), mk('Copilot', 'M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z', 'Copilot.dc.html'), mk('Documents', I.folder, 'Documents.dc.html')] },
+        { h: 'RUN', items: [mk('Sales & Billing', 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3', 'Billing.dc.html'), mk('Finance & Books', I.book, 'Finance.dc.html'), mk('GST & Tax', I.gst, 'GST.dc.html'), mk('Payroll & HR', I.people, 'Payroll.dc.html'), mk('Legal & Contracts', I.legal, 'Legal.dc.html')] },
+        { h: 'TRACKS', items: [mk('Startup', I.rocket, 'Startup.dc.html'), mk('MSME', I.factory, 'MSME.dc.html'), mk('All modules', I.grid, 'Modules.dc.html')] },
+        { h: 'ADMIN', items: [mk('Group view', 'M3 21V9l6-4 6 4v12M15 21V13h6v8M7 13h4M7 17h4', 'Group.dc.html'), mk('Settings', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L10 21h4l.5-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z', 'Settings.dc.html')] }
+      ],
+      kpis: [
+        { l: 'Compliance health', v: '92 / 100', n: '+3 since September', ns: 'color:#14692F' },
+        { l: 'Due in next 7 days', v: '5 filings', n: '2 need your signature', ns: 'color:#9A4508' },
+        { l: 'Cash in bank', v: '₹48.2 L', n: 'Across 3 accounts', ns: 'color:#5A5F68' },
+        { l: 'Runway', v: '14 mo', n: 'At ₹3.4 L net burn / month', ns: 'color:#5A5F68' },
+        { l: 'Receivables overdue', v: '₹6.4 L', n: '9 invoices · 3 over 60 days', ns: 'color:#9A4508' }
+      ],
+      approvals: [
+        { t: 'Sign AOC-4 for FY 2025–26', s: 'Financial statements · prepared by Mehta & Co (CA) · DSC required', due: 'Due tomorrow', ds: 'color:#9A4508;font-weight:600', cta: 'Review & sign', bs: 'border:0;background:#14161A;color:#FFFFFF', icon: 'M6 3h9l3 3v15H6zM9 12h6M9 16h6', ic: 'background:#FDF0E1;color:#9A4508' },
+        { t: 'Approve TDS return Q2 (24Q, 26Q)', s: '42 deductees · ₹8.7 L deducted · validated with FVU', due: '31 Oct', ds: 'color:#9A4508;font-weight:600', cta: 'Approve', bs: 'border:0;background:#14161A;color:#FFFFFF', icon: 'M5 12l5 5 9-10', ic: 'background:#FDF0E1;color:#9A4508' },
+        { t: 'Pay 2 MSME vendors before day 45', s: 'Shakti Castings, Vega Electro · ₹5.0 L · protects 43B(h) deduction', due: '04 Nov', ds: 'color:#3D424B', cta: 'Schedule', bs: 'border:1px solid #C9C8C0;background:#FFFFFF;color:#14161A', icon: 'M3 10l9-6 9 6M5 10v9M19 10v9M3 21h18', ic: 'background:#E8ECFF;color:#1A31A8' },
+        { t: 'Board resolution — open a second current account', s: 'Draft circulated to 3 directors · 1 of 3 signed', due: '06 Nov', ds: 'color:#3D424B', cta: 'Sign', bs: 'border:1px solid #C9C8C0;background:#FFFFFF;color:#14161A', icon: 'M4 6h16M4 12h16M4 18h10', ic: 'background:#E8ECFF;color:#1A31A8' }
+      ],
+      weeks: [
+        { h: '29 OCT – 01 NOV', items: [{ d: '30 Oct', t: 'AOC-4', bl: bDue, tip: 'Needs action' }, { d: '31 Oct', t: 'TDS return Q2', bl: bDue, tip: 'Needs action' }, { d: '31 Oct', t: 'MSME-1 (H1)', bl: bOk, tip: 'Filed' }] },
+        { h: '02 – 08 NOV', items: [{ d: '07 Nov', t: 'TDS deposit · Oct', bl: bWait, tip: 'Scheduled' }] },
+        { h: '09 – 15 NOV', items: [{ d: '11 Nov', t: 'GSTR-1 · Oct', bl: bWait, tip: 'Ready' }, { d: '15 Nov', t: 'PF ECR & ESI', bl: bWait, tip: 'Scheduled' }] },
+        { h: '16 – 22 NOV', items: [{ d: '20 Nov', t: 'GSTR-3B · Oct', bl: bWait, tip: 'Drafting' }, { d: '20 Nov', t: 'Professional tax', bl: bWait, tip: 'Scheduled' }] },
+        { h: '23 – 29 NOV', items: [{ d: '29 Nov', t: 'MGT-7 · annual return', bl: bDue, tip: 'Needs action' }] }
+      ],
+      auth: [
+        { a: 'MCA · ROC', l: 'MSME-1 · 27 Oct', o: '2', s: 'Action due', ps: pillDue },
+        { a: 'GSTN · 3 GSTINs', l: 'GSTR-3B Sep · 18 Oct', o: '1', s: 'On track', ps: pillWait },
+        { a: 'Income Tax · TDS', l: 'Challan 281 · 06 Oct', o: '1', s: 'Action due', ps: pillDue },
+        { a: 'EPFO', l: 'ECR Sep · 13 Oct', o: '0', s: 'Clear', ps: pillOk },
+        { a: 'ESIC', l: 'Contribution Sep · 13 Oct', o: '0', s: 'Clear', ps: pillOk },
+        { a: 'Karnataka PT', l: 'Return Sep · 19 Oct', o: '0', s: 'Clear', ps: pillOk }
+      ],
+      cash: cashRaw.map(([m, v], i) => ({ m, v: v.toFixed(1), h: Math.round((v / max) * 100) + '%', last: i === cashRaw.length - 1 })),
+      prompts: ['What will our GST liability be for October?', 'Which contracts renew in the next 60 days?', 'Are we required to get a tax audit this year?'],
+      log: [
+        { t: '09:12', w: 'Engine', e: 'drafted GSTR-1 for Oct from 212 invoices' },
+        { t: '08:40', w: 'Mehta & Co', e: 'uploaded audited financials for AOC-4' },
+        { t: 'Yday', w: 'Ravi K', e: 'filed MSME-1 · SRN acknowledged' },
+        { t: 'Yday', w: 'Engine', e: 'flagged 3 invoices crossing day 45' },
+        { t: '27 Oct', w: 'Ananya R', e: 'approved October payroll · 38 employees' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

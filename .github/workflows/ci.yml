@@ -1,0 +1,43 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: biz360x
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/biz360x
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Load schema
+        run: for f in db/0*.sql db/10_*.sql db/11_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -q -f "$f"; done
+      - name: Database behaviour checks
+        run: psql -d biz360x -v ON_ERROR_STOP=1 -q -f db/tests/demo_and_checks.sql
+      - name: Install API dependencies
+        run: pip install -r server/requirements.txt pyyaml openapi-spec-validator
+      - name: Contract is generated, valid and linted
+        run: |
+          python api/build_openapi.py /tmp/openapi.yaml
+          diff -u api/openapi.yaml /tmp/openapi.yaml
+          python -c "import yaml; from openapi_spec_validator import validate; validate(yaml.safe_load(open('api/openapi.yaml')))"
+          npx -y @redocly/cli@1.25.0 lint api/openapi.yaml --config api/redocly.yaml
+      - name: End-to-end API tests
+        working-directory: server
+        run: pytest -q

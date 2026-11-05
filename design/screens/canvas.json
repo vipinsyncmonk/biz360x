@@ -1,0 +1,333 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-29T10:30:00Z"
+  },
+  "title": "Biz360X — Next-gen Business OS",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 5400,
+      "title": "Landing page",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Login.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 940,
+      "title": "Sign in / Create workspace",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Onboarding.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1000,
+      "title": "Onboarding — build the obligation graph",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Dashboard.dc.html": {
+      "x": 0,
+      "y": 5820,
+      "w": 1440,
+      "h": 1320,
+      "title": "Command Center — Business",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Compliance.dc.html": {
+      "x": 1520,
+      "y": 5820,
+      "w": 1440,
+      "h": 1560,
+      "title": "Compliance Engine",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Startup.dc.html": {
+      "x": 3040,
+      "y": 5820,
+      "w": 1440,
+      "h": 1320,
+      "title": "Startup workspace",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "MSME.dc.html": {
+      "x": 4560,
+      "y": 5820,
+      "w": 1440,
+      "h": 1320,
+      "title": "MSME workspace",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Copilot.dc.html": {
+      "x": 6080,
+      "y": 5820,
+      "w": 1440,
+      "h": 1000,
+      "title": "Copilot",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Modules.dc.html": {
+      "x": 0,
+      "y": 7800,
+      "w": 1440,
+      "h": 1700,
+      "title": "Module map",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "MobileToday.dc.html": {
+      "x": 1520,
+      "y": 7800,
+      "w": 390,
+      "h": 844,
+      "title": "Mobile — Today",
+      "is_interactive": true,
+      "radius": 40
+    },
+    "MobileCompliance.dc.html": {
+      "x": 1990,
+      "y": 7800,
+      "w": 390,
+      "h": 844,
+      "title": "Mobile — Compliance",
+      "is_interactive": true,
+      "radius": 40
+    },
+    "MobileCopilot.dc.html": {
+      "x": 2460,
+      "y": 7800,
+      "w": 390,
+      "h": 844,
+      "title": "Mobile — Copilot",
+      "is_interactive": true,
+      "radius": 40
+    },
+    "MobileMore.dc.html": {
+      "x": 2930,
+      "y": 7800,
+      "w": 390,
+      "h": 844,
+      "title": "Mobile — More",
+      "is_interactive": true,
+      "radius": 40
+    },
+    "Finance.dc.html": {
+      "x": 0,
+      "y": 9920,
+      "w": 1440,
+      "h": 1400,
+      "title": "Finance & Books — month-end close",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Payroll.dc.html": {
+      "x": 1520,
+      "y": 9920,
+      "w": 1440,
+      "h": 1400,
+      "title": "Payroll & HR",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "GST.dc.html": {
+      "x": 3040,
+      "y": 9920,
+      "w": 1440,
+      "h": 1400,
+      "title": "GST & Tax — returns and 2B matching",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Legal.dc.html": {
+      "x": 4560,
+      "y": 9920,
+      "w": 1440,
+      "h": 1300,
+      "title": "Legal & Contracts",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Documents.dc.html": {
+      "x": 6080,
+      "y": 9920,
+      "w": 1440,
+      "h": 1200,
+      "title": "Document Vault",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Group.dc.html": {
+      "x": 0,
+      "y": 11740,
+      "w": 1440,
+      "h": 1200,
+      "title": "Group view — all entities",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Settings.dc.html": {
+      "x": 1520,
+      "y": 11740,
+      "w": 1440,
+      "h": 1200,
+      "title": "Settings — team, advisors, signing, portals",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Billing.dc.html": {
+      "x": 0,
+      "y": 13360,
+      "w": 1440,
+      "h": 1300,
+      "title": "Sales & Billing — invoices and collections",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "InvoiceEditor.dc.html": {
+      "x": 1520,
+      "y": 13360,
+      "w": 1440,
+      "h": 1240,
+      "title": "New GST invoice",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "CustomerPay.dc.html": {
+      "x": 3040,
+      "y": 13360,
+      "w": 390,
+      "h": 844,
+      "title": "Customer's payment page (phone)",
+      "is_interactive": true,
+      "radius": 40
+    },
+    "Quotes.dc.html": {
+      "x": 3510,
+      "y": 13360,
+      "w": 1440,
+      "h": 1240,
+      "title": "Quotes — quote to invoice",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "CreditNote.dc.html": {
+      "x": 5030,
+      "y": 13360,
+      "w": 1440,
+      "h": 1200,
+      "title": "Credit note against an invoice",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "DataModel.dc.html": {
+      "x": 0,
+      "y": 15020,
+      "w": 1840,
+      "h": 1240,
+      "title": "Data model — domain map"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Login.dc.html",
+    "Onboarding.dc.html",
+    "Dashboard.dc.html",
+    "Compliance.dc.html",
+    "Startup.dc.html",
+    "MSME.dc.html",
+    "Copilot.dc.html",
+    "Modules.dc.html",
+    "MobileToday.dc.html",
+    "MobileCompliance.dc.html",
+    "MobileCopilot.dc.html",
+    "MobileMore.dc.html",
+    "Finance.dc.html",
+    "Payroll.dc.html",
+    "GST.dc.html",
+    "Legal.dc.html",
+    "Documents.dc.html",
+    "Group.dc.html",
+    "Settings.dc.html",
+    "Billing.dc.html",
+    "InvoiceEditor.dc.html",
+    "CustomerPay.dc.html",
+    "Quotes.dc.html",
+    "CreditNote.dc.html",
+    "DataModel.dc.html"
+  ],
+  "notes": {
+    "t1": {
+      "x": 0,
+      "y": -300,
+      "text": "Marketing, access & onboarding",
+      "kind": "title1",
+      "maxW": 4480
+    },
+    "t2": {
+      "x": 0,
+      "y": 5520,
+      "text": "Workspace — dashboards, compliance engine & copilot",
+      "kind": "title1",
+      "maxW": 7520
+    },
+    "t3": {
+      "x": 0,
+      "y": 7500,
+      "text": "Module map — the whole OS",
+      "kind": "title1",
+      "maxW": 1440
+    },
+    "t4": {
+      "x": 1520,
+      "y": 7500,
+      "text": "Mobile",
+      "kind": "title1",
+      "maxW": 1800
+    },
+    "t5": {
+      "x": 0,
+      "y": 9620,
+      "text": "Run & govern modules — Finance, Payroll, GST, Legal, Documents",
+      "kind": "title1",
+      "maxW": 7520
+    },
+    "t6": {
+      "x": 0,
+      "y": 11440,
+      "text": "Admin — group view, settings & access",
+      "kind": "title1",
+      "maxW": 2960
+    },
+    "t7": {
+      "x": 0,
+      "y": 13060,
+      "text": "Sales & Billing — quote, invoice, collect, credit",
+      "kind": "title1",
+      "maxW": 6470
+    },
+    "t8": {
+      "x": 0,
+      "y": 14720,
+      "text": "Data model",
+      "kind": "title1",
+      "maxW": 1840
+    }
+  },
+  "designSystems": []
+}

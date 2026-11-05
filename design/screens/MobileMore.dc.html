@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — Mobile More</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.tile:hover{border-color:#14161A !important}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F3EE; color: #14161A; font-family: Geist, ui-sans-serif, system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 56px 18px 20px; display: flex; flex-direction: column; gap: 20px">
+    <h1 class="disp" style="margin: 0; font-size: 30px; font-weight: 700">More</h1>
+
+    <!-- entities -->
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 class="mono" style="margin: 0; font-size: 11px; font-weight: 500; color: #5A5F68">YOUR ENTITIES</h2>
+      <div role="radiogroup" aria-label="Active entity" style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{entities}}" as="e" hint-placeholder-count="3">
+          <button type="button" role="radio" aria-checked="{{e.on}}" onClick="{{e.pick}}" style="font: inherit; width: 100%; text-align: left; display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-height: 60px; border: 0; border-top: 1px solid #ECEBE5; background: {{e.bg}}; color: #14161A; cursor: pointer">
+            <span class="mono" style="width: 36px; height: 36px; flex: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; {{e.badge}}">{{e.i}}</span>
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">{{e.n}}</span><span style="font-size: 12px; color: #5A5F68">{{e.s}}</span></span>
+            <sc-if value="{{e.on}}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#14161A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></sc-if>
+          </button>
+        </sc-for>
+      </div>
+      <a href="#add-entity" style="font-size: 14px; padding: 4px">+ Add an entity or client</a>
+    </section>
+
+    <!-- modules -->
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 class="mono" style="margin: 0; font-size: 11px; font-weight: 500; color: #5A5F68">MODULES FOR {{trackLabel}}</h2>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <sc-for list="{{mods}}" as="m" hint-placeholder-count="6">
+          <a class="tile" href="#module" style="text-decoration: none; color: #14161A; background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 14px; padding: 14px; min-height: 92px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14161A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{m.icon}}"></path></svg>
+            <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">{{m.t}}</span><span style="font-size: 12px; color: #5A5F68">{{m.s}}</span></span>
+          </a>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- settings -->
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 class="mono" style="margin: 0; font-size: 11px; font-weight: 500; color: #5A5F68">ACCOUNT</h2>
+      <div style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{settings}}" as="s" hint-placeholder-count="4">
+          <a href="{{s.href}}" style="text-decoration: none; color: #14161A; display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 52px; border-top: 1px solid #ECEBE5">
+            <span style="flex: 1; font-size: 15px">{{s.t}}</span>
+            <span style="font-size: 13px; color: #5A5F68">{{s.v}}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5A5F68" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+          </a>
+        </sc-for>
+      </div>
+      <a href="Login.dc.html" style="font-size: 15px; color: #B42318; padding: 8px 4px">Sign out</a>
+    </section>
+  </div>
+
+  <nav aria-label="Main" style="flex: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #E2E1DA; padding: 6px 6px 28px">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+      <a href="{{t.href}}" aria-current="{{t.cur}}" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 48px; justify-content: center; font-size: 11px; font-weight: 500; {{t.st}}">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{t.icon}}"></path></svg>{{t.t}}
+      </a>
+    </sc-for>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { ent: 'ni' }; }
+  renderVals() {
+    const I = {
+      book: 'M4 4h16v16H4zM4 10h16M10 4v16', gst: 'M7 3h10l2 4H5zM5 7v14h14V7M9 13h6M9 17h4', people: 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0',
+      legal: 'M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z', folder: 'M3 7h6l2 2h10v11H3z', board: 'M4 6h16M4 12h16M4 18h10',
+      pie: 'M12 3a9 9 0 1 0 9 9h-9z', mail: 'M3 6h18v12H3zM3 6l9 7 9-7', rupee: 'M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+      factory: 'M3 21V10l6 4V10l6 4V6h6v15z', truck: 'M3 6h11v10H3zM14 10h4l3 3v3h-7M7 19a2 2 0 1 0 0-.01M17 19a2 2 0 1 0 0-.01'
+    };
+    const ents = [
+      { id: 'ni', i: 'NI', n: 'Nimbus Instruments', s: 'Pvt Ltd · Business', track: 'BUSINESS' },
+      { id: 'ol', i: 'OL', n: 'Orbitly Labs', s: 'Pvt Ltd · Startup', track: 'STARTUP' },
+      { id: 'kp', i: 'KP', n: 'Kaveri Polymers', s: 'LLP · MSME', track: 'MSME' }
+    ];
+    const modsBy = {
+      ni: [['Finance & Books', 'October close · 3 steps', I.book], ['GST & Tax', 'GSTR-1 ready', I.gst], ['Payroll & HR', '38 employees', I.people], ['Legal & Contracts', '2 renewals', I.legal], ['Board & Secretarial', 'MGT-7 due', I.board], ['Documents', '1,284 files', I.folder]],
+      ol: [['Cap table & ESOP', '10.4% pool', I.pie], ['Investor updates', 'October draft', I.mail], ['Finance & Books', '19 mo runway', I.book], ['Payroll & HR', '24 people', I.people], ['Board & Secretarial', 'Meeting 05 Nov', I.board], ['Documents', 'Data room 84%', I.folder]],
+      kp: [['Receivables & TReDS', '₹18.4 L past 45 days', I.rupee], ['Schemes & Credit', '2 eligible', I.factory], ['GST & E-way bills', '146 this month', I.truck], ['Finance & Books', 'September closed', I.book], ['Payroll & HR', '52 workers', I.people], ['Documents', 'Udyam, licences', I.folder]]
+    };
+    const cur = ents.find((e) => e.id === this.state.ent);
+    const tabsDef = [
+      ['Today', 'M3 12l9-8 9 8M5 10v10h14V10', 'MobileToday.dc.html'],
+      ['Compliance', 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4', 'MobileCompliance.dc.html'],
+      ['Copilot', 'M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z', 'MobileCopilot.dc.html'],
+      ['More', 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', 'MobileMore.dc.html']
+    ];
+    return {
+      entities: ents.map((e) => ({ ...e, on: e.id === cur.id, bg: e.id === cur.id ? '#F8F8F5' : '#FFFFFF',
+        badge: e.id === cur.id ? 'background:#14161A;color:#FFFFFF' : 'background:#ECEBE5;color:#3D424B',
+        pick: () => this.setState({ ent: e.id }) })),
+      trackLabel: cur.track,
+      mods: modsBy[cur.id].map(([t, s, icon]) => ({ t, s, icon })),
+      settings: [
+        { t: 'Team & advisors', v: '6 people', href: '#team' },
+        { t: 'Signing · DSC & e-sign', v: '2 active', href: '#dsc' },
+        { t: 'Connected portals', v: 'GSTN, MCA, EPFO', href: '#portals' },
+        { t: 'Notifications', v: 'Due in 3 days', href: '#notify' }
+      ],
+      tabs: tabsDef.map(([t, icon, href], i) => ({ t, icon, href, cur: i === 3 ? 'page' : 'false', st: i === 3 ? 'color:#14161A' : 'color:#5A5F68' }))
+    };
+  }
+}
+</script>
+</body>
+</html>
