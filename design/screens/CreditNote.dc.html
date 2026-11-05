@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — Credit note</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0;background:#F4F3EE;color:#14161A;font-family:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.sub{color:#5A5F68;text-decoration:none}.sub:hover{color:#14161A}
+.opt:hover{border-color:#14161A !important}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F4F3EE; display: flex; flex-direction: column">
+
+  <header style="background: #FFFFFF; border-bottom: 1px solid #E2E1DA">
+    <div style="max-width: 1360px; margin: 0 auto; padding: 0 24px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; min-height: 64px">
+      <a href="Billing.dc.html" style="display: inline-flex; align-items: center; gap: 6px; font-size: 14px; text-decoration: none; color: #3D424B; min-height: 44px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>Sales &amp; Billing</a>
+      <nav aria-label="Sales & Billing" style="display: flex; gap: 2px; flex-wrap: wrap">
+        <sc-for list="{{subnav}}" as="s" hint-placeholder-count="4">
+          <a class="sub" href="{{s.href}}" aria-current="{{s.cur}}" style="font-size: 14px; font-weight: 500; height: 64px; padding: 0 12px; display: inline-flex; align-items: center; {{s.st}}">{{s.t}}</a>
+        </sc-for>
+      </nav>
+      <div style="margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+        <sc-if value="{{issued}}" hint-placeholder-val="{{ false }}"><span style="font-size: 13px; font-weight: 600; color: #14692F">IRN generated · sent to Deccan Motors</span></sc-if>
+        <button type="button" onClick="{{issue}}" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; padding: 0 16px; border-radius: 12px; border: 0; background: #14161A; color: #FFFFFF; cursor: pointer">Issue credit note</button>
+      </div>
+    </div>
+  </header>
+
+  <main style="max-width: 1360px; width: 100%; margin: 0 auto; padding: 28px 24px 56px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span class="mono" style="font-size: 12px; color: #5A5F68">CREDIT NOTE NI/TN/CN-03 · AGAINST INVOICE NI/TN/046</span>
+      <h1 class="disp" style="margin: 0; font-size: 34px; font-weight: 700">Credit Deccan Motors {{totalFmt}}.</h1>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start">
+      <!-- FORM -->
+      <div style="flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+        <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 18px 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 14px">
+          <sc-for list="{{orig}}" as="o" hint-placeholder-count="4">
+            <div style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 12px; color: #5A5F68">{{o.k}}</span><span class="mono" style="font-size: 14px; font-weight: 600">{{o.v}}</span></div>
+          </sc-for>
+        </section>
+
+        <fieldset style="border: 1px solid #E2E1DA; border-radius: 16px; background: #FFFFFF; margin: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+          <legend style="font-size: 14px; font-weight: 600; padding: 0 6px">Why are you issuing this?</legend>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 8px">
+            <sc-for list="{{reasons}}" as="r" hint-placeholder-count="4">
+              <button type="button" class="opt" aria-pressed="{{r.on}}" onClick="{{r.pick}}" style="font: inherit; text-align: left; padding: 12px 14px; border-radius: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; min-height: 64px; {{r.st}}">
+                <span style="font-size: 14px; font-weight: 600">{{r.t}}</span><span style="font-size: 12px; {{r.sub}}">{{r.d}}</span>
+              </button>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{isReturn}}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding-top: 12px; border-top: 1px solid #ECEBE5">
+              <span style="flex: 1 1 220px; font-size: 14px">Units coming back <span style="color: #5A5F68">(of 17 supplied)</span></span>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <button type="button" aria-label="Fewer units" onClick="{{dec}}" style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #C9C8C0; background: #FFFFFF; cursor: pointer; font-size: 18px; color: #14161A">−</button>
+                <span class="mono" style="min-width: 32px; text-align: center; font-size: 18px; font-weight: 600">{{units}}</span>
+                <button type="button" aria-label="More units" onClick="{{inc}}" style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #C9C8C0; background: #FFFFFF; cursor: pointer; font-size: 18px; color: #14161A">+</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{isDiscount}}" hint-placeholder-val="{{ false }}">
+            <label style="display: flex; gap: 12px; align-items: flex-start; padding-top: 12px; border-top: 1px solid #ECEBE5; cursor: pointer">
+              <input type="checkbox" checked="{{agreed}}" onChange="{{toggleAgreed}}" style="width: 18px; height: 18px; margin-top: 2px; accent-color: #14161A; flex: none">
+              <span style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 14px; font-weight: 500">Discount was agreed before the supply</span><span style="font-size: 13px; color: #5A5F68">Clause 7 of the supply terms · linked to this invoice</span></span>
+            </label>
+          </sc-if>
+          <span style="font-size: 14px; line-height: 1.5; color: #3D424B">{{guide}}</span>
+        </fieldset>
+
+        <!-- rules -->
+        <section aria-label="Rules applied" style="background: #111318; color: #ECEDEF; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0 0 6px; font-size: 14px; font-weight: 600">What the engine checked</h2>
+          <sc-for list="{{rules}}" as="c" hint-placeholder-count="5">
+            <div style="display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid #23272F; font-size: 14px; line-height: 1.45">
+              <span style="width: 18px; height: 18px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-top: 1px; {{c.dot}}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{c.icon}}"></path></svg></span>
+              <span><strong style="font-weight: 600">{{c.t}}</strong> <span style="color: #B7BCC5">{{c.d}}</span></span>
+            </div>
+          </sc-for>
+        </section>
+      </div>
+
+      <!-- PREVIEW + IMPACT -->
+      <div style="flex: 1 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+        <div style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 6px; box-shadow: 0 24px 48px -28px rgba(20,22,26,0.35); padding: 28px; display: flex; flex-direction: column; gap: 16px; font-size: 13px">
+          <div style="display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span class="disp" style="font-size: 18px; font-weight: 700">Nimbus Instruments Pvt Ltd</span>
+              <span class="mono" style="color: #3D424B">GSTIN 33AAHCN1234Q1Z4 · Chennai</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px">
+              <span class="mono" style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em">CREDIT NOTE</span>
+              <span class="mono">NI/TN/CN-03 · 29 Oct 2026</span>
+              <span style="color: #3D424B">Against NI/TN/046 dated 27 Oct 2026</span>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px; padding: 12px 0; border-top: 1px solid #ECEBE5; border-bottom: 1px solid #ECEBE5">
+            <span class="mono" style="font-size: 11px; color: #5A5F68">ISSUED TO</span>
+            <span style="font-weight: 600">Deccan Motors Pvt Ltd</span>
+            <span class="mono" style="color: #3D424B">GSTIN 33AAFCD3390L1ZM · Place of supply Tamil Nadu (33)</span>
+          </div>
+          <table style="width: 100%; border-collapse: collapse">
+            <thead><tr style="font-size: 11px; color: #5A5F68; text-align: left"><th scope="col" style="padding: 6px 0; font-weight: 500">Description</th><th scope="col" style="padding: 6px 0; font-weight: 500; text-align: right">Taxable ₹</th></tr></thead>
+            <tbody>
+              <sc-for list="{{cnLines}}" as="l" hint-placeholder-count="2">
+                <tr style="border-top: 1px solid #ECEBE5"><td style="padding: 8px 0">{{l.n}}</td><td class="mono" style="padding: 8px 0; text-align: right">{{l.v}}</td></tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <dl style="margin: 0; align-self: flex-end; width: 100%; max-width: 280px; display: flex; flex-direction: column">
+            <sc-for list="{{totals}}" as="t" hint-placeholder-count="4">
+              <div style="display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; {{t.st}}"><dt>{{t.k}}</dt><dd class="mono" style="margin: 0">{{t.v}}</dd></div>
+            </sc-for>
+          </dl>
+          <span style="font-size: 11px; color: #5A5F68">Reason: {{reasonLabel}}</span>
+        </div>
+
+        <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+          <div style="padding: 16px 20px"><h2 style="margin: 0; font-size: 16px; font-weight: 600">What changes when you issue it</h2></div>
+          <sc-for list="{{impact}}" as="i" hint-placeholder-count="4">
+            <div style="display: flex; justify-content: space-between; gap: 12px; padding: 12px 20px; border-top: 1px solid #ECEBE5; font-size: 14px">
+              <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">{{i.t}}</span><span style="font-size: 12px; color: #5A5F68">{{i.s}}</span></span>
+              <span class="mono" style="font-weight: 600; white-space: nowrap">{{i.v}}</span>
+            </div>
+          </sc-for>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { reason: 'return', units: 2, agreed: true, issued: false }; }
+  renderVals() {
+    const st = this.state;
+    const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+    const sub = (t, href, on) => ({ t, href, cur: on ? 'page' : 'false', st: on ? 'color:#14161A;box-shadow:inset 0 -2px 0 #14161A' : '' });
+    const R = {
+      return: { t: 'Goods returned', d: 'Damaged or rejected units', label: 'Sales return — units damaged in transit' },
+      rate: { t: 'Price revised down', d: 'Rate agreed after supply', label: 'Rate difference — ₹500 per unit' },
+      discount: { t: 'Post-sale discount', d: 'Volume or prompt-payment', label: 'Post-sale discount — 2% volume' },
+      deficiency: { t: 'Service not delivered', d: 'Part of the supply missing', label: 'Calibration certificates not issued' }
+    };
+    let taxable = 0, lines = [];
+    if (st.reason === 'return') { taxable = st.units * 15700; lines = [{ n: 'Pressure transmitter PT-400 · returned × ' + st.units, v: (st.units * 14500).toLocaleString('en-IN') }, { n: 'NABL certificate · × ' + st.units, v: (st.units * 1200).toLocaleString('en-IN') }]; }
+    if (st.reason === 'rate') { taxable = 8500; lines = [{ n: 'Rate revision · ₹500 × 17 units', v: '8,500' }]; }
+    if (st.reason === 'discount') { taxable = 5500; lines = [{ n: 'Volume discount · 2% of ₹2,75,000', v: '5,500' }]; }
+    if (st.reason === 'deficiency') { taxable = 20400; lines = [{ n: 'NABL certificates not issued · × 17', v: '20,400' }]; }
+    const gstApplies = !(st.reason === 'discount' && !st.agreed);
+    const gst = gstApplies ? Math.round(taxable * 0.18) : 0;
+    const total = taxable + gst;
+    const balance = 224500 - total;
+    const ok = { dot: 'background:#1E3A28;color:#9BE3B0', icon: 'M5 12l5 5 9-10' };
+    const info = { dot: 'background:#1E2647;color:#C9D3FF', icon: 'M12 8v.01M12 11v5' };
+    const warn = { dot: 'background:#3A2612;color:#FFC58A', icon: 'M12 7v6M12 17v.01' };
+    const returnGoods = st.units * 14500 * 1.18;
+    const guides = {
+      return: 'Stock re-enters inventory when the returned units are received. The credit note reverses both the goods and their certificates.',
+      rate: 'Link the revised PO from Deccan Motors so the reason holds up in an audit.',
+      discount: gstApplies ? 'Agreed before supply and linked to this invoice, so GST can be reduced along with the price.' : 'Not agreed before supply, so this becomes a commercial credit note: the price drops, but your GST and the customer’s input credit stay as they are.',
+      deficiency: 'Only the undelivered service is credited. The transmitters stay billed.'
+    };
+    const rules = [
+      { ...ok, t: 'Within the time limit.', d: 'Credit notes for FY 2026–27 supplies can be issued until 30 Nov 2027, or the annual return date if that’s earlier.' },
+      gstApplies ? { ...ok, t: 'Output GST reduced.', d: 'Reported in October GSTR-1. CGST and SGST fall by ' + inr(gst / 2) + ' each in the October 3B.' } : { ...info, t: 'No GST adjustment.', d: 'A commercial credit note is not reported in GSTR-1.' },
+      gstApplies ? { ...info, t: 'Customer reverses credit.', d: 'Deccan Motors sees this in their GSTR-2B and reverses ' + inr(gst) + ' of input credit.' } : { ...info, t: 'Customer credit unchanged.', d: 'Deccan Motors keeps the full input credit on the original invoice.' },
+      { ...ok, t: 'E-invoice IRN.', d: gstApplies ? 'Credit notes need an IRN too — generated on issue.' : 'Not needed for a commercial credit note.' },
+      st.reason === 'return' ? (returnGoods > 50000 ? { ...warn, t: 'E-way bill for the return.', d: 'Returned goods worth ' + inr(returnGoods) + ' cross ₹50,000 — generate one before they ship back.' } : { ...ok, t: 'No e-way bill for the return.', d: 'Returned goods worth ' + inr(returnGoods) + ' are under ₹50,000.' }) : { ...ok, t: 'No goods movement.', d: 'No e-way bill needed.' }
+    ];
+    return {
+      subnav: [sub('Invoices', 'Billing.dc.html', false), sub('Quotes', 'Quotes.dc.html', false), sub('Credit notes', 'CreditNote.dc.html', true), sub('New invoice', 'InvoiceEditor.dc.html', false)],
+      issued: st.issued, issue: () => this.setState({ issued: true }),
+      totalFmt: inr(total),
+      orig: [{ k: 'Original invoice', v: 'NI/TN/046' }, { k: 'Invoice total', v: '₹3,24,500' }, { k: 'Already received', v: '₹1,00,000' }, { k: 'Balance due', v: '₹2,24,500' }],
+      reasons: Object.keys(R).map((k) => ({ t: R[k].t, d: R[k].d, on: st.reason === k, pick: () => this.setState({ reason: k, issued: false }),
+        st: st.reason === k ? 'border:1px solid #14161A;background:#14161A;color:#FFFFFF' : 'border:1px solid #E2E1DA;background:#FFFFFF;color:#14161A',
+        sub: st.reason === k ? 'color:#C7CBD2' : 'color:#5A5F68' })),
+      isReturn: st.reason === 'return', isDiscount: st.reason === 'discount',
+      units: String(st.units),
+      inc: () => this.setState({ units: Math.min(st.units + 1, 17), issued: false }),
+      dec: () => this.setState({ units: Math.max(st.units - 1, 1), issued: false }),
+      agreed: st.agreed, toggleAgreed: () => this.setState({ agreed: !st.agreed, issued: false }),
+      guide: guides[st.reason], rules,
+      cnLines: lines, reasonLabel: R[st.reason].label,
+      totals: gstApplies
+        ? [{ k: 'Taxable value', v: taxable.toLocaleString('en-IN'), st: '' }, { k: 'CGST 9%', v: (gst / 2).toLocaleString('en-IN'), st: '' }, { k: 'SGST 9%', v: (gst / 2).toLocaleString('en-IN'), st: '' }, { k: 'Credit total', v: inr(total), st: 'font-weight:700;font-size:15px;border-top:1px solid #14161A;padding-top:10px;margin-top:4px' }]
+        : [{ k: 'Value', v: taxable.toLocaleString('en-IN'), st: '' }, { k: 'GST', v: 'Not adjusted', st: '' }, { k: 'Credit total', v: inr(total), st: 'font-weight:700;font-size:15px;border-top:1px solid #14161A;padding-top:10px;margin-top:4px' }],
+      impact: [
+        { t: 'Deccan Motors now owes', s: 'On NI/TN/046, after ₹1,00,000 received', v: inr(balance) },
+        { t: 'October output GST', s: 'Tamil Nadu GSTIN', v: gstApplies ? '−' + inr(gst) : 'No change' },
+        { t: 'October revenue', s: 'Booked as a sales reduction', v: '−' + inr(taxable) },
+        { t: 'Collections sequence', s: 'Reminders now ask for the new balance', v: 'Updated' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

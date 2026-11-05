@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: biz360x
+    ports: ["5432:5432"]
+    volumes:
+      - ./db:/docker-entrypoint-initdb.d:ro   # *.sql run once, in filename order, on an empty volume
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d biz360x"]
+      interval: 5s
+      retries: 20
+
+  api:
+    build: { context: ., dockerfile: server/Dockerfile }
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/biz360x
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-in-every-environment}
+      BIZ_ENV: dev
+    ports: ["8000:8000"]
+    depends_on: { db: { condition: service_healthy } }
+
+  worker:
+    build: { context: ., dockerfile: server/Dockerfile }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/biz360x
+      BIZ_ENV: dev
+    depends_on: { db: { condition: service_healthy } }
+
+volumes:
+  pgdata:

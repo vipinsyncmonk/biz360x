@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — Mobile Today</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2846E0}a:hover{color:#1A31A8}
+.disp{font-family:"Bricolage Grotesque","Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-0.02em}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F3EE; color: #14161A; font-family: Geist, ui-sans-serif, system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 56px 18px 20px; display: flex; flex-direction: column; gap: 18px">
+    <header style="display: flex; align-items: center; gap: 10px">
+      <button type="button" style="font: inherit; flex: 1; min-width: 0; text-align: left; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; padding: 0; cursor: pointer; min-height: 44px; color: #14161A">
+        <span class="mono" style="width: 36px; height: 36px; border-radius: 10px; background: #14161A; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">NI</span>
+        <span style="display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 600">Nimbus Instruments</span><span style="font-size: 12px; color: #5A5F68">Thu 29 Oct · switch entity</span></span>
+      </button>
+      <button type="button" aria-label="Notifications, 3 new" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid #DCDBD3; background: #FFFFFF; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#14161A" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"></path></svg><span style="position: absolute; top: 9px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: #C2570C"></span></button>
+    </header>
+
+    <h1 class="disp" style="margin: 0; font-size: 30px; line-height: 1.08; font-weight: 700">{{headline}}</h1>
+
+    <!-- health -->
+    <section style="background: #111318; color: #FFFFFF; border-radius: 20px; padding: 18px; display: flex; align-items: center; gap: 16px">
+      <svg width="72" height="72" viewBox="0 0 64 64" role="img" aria-label="Compliance health 92 out of 100"><circle cx="32" cy="32" r="26" fill="none" stroke="#262A33" stroke-width="7"></circle><circle cx="32" cy="32" r="26" fill="none" stroke="#8EA2FF" stroke-width="7" stroke-linecap="round" stroke-dasharray="150 163.4" transform="rotate(-90 32 32)"></circle><text x="32" y="38" text-anchor="middle" font-family="Geist Mono, monospace" font-size="17" font-weight="600" fill="#FFFFFF">92</text></svg>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 15px; font-weight: 600">Compliance health</span>
+        <span style="font-size: 13px; color: #B7BCC5; line-height: 1.4">0 overdue · 5 due in 7 days · ₹0 late fees</span>
+      </div>
+    </section>
+
+    <!-- approvals -->
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline"><h2 style="margin: 0; font-size: 16px; font-weight: 600">Waiting on you</h2><span class="mono" style="font-size: 12px; color: #5A5F68">{{left}} left</span></div>
+      <sc-for list="{{items}}" as="a" hint-placeholder-count="3">
+        <div style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; justify-content: space-between; gap: 10px; align-items: flex-start">
+            <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+              <span style="font-size: 15px; font-weight: 600; line-height: 1.3">{{a.t}}</span>
+              <span style="font-size: 13px; color: #5A5F68; line-height: 1.4">{{a.s}}</span>
+            </div>
+            <span class="mono" style="font-size: 12px; white-space: nowrap; {{a.dc}}">{{a.due}}</span>
+          </div>
+          <sc-if value="{{a.open}}" hint-placeholder-val="{{ true }}">
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+              <button type="button" style="font: inherit; font-size: 14px; height: 44px; border-radius: 12px; border: 1px solid #C9C8C0; background: #FFFFFF; color: #14161A; cursor: pointer">Review</button>
+              <button type="button" onClick="{{a.act}}" style="font: inherit; font-size: 14px; font-weight: 500; height: 44px; border-radius: 12px; border: 0; background: #14161A; color: #FFFFFF; cursor: pointer">{{a.cta}}</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{a.done}}" hint-placeholder-val="{{ false }}">
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #14692F"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>{{a.doneText}}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </section>
+
+    <!-- next due -->
+    <section style="background: #FFFFFF; border: 1px solid #E2E1DA; border-radius: 16px; overflow: hidden">
+      <div style="padding: 14px 14px 8px; display: flex; justify-content: space-between; align-items: baseline"><h2 style="margin: 0; font-size: 16px; font-weight: 600">Coming up</h2><a href="MobileCompliance.dc.html" style="font-size: 13px">All</a></div>
+      <sc-for list="{{next}}" as="n" hint-placeholder-count="4">
+        <div style="display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid #ECEBE5">
+          <span class="mono" style="width: 52px; flex: none; font-size: 12px; color: #3D424B">{{n.d}}</span>
+          <span style="flex: 1; font-size: 14px">{{n.t}}</span>
+          <span style="width: 8px; height: 8px; border-radius: 2px; flex: none; background: {{n.c}}" title="{{n.s}}"></span>
+        </div>
+      </sc-for>
+    </section>
+
+    <!-- copilot nudge -->
+    <a href="MobileCopilot.dc.html" style="text-decoration: none; color: #14161A; background: #E8ECFF; border-radius: 16px; padding: 14px; display: flex; gap: 12px; align-items: flex-start">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A31A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"></path></svg>
+      <span style="font-size: 14px; line-height: 1.45">₹1.86 L of October ITC is waiting on 4 suppliers. <strong style="color: #1A31A8">Send reminders</strong></span>
+    </a>
+  </div>
+
+  <!-- tab bar -->
+  <nav aria-label="Main" style="flex: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #E2E1DA; padding: 6px 6px 28px">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+      <a href="{{t.href}}" aria-current="{{t.cur}}" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 48px; justify-content: center; font-size: 11px; font-weight: 500; {{t.st}}">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{t.icon}}"></path></svg>{{t.t}}
+      </a>
+    </sc-for>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { done: {} }; }
+  renderVals() {
+    const defs = [
+      { id: 'aoc', t: 'Sign AOC-4 for FY 2025–26', s: 'Prepared by Mehta & Co · DSC on this phone', due: 'Tomorrow', dc: 'color:#9A4508;font-weight:600', cta: 'Sign', doneText: 'Signed · sent to CA for certification' },
+      { id: 'tds', t: 'Approve TDS return Q2', s: '42 deductees · ₹8.7 L · FVU validated', due: '31 Oct', dc: 'color:#9A4508;font-weight:600', cta: 'Approve', doneText: 'Approved · queued for TRACES upload' },
+      { id: 'msme', t: 'Pay 2 MSME vendors', s: '₹5.0 L · keeps the 43B(h) deduction', due: '04 Nov', dc: 'color:#3D424B', cta: 'Schedule', doneText: 'Scheduled for 03 Nov' }
+    ];
+    const done = this.state.done;
+    const left = defs.filter((d) => !done[d.id]).length;
+    const tabsDef = [
+      ['Today', 'M3 12l9-8 9 8M5 10v10h14V10', 'MobileToday.dc.html'],
+      ['Compliance', 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4', 'MobileCompliance.dc.html'],
+      ['Copilot', 'M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z', 'MobileCopilot.dc.html'],
+      ['More', 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', 'MobileMore.dc.html']
+    ];
+    return {
+      headline: left === 0 ? 'All clear for today, Ananya.' : left + (left === 1 ? ' thing needs' : ' things need') + ' you today, Ananya.',
+      left: String(left),
+      items: defs.map((d) => ({ ...d, open: !done[d.id], done: !!done[d.id], act: () => this.setState({ done: { ...done, [d.id]: true } }) })),
+      next: [
+        { d: '07 Nov', t: 'TDS deposit · October', c: '#2846E0', s: 'Scheduled' },
+        { d: '11 Nov', t: 'GSTR-1 · October', c: '#2846E0', s: 'Ready' },
+        { d: '15 Nov', t: 'PF and ESI deposit', c: '#2846E0', s: 'Scheduled' },
+        { d: '29 Nov', t: 'MGT-7 · annual return', c: '#C2570C', s: 'Needs action' }
+      ],
+      tabs: tabsDef.map(([t, icon, href], i) => ({ t, icon, href, cur: i === 0 ? 'page' : 'false', st: i === 0 ? 'color:#14161A' : 'color:#5A5F68' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

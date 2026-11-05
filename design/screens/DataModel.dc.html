@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Biz360X — Data model</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400..600&amp;display=swap">
+<style>
+body{margin:0}
+.t{font-family:"Geist Mono",ui-monospace,Menlo,monospace;font-size:13px;line-height:20px}
+</style>
+</helmet>
+<div style="position: relative; width: 1840px; height: 1240px; background: #F4F3EE; color: #14161A; font-family: Geist, ui-sans-serif, system-ui, sans-serif; font-size: 16px; line-height: 24px">
+
+<!-- lines & arrows -->
+<svg width="8" height="48" viewBox="0 0 8 48" preserveAspectRatio="none" style="position: absolute; left: 916px; top: 344px; width: 8px; height: 48px; overflow: visible; fill: none; stroke: #8A8F98; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M 4 0 L 4 48"></path></svg>
+<svg width="1200" height="8" viewBox="0 0 1200 8" preserveAspectRatio="none" style="position: absolute; left: 320px; top: 388px; width: 1200px; height: 8px; overflow: visible; fill: none; stroke: #8A8F98; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M 0 4 L 1200 4"></path></svg>
+<svg width="8" height="47" viewBox="0 0 8 47" preserveAspectRatio="none" style="position: absolute; left: 316px; top: 392px; width: 8px; height: 47px; overflow: visible; fill: none; stroke: #8A8F98; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-1" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#8A8F98" stroke="none" style="stroke: none; fill: #8A8F98; fill: context-stroke"/></marker></defs><path d="M 4 0 L 4 43" marker-end="url(#dc-arrow-head-filled-1)"></path></svg>
+<svg width="8" height="47" viewBox="0 0 8 47" preserveAspectRatio="none" style="position: absolute; left: 716px; top: 392px; width: 8px; height: 47px; overflow: visible; fill: none; stroke: #8A8F98; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-2" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#8A8F98" stroke="none" style="stroke: none; fill: #8A8F98; fill: context-stroke"/></marker></defs><path d="M 4 0 L 4 43" marker-end="url(#dc-arrow-head-filled-2)"></path></svg>
+<svg width="8" height="47" viewBox="0 0 8 47" preserveAspectRatio="none" style="position: absolute; left: 1116px; top: 392px; width: 8px; height: 47px; overflow: visible; fill: none; stroke: #8A8F98; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-3" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#8A8F98" stroke="none" style="stroke: none; fill: #8A8F98; fill: context-stroke"/></marker></defs><path d="M 4 0 L 4 43" marker-end="url(#dc-arrow-head-filled-3)"></path></svg>
+<svg width="8" height="47" viewBox="0 0 8 47" preserveAspectRatio="none" style="position: absolute; left: 1516px; top: 392px; width: 8px; height: 47px; overflow: visible; fill: none; stroke: #8A8F98; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-4" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#8A8F98" stroke="none" style="stroke: none; fill: #8A8F98; fill: context-stroke"/></marker></defs><path d="M 4 0 L 4 43" marker-end="url(#dc-arrow-head-filled-4)"></path></svg>
+<svg width="8" height="95" viewBox="0 0 8 95" preserveAspectRatio="none" style="position: absolute; left: 316px; top: 672px; width: 8px; height: 95px; overflow: visible; fill: none; stroke: #2846E0; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-5" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#2846E0" stroke="none" style="stroke: none; fill: #2846E0; fill: context-stroke"/></marker></defs><path d="M 4 0 L 4 91" marker-end="url(#dc-arrow-head-filled-5)"></path></svg>
+<svg width="8" height="95" viewBox="0 0 8 95" preserveAspectRatio="none" style="position: absolute; left: 716px; top: 673px; width: 8px; height: 95px; overflow: visible; fill: none; stroke: #2846E0; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-6" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#2846E0" stroke="none" style="stroke: none; fill: #2846E0; fill: context-stroke"/></marker></defs><path d="M 4 95 L 4 4" marker-end="url(#dc-arrow-head-filled-6)"></path></svg>
+<svg width="8" height="95" viewBox="0 0 8 95" preserveAspectRatio="none" style="position: absolute; left: 1116px; top: 673px; width: 8px; height: 95px; overflow: visible; fill: none; stroke: #2846E0; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-7" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#2846E0" stroke="none" style="stroke: none; fill: #2846E0; fill: context-stroke"/></marker></defs><path d="M 4 95 L 4 4" marker-end="url(#dc-arrow-head-filled-7)"></path></svg>
+<svg width="8" height="95" viewBox="0 0 8 95" preserveAspectRatio="none" style="position: absolute; left: 1516px; top: 673px; width: 8px; height: 95px; overflow: visible; fill: none; stroke: #2846E0; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-8" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#2846E0" stroke="none" style="stroke: none; fill: #2846E0; fill: context-stroke"/></marker></defs><path d="M 4 95 L 4 4" marker-end="url(#dc-arrow-head-filled-8)"></path></svg>
+
+<!-- title -->
+<div style="position: absolute; left: 64px; top: 64px; font-family: 'Bricolage Grotesque', Geist, sans-serif; font-size: 34px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em">Biz360X data model — domain map</div>
+<div style="position: absolute; left: 64px; top: 112px; width: 900px; font-size: 16px; color: #3D424B">PostgreSQL 16 · 119 tables · 9 views · row-level security on every tenant table</div>
+
+<!-- foundation -->
+<div style="position: absolute; left: 480px; top: 176px; width: 880px; height: 168px; box-sizing: border-box; padding: 20px 24px; display: flex; align-items: flex-start; text-align: left; background: #111318; color: #FFFFFF; border-radius: 14px"><span><b>Foundation · tenancy &amp; identity</b><br><span class="t" style="color: #C9D3FF">organizations · entities · entity_registrations · users · memberships · org_members · advisor_grants · persons · dsc_certificates</span><br><span style="font-size: 14px; color: #B7BCC5">Every business row carries entity_id. A user sees an entity only as a member, as staff of its organisation, or through an active advisor grant.</span></span></div>
+
+<!-- row 2 -->
+<div style="position: absolute; left: 144px; top: 440px; width: 352px; height: 232px; box-sizing: border-box; padding: 20px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #D6D5CD; border-radius: 14px"><span><b>Parties &amp; items</b><br><span class="t">parties<br>party_gst_registrations<br>party_addresses · party_contacts<br>items · ref_hsn_sac</span><br><span style="font-size: 13px; color: #5A5F68">One party can be customer and vendor; its Udyam class drives the MSME rules.</span></span></div>
+<div style="position: absolute; left: 544px; top: 440px; width: 352px; height: 232px; box-sizing: border-box; padding: 20px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #D6D5CD; border-radius: 14px"><span><b>Ledger &amp; banking</b><br><span class="t">ledger_accounts · fiscal_periods<br>journal_entries · journal_lines<br>bank_accounts · bank_transactions<br>bank_matches · close_tasks</span><br><span style="font-size: 13px; color: #5A5F68">Posted journals must balance, can't change, and can't land in a locked period.</span></span></div>
+<div style="position: absolute; left: 944px; top: 440px; width: 352px; height: 232px; box-sizing: border-box; padding: 20px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #D6D5CD; border-radius: 14px"><span><b>Compliance engine</b><br><span class="t">compliance_rules (versioned)<br>entity_facts · engine_runs<br>obligations · obligation_events<br>threshold_watches · notices</span><br><span style="font-size: 13px; color: #5A5F68">Rules are data: applicability, due dates and penalties as JSON, one live version per day.</span></span></div>
+<div style="position: absolute; left: 1344px; top: 440px; width: 352px; height: 232px; box-sizing: border-box; padding: 20px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #D6D5CD; border-radius: 14px"><span><b>Documents, portals &amp; audit</b><br><span class="t">documents · document_links<br>document_requests · data_rooms<br>portal_connections · sync_jobs<br>audit_log (hash-chained)</span><br><span style="font-size: 13px; color: #5A5F68">Full-text search over OCR; audit rows can't be edited or deleted.</span></span></div>
+
+<!-- row 3 -->
+<div style="position: absolute; left: 144px; top: 768px; width: 352px; height: 232px; box-sizing: border-box; padding: 20px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #D6D5CD; border-radius: 14px"><span><b>Sales &amp; billing</b><br><span class="t">document_series · quotes<br>sales_orders · sales_documents<br>eway_bills · payment_links<br>receipts · invoice_settlements<br>dunning_* · recurring_invoices</span></span></div>
+<div style="position: absolute; left: 544px; top: 768px; width: 352px; height: 232px; box-sizing: border-box; padding: 20px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #D6D5CD; border-radius: 14px"><span><b>Purchases, GST &amp; TDS</b><br><span class="t">purchase_bills · vendor_payments<br>gst_returns · gst_inward_docs<br>itc_matches · tax_challans<br>tds_deductions · tds_returns<br>advance_tax · income_tax_returns</span></span></div>
+<div style="position: absolute; left: 944px; top: 768px; width: 352px; height: 232px; box-sizing: border-box; padding: 20px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #D6D5CD; border-radius: 14px"><span><b>Payroll &amp; HR</b><br><span class="t">employees · salary_structures<br>salary_components<br>payroll_runs · payslips<br>leave_* · gratuity_valuations<br>statutory_bonus · committees</span></span></div>
+<div style="position: absolute; left: 1344px; top: 768px; width: 352px; height: 232px; box-sizing: border-box; padding: 20px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #D6D5CD; border-radius: 14px"><span><b>Legal, board &amp; capital</b><br><span class="t">contracts · contract_terms<br>meetings · resolutions<br>share_classes · share_allotments<br>funding_rounds · esop_*<br>entity_benefits · treds_invoices</span></span></div>
+
+<!-- cross-cutting -->
+<div style="position: absolute; left: 64px; top: 1048px; width: 1712px; height: 128px; box-sizing: border-box; padding: 20px 24px; display: flex; align-items: flex-start; text-align: left; background: #E8ECFF; border: 1px solid #C9D3FF; border-radius: 14px"><span><b>Cross-cutting · used by every module</b><br><span class="t">approval_policies · approval_requests (two-person rule) · signature_requests · signature_signers · tasks · copilot_threads · copilot_messages · copilot_citations · copilot_actions · notification_preferences · notifications · subscriptions</span><br><span style="font-size: 14px; color: #2E3340">A copilot action can't be approved or executed without an approval request, and a maker can never approve their own request.</span></span></div>
+
+<!-- arrow labels -->
+<div style="position: absolute; left: 332px; top: 712px; width: 120px; font-size: 13px; line-height: 16px; color: #1A31A8">bills customers</div>
+<div style="position: absolute; left: 732px; top: 712px; width: 112px; font-size: 13px; line-height: 16px; color: #1A31A8">posts journals</div>
+<div style="position: absolute; left: 1132px; top: 712px; width: 136px; font-size: 13px; line-height: 16px; color: #1A31A8">feeds facts &amp; filings</div>
+<div style="position: absolute; left: 1532px; top: 712px; width: 104px; font-size: 13px; line-height: 16px; color: #1A31A8">signed copies</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
