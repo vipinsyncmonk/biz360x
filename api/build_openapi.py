@@ -728,6 +728,11 @@ collection(E + "/bank-accounts", "Finance & books", "BankAccount", "finance")
 item(E + "/bank-accounts", "Finance & books", "BankAccount", "finance")
 action(E + "/bank-accounts/{id}/statements", "Finance & books", "uploadStatement", "Import a statement file (CSV / MT940 / PDF)", "finance:write",
        body=schema("StatementImport", {"document_id": UUID}, required=("document_id",)), status="202")
+schema("BankFeedLine", {"external_id": S(description="Dedupe key from the feed"), "txn_date": DATE, "amount": {**MONEY, "description": "+ credit to us, - debit"}, "description": S(), "utr": NULLABLE(S()), "counterparty_name": NULLABLE(S()), "counterparty_va": NULLABLE(S(description="Virtual account the money was paid into")), "balance_after": NULLABLE(MONEY)}, required=("external_id", "txn_date", "amount", "description"))
+action(E + "/bank-accounts/{id}/transactions", "Finance & books", "importBankTransactions", "Import bank lines from a feed (Account Aggregator, bank API or parsed statement)", "finance:write",
+       body=schema("BankFeedImport", {"transactions": ARR(ref("BankFeedLine"), minItems=1, maxItems=1000)}, required=("transactions",)),
+       resp=schema("BankFeedResult", {"imported": I(), "duplicates": I(), "suggested": I()}), status="201",
+       desc="Duplicates (same `external_id`) are ignored. Credits paid into an invoice virtual account, or naming an invoice number, get a suggested receipt to accept or reject.")
 schema("BankMatchSuggestion", {"id": RO_UUID, "target_kind": S(), "target_id": UUID, "label": S(examples=["Invoice NI/KA/184"]), "amount": MONEY,
                                "confidence": N(), "rule": S(), "status": ENUM("suggested", "accepted", "rejected")})
 schema("BankTransaction", {"id": RO_UUID, "bank_account_id": UUID, "txn_date": DATE, "amount": MONEY, "description": S(), "utr": NULLABLE(S()),
