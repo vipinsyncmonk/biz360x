@@ -67,7 +67,30 @@ def schedule_engine_runs(cur) -> int:
     return len(ids)
 
 
-HANDLERS = {"einvoice.generate_irn": handle_generate_irn, "compliance.run_engine": handle_run_engine}
+def handle_dunning(cur, job: dict) -> dict:
+    from . import receivables
+    return receivables.run_dunning(cur, job["entity_id"])
+
+
+def handle_recurring(cur, job: dict) -> dict:
+    from . import receivables
+    return receivables.run_recurring(cur, job["entity_id"])
+
+
+def schedule_daily_jobs(cur) -> int:
+    """Queue the daily dunning and recurring-invoice jobs once per entity per day."""
+    n = 0
+    for kind in ("collections.dunning", "collections.recurring"):
+        cur.execute("""INSERT INTO jobs (entity_id, kind, subject, subject_id)
+                       SELECT e.id, %s, 'entities', e.id FROM entities e
+                        WHERE e.is_active AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.entity_id = e.id AND j.kind = %s
+                                                           AND j.created_at > now() - interval '20 hours')""", (kind, kind))
+        n += cur.rowcount
+    return n
+
+
+HANDLERS = {"einvoice.generate_irn": handle_generate_irn, "compliance.run_engine": handle_run_engine,
+            "collections.dunning": handle_dunning, "collections.recurring": handle_recurring}
 
 
 def run_once() -> bool:
@@ -99,6 +122,7 @@ def main():
         if time.monotonic() - last_schedule > 3600:
             with tx(None, role="biz_worker") as cur:
                 schedule_engine_runs(cur)
+                schedule_daily_jobs(cur)
             last_schedule = time.monotonic()
         if not run_once():
             time.sleep(1)

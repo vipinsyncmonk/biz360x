@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import tax
+from . import ledger, tax
 from .core import (ApiError, Auth, Principal, audit, emit, etag_of, idempotency_begin, idempotency_finish, jsonable, money,
                    require, tx)
 
@@ -28,6 +28,8 @@ class LineIn(BaseModel):
     gst_rate: Decimal
     discount: Decimal = Decimal("0")
     uqc: str = "NOS"
+    so_line_id: int | None = None
+    original_line_id: int | None = None
 
 
 class SalesDocIn(BaseModel):
@@ -43,6 +45,8 @@ class SalesDocIn(BaseModel):
     original_document_id: uuid.UUID | None = None
     cn_reason: str | None = None
     gst_adjusted: bool = True
+    quote_id: uuid.UUID | None = None
+    sales_order_id: uuid.UUID | None = None
     lines: list[LineIn] = Field(min_length=1)
 
 
@@ -134,37 +138,45 @@ def load_document(cur, entity_id, doc_id) -> dict:
     return json.loads(json.dumps(d, default=jsonable))
 
 
+def create_draft(cur, entity_id, body: SalesDocIn) -> uuid.UUID:
+    """Validate, compute and insert a draft sales document. Shared by the API, quotes, orders, credit notes and recurring invoices."""
+    ctx, lines, party, gst, reg = _context(cur, entity_id, body)
+    res = tax.compute(lines, ctx)
+    blocks = [c for c in res.checks if c["level"] == "block"]
+    if blocks and body.doc_type == "credit_note":
+        raise ApiError(400, blocks[0]["code"], blocks[0]["title"], blocks[0]["detail"])
+    cur.execute("""
+        INSERT INTO sales_documents (entity_id, doc_type, doc_date, registration_id, supplier_state, party_id, party_gst_id,
+               buyer_gstin, buyer_legal_name, bill_to, place_of_supply, supply_type, customer_po_ref, original_document_id,
+               cn_reason, gst_adjusted, payment_terms_days, due_date, taxable_total, cgst_total, sgst_total, igst_total,
+               round_off, grand_total, tds_expected, irn_status, created_by, quote_id, sales_order_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                app.current_user_id(), %s, %s)
+        RETURNING id""",
+        (entity_id, body.doc_type, body.doc_date, body.registration_id, ctx.supplier_state, body.party_id, body.party_gst_id,
+         ctx.buyer_gstin, party["legal_name"], json.dumps({"gstin": ctx.buyer_gstin, "state": ctx.place_of_supply}),
+         ctx.place_of_supply, body.supply_type, body.customer_po_ref, body.original_document_id, body.cn_reason,
+         body.gst_adjusted, ctx.payment_terms_days, res.due_date, res.taxable_total, res.cgst_total, res.sgst_total,
+         res.igst_total, res.round_off, res.grand_total, res.tds_expected,
+         "pending" if any(c["code"] == "einvoice_required" for c in res.checks) else "not_required",
+         body.quote_id, body.sales_order_id))
+    doc_id = cur.fetchone()["id"]
+    for l, src in zip(res.lines, body.lines):
+        cur.execute("""INSERT INTO sales_document_lines (document_id, line_no, item_id, so_line_id, original_line_id, description, hsn_sac,
+                              is_service, qty, uqc, rate, discount, taxable_value, gst_rate, cgst_amount, sgst_amount, igst_amount)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (doc_id, l["line_no"], src.item_id, src.so_line_id, src.original_line_id, src.description, src.hsn_sac,
+                     src.hsn_sac.startswith("99"), src.qty, src.uqc, src.rate, src.discount, l["taxable_value"], src.gst_rate,
+                     l["cgst_amount"], l["sgst_amount"], l["igst_amount"]))
+    audit(cur, entity_id, "sales_document.drafted", "sales_documents", doc_id, after={"grand_total": res.grand_total})
+    return doc_id
+
+
 @router.post(E + "/sales-documents", status_code=201, tags=["Sales & billing"])
 def create_document(entity_id: uuid.UUID, body: SalesDocIn, response: Response, p: Principal = Auth):
     with tx(p.user_id) as cur:
         require(cur, entity_id, "sales:write")
-        ctx, lines, party, gst, reg = _context(cur, entity_id, body)
-        res = tax.compute(lines, ctx)
-        blocks = [c for c in res.checks if c["level"] == "block"]
-        if blocks and body.doc_type == "credit_note":
-            raise ApiError(400, blocks[0]["code"], blocks[0]["title"], blocks[0]["detail"])
-        cur.execute("""
-            INSERT INTO sales_documents (entity_id, doc_type, doc_date, registration_id, supplier_state, party_id, party_gst_id,
-                   buyer_gstin, buyer_legal_name, bill_to, place_of_supply, supply_type, customer_po_ref, original_document_id,
-                   cn_reason, gst_adjusted, payment_terms_days, due_date, taxable_total, cgst_total, sgst_total, igst_total,
-                   round_off, grand_total, tds_expected, irn_status, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    app.current_user_id())
-            RETURNING id""",
-            (entity_id, body.doc_type, body.doc_date, body.registration_id, ctx.supplier_state, body.party_id, body.party_gst_id,
-             ctx.buyer_gstin, party["legal_name"], json.dumps({"gstin": ctx.buyer_gstin, "state": ctx.place_of_supply}),
-             ctx.place_of_supply, body.supply_type, body.customer_po_ref, body.original_document_id, body.cn_reason,
-             body.gst_adjusted, ctx.payment_terms_days, res.due_date, res.taxable_total, res.cgst_total, res.sgst_total,
-             res.igst_total, res.round_off, res.grand_total, res.tds_expected,
-             "pending" if any(c["code"] == "einvoice_required" for c in res.checks) else "not_required"))
-        doc_id = cur.fetchone()["id"]
-        for l, src in zip(res.lines, body.lines):
-            cur.execute("""INSERT INTO sales_document_lines (document_id, line_no, item_id, description, hsn_sac, is_service, qty, uqc,
-                                  rate, discount, taxable_value, gst_rate, cgst_amount, sgst_amount, igst_amount)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (doc_id, l["line_no"], src.item_id, src.description, src.hsn_sac, src.hsn_sac.startswith("99"), src.qty, src.uqc,
-                         src.rate, src.discount, l["taxable_value"], src.gst_rate, l["cgst_amount"], l["sgst_amount"], l["igst_amount"]))
-        audit(cur, entity_id, "sales_document.drafted", "sales_documents", doc_id, after={"grand_total": res.grand_total})
+        doc_id = create_draft(cur, entity_id, body)
         doc = load_document(cur, entity_id, doc_id)
     response.headers["ETag"] = etag_of(doc)
     response.headers["Location"] = f"/v1/entities/{entity_id}/sales-documents/{doc_id}"
@@ -185,6 +197,46 @@ class IssueRequest(BaseModel):
     generate_eway_bill: bool = True
 
 
+def issue_core(cur, entity_id, doc_id, *, eway_bill: bool = True, payment_link: bool = True) -> dict:
+    """Take the next number, post the journal, settle a credit note against its invoice, queue the IRN job.
+    Runs in the caller's transaction (API request or worker)."""
+    cur.execute("SELECT * FROM sales_documents WHERE id = %s AND entity_id = %s FOR UPDATE", (doc_id, entity_id))
+    d = cur.fetchone()
+    if not d:
+        raise ApiError(404, "not_found", "Not found")
+    if d["status"] != "draft":
+        raise ApiError(409, "conflict", f"Document is already {d['status']}")
+    cur.execute("SELECT id FROM document_series WHERE registration_id = %s AND doc_type = %s AND fy = %s",
+                (d["registration_id"], d["doc_type"], d["fy"]))
+    series = cur.fetchone()
+    if not series:
+        raise ApiError(409, "conflict", f"No number series for this GSTIN, {d['doc_type']} and FY {d['fy']}")
+    cur.execute("SELECT app.next_document_number(%s) AS n", (series["id"],))
+    number = cur.fetchone()["n"]
+    cur.execute("""UPDATE sales_documents SET number = %s, series_id = %s, status = 'issued', issued_at = now(),
+                          issued_by = app.current_user_id() WHERE id = %s""", (number, series["id"], doc_id))
+    ledger.post_sales_document(cur, entity_id, doc_id)
+    if d["doc_type"] == "credit_note":                       # a credit note reduces what the customer owes on the invoice
+        cur.execute("SELECT balance_due FROM sales_documents WHERE id = %s", (d["original_document_id"],))
+        applicable = min(d["grand_total"], cur.fetchone()["balance_due"])
+        if applicable > 0:
+            cur.execute("""INSERT INTO invoice_settlements (entity_id, invoice_id, source_kind, credit_note_id, amount, settled_on)
+                           VALUES (%s, %s, 'credit_note', %s, %s, %s)""", (entity_id, d["original_document_id"], doc_id, applicable, d["doc_date"]))
+    needs_irn = d["irn_status"] == "pending"
+    cur.execute("""INSERT INTO jobs (entity_id, kind, status, subject, subject_id, payload, created_by, result, finished_at, progress)
+                   VALUES (%s, %s, %s, 'sales_documents', %s, %s, app.current_user_id(), %s, %s, %s) RETURNING *""",
+                (entity_id, "einvoice.generate_irn" if needs_irn else "sales_document.issue",
+                 "queued" if needs_irn else "succeeded", doc_id,
+                 json.dumps({"number": number, "eway_bill": eway_bill, "payment_link": payment_link}),
+                 None if needs_irn else json.dumps({"number": number}), None if needs_irn else dt.datetime.now(dt.timezone.utc),
+                 0 if needs_irn else 1))
+    job = json.loads(json.dumps(cur.fetchone(), default=jsonable))
+    job = {k: job[k] for k in ("id", "kind", "status", "progress", "subject", "subject_id", "result", "created_at", "finished_at")}
+    audit(cur, entity_id, "sales_document.issued", "sales_documents", doc_id, after={"number": number})
+    emit(cur, entity_id, "sales_document.issued", "sales_documents", doc_id, {"number": number})
+    return job
+
+
 @router.post(E + "/sales-documents/{doc_id}/issue", status_code=202, tags=["Sales & billing"])
 def issue_document(entity_id: uuid.UUID, doc_id: uuid.UUID, body: IssueRequest, p: Principal = Auth,
                    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
@@ -194,33 +246,7 @@ def issue_document(entity_id: uuid.UUID, doc_id: uuid.UUID, body: IssueRequest, 
         replay = idempotency_begin(cur, idempotency_key, "POST", path, body.model_dump())
         if replay:
             return JSONResponse(replay["body"], status_code=replay["status"])
-        cur.execute("SELECT * FROM sales_documents WHERE id = %s AND entity_id = %s FOR UPDATE", (doc_id, entity_id))
-        d = cur.fetchone()
-        if not d:
-            raise ApiError(404, "not_found", "Not found")
-        if d["status"] != "draft":
-            raise ApiError(409, "conflict", f"Document is already {d['status']}")
-        cur.execute("SELECT id FROM document_series WHERE registration_id = %s AND doc_type = %s AND fy = %s",
-                    (d["registration_id"], d["doc_type"], d["fy"]))
-        series = cur.fetchone()
-        if not series:
-            raise ApiError(409, "conflict", f"No number series for this GSTIN, {d['doc_type']} and FY {d['fy']}")
-        cur.execute("SELECT app.next_document_number(%s) AS n", (series["id"],))
-        number = cur.fetchone()["n"]
-        cur.execute("""UPDATE sales_documents SET number = %s, series_id = %s, status = 'issued', issued_at = now(),
-                              issued_by = app.current_user_id() WHERE id = %s""", (number, series["id"], doc_id))
-        needs_irn = d["irn_status"] == "pending"
-        cur.execute("""INSERT INTO jobs (entity_id, kind, status, subject, subject_id, payload, created_by, result, finished_at, progress)
-                       VALUES (%s, %s, %s, 'sales_documents', %s, %s, app.current_user_id(), %s, %s, %s) RETURNING *""",
-                    (entity_id, "einvoice.generate_irn" if needs_irn else "sales_document.issue",
-                     "queued" if needs_irn else "succeeded", doc_id,
-                     json.dumps({"number": number, "eway_bill": body.generate_eway_bill, "payment_link": body.create_payment_link}),
-                     None if needs_irn else json.dumps({"number": number}), None if needs_irn else dt.datetime.now(dt.timezone.utc),
-                     0 if needs_irn else 1))
-        job = json.loads(json.dumps(cur.fetchone(), default=jsonable))
-        job = {k: job[k] for k in ("id", "kind", "status", "progress", "subject", "subject_id", "result", "created_at", "finished_at")}
-        audit(cur, entity_id, "sales_document.issued", "sales_documents", doc_id, after={"number": number})
-        emit(cur, entity_id, "sales_document.issued", "sales_documents", doc_id, {"number": number})
+        job = issue_core(cur, entity_id, doc_id, eway_bill=body.generate_eway_bill, payment_link=body.create_payment_link)
         idempotency_finish(cur, idempotency_key, 202, job)
     return JSONResponse(job, status_code=202, headers={"Location": f"/v1/jobs/{job['id']}"})
 
@@ -239,6 +265,44 @@ class ReceiptIn(BaseModel):
     allocations: list[AllocationIn] = []
 
 
+def record_receipt(cur, entity_id, body: ReceiptIn, *, bank_account_id=None, bank_transaction_id=None) -> dict:
+    """Insert a confirmed receipt, settle the allocated invoices and post the journal (Dr bank, Cr receivable / advances)."""
+    receipt_no = "RCPT-" + uuid.uuid4().hex[:8].upper()
+    cur.execute("""INSERT INTO receipts (entity_id, party_id, receipt_no, received_on, amount, method, utr, bank_account_id,
+                          bank_transaction_id, is_advance)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                (entity_id, body.party_id, receipt_no, body.received_on, body.amount, body.method, body.utr, bank_account_id,
+                 bank_transaction_id, not body.allocations))
+    rid = cur.fetchone()["id"]
+    for a in body.allocations:
+        cur.execute("SELECT 1 FROM sales_documents WHERE id = %s AND entity_id = %s AND party_id = %s AND status = 'issued'",
+                    (a.invoice_id, entity_id, body.party_id))
+        if not cur.fetchone():
+            raise ApiError(400, "validation_failed", "Allocation must target an issued invoice of the same customer",
+                           errors=[{"field": "allocations.invoice_id", "message": str(a.invoice_id)}])
+        cur.execute("""INSERT INTO invoice_settlements (entity_id, invoice_id, source_kind, receipt_id, amount, settled_on)
+                       VALUES (%s, %s, 'receipt', %s, %s, %s)""", (entity_id, a.invoice_id, rid, a.amount, body.received_on))
+        cur.execute("SELECT payment_status FROM sales_documents WHERE id = %s", (a.invoice_id,))
+        if cur.fetchone()["payment_status"] == "paid":
+            emit(cur, entity_id, "sales_document.paid", "sales_documents", a.invoice_id)
+    allocated = sum((a.amount for a in body.allocations), Decimal("0"))
+    bank_key = None
+    if bank_account_id:
+        cur.execute("SELECT ledger_account_id FROM bank_accounts WHERE id = %s", (bank_account_id,))
+        bank_key = "account:" + str(cur.fetchone()["ledger_account_id"])
+    jid = ledger.post_journal(cur, entity_id, body.received_on, "receipt", rid, f"Receipt {receipt_no}",
+                              ledger.receipt_lines(amount=body.amount, allocated=allocated, party_id=body.party_id,
+                                                   method=body.method, bank_account_key=bank_key))
+    cur.execute("UPDATE receipts SET journal_entry_id = %s WHERE id = %s", (jid, rid))
+    out = {"id": str(rid), "receipt_no": receipt_no, "party_id": str(body.party_id), "received_on": body.received_on.isoformat(),
+           "amount": money(body.amount), "method": body.method, "utr": body.utr, "status": "confirmed",
+           "allocations": [{"invoice_id": str(a.invoice_id), "amount": money(a.amount)} for a in body.allocations],
+           "unallocated": money(body.amount - allocated)}
+    audit(cur, entity_id, "receipt.created", "receipts", rid, after=out)
+    emit(cur, entity_id, "receipt.created", "receipts", rid, {"amount": out["amount"]})
+    return out
+
+
 @router.post(E + "/receipts", status_code=201, tags=["Sales & billing"])
 def create_receipt(entity_id: uuid.UUID, body: ReceiptIn, p: Principal = Auth,
                    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
@@ -249,28 +313,6 @@ def create_receipt(entity_id: uuid.UUID, body: ReceiptIn, p: Principal = Auth,
         replay = idempotency_begin(cur, idempotency_key, "POST", f"/entities/{entity_id}/receipts", body.model_dump())
         if replay:
             return JSONResponse(replay["body"], status_code=replay["status"])
-        receipt_no = "RCPT-" + uuid.uuid4().hex[:8].upper()
-        cur.execute("""INSERT INTO receipts (entity_id, party_id, receipt_no, received_on, amount, method, utr)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                    (entity_id, body.party_id, receipt_no, body.received_on, body.amount, body.method, body.utr))
-        rid = cur.fetchone()["id"]
-        for a in body.allocations:
-            cur.execute("SELECT 1 FROM sales_documents WHERE id = %s AND entity_id = %s AND party_id = %s AND status = 'issued'",
-                        (a.invoice_id, entity_id, body.party_id))
-            if not cur.fetchone():
-                raise ApiError(400, "validation_failed", "Allocation must target an issued invoice of the same customer",
-                               errors=[{"field": "allocations.invoice_id", "message": str(a.invoice_id)}])
-            cur.execute("""INSERT INTO invoice_settlements (entity_id, invoice_id, source_kind, receipt_id, amount, settled_on)
-                           VALUES (%s, %s, 'receipt', %s, %s, %s)""", (entity_id, a.invoice_id, rid, a.amount, body.received_on))
-            cur.execute("SELECT payment_status FROM sales_documents WHERE id = %s", (a.invoice_id,))
-            if cur.fetchone()["payment_status"] == "paid":
-                emit(cur, entity_id, "sales_document.paid", "sales_documents", a.invoice_id)
-        allocated = sum((a.amount for a in body.allocations), Decimal("0"))
-        out = {"id": str(rid), "receipt_no": receipt_no, "party_id": str(body.party_id), "received_on": body.received_on.isoformat(),
-               "amount": money(body.amount), "method": body.method, "utr": body.utr, "status": "confirmed",
-               "allocations": [{"invoice_id": str(a.invoice_id), "amount": money(a.amount)} for a in body.allocations],
-               "unallocated": money(body.amount - allocated)}
-        audit(cur, entity_id, "receipt.created", "receipts", rid, after=out)
-        emit(cur, entity_id, "receipt.created", "receipts", rid, {"amount": out["amount"]})
+        out = record_receipt(cur, entity_id, body)
         idempotency_finish(cur, idempotency_key, 201, out)
     return JSONResponse(out, status_code=201)
