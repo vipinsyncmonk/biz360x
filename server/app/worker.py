@@ -80,7 +80,7 @@ def handle_recurring(cur, job: dict) -> dict:
 def schedule_daily_jobs(cur) -> int:
     """Queue the daily dunning and recurring-invoice jobs once per entity per day."""
     n = 0
-    for kind in ("collections.dunning", "collections.recurring"):
+    for kind in ("collections.dunning", "collections.recurring", "purchases.msme_alerts"):
         cur.execute("""INSERT INTO jobs (entity_id, kind, subject, subject_id)
                        SELECT e.id, %s, 'entities', e.id FROM entities e
                         WHERE e.is_active AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.entity_id = e.id AND j.kind = %s
@@ -89,8 +89,15 @@ def schedule_daily_jobs(cur) -> int:
     return n
 
 
+def _m3_handlers() -> dict:
+    from . import routes_gst as g, routes_purchases as pu
+    return {"obligation.prepare": g.handle_prepare, "gst.compute_return": g.handle_compute_return, "gst.file_return": g.handle_file_return,
+            "gst.inward_sync": g.handle_inward_sync, "tax.pay_challan": g.handle_pay_challan, "tds.validate_return": g.handle_validate_tds_return,
+            "bank.release_payment": pu.handle_release_payment, "purchases.msme_alerts": pu.handle_msme_alerts}
+
+
 HANDLERS = {"einvoice.generate_irn": handle_generate_irn, "compliance.run_engine": handle_run_engine,
-            "collections.dunning": handle_dunning, "collections.recurring": handle_recurring}
+            "collections.dunning": handle_dunning, "collections.recurring": handle_recurring, **_m3_handlers()}
 
 
 def run_once() -> bool:

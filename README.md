@@ -6,7 +6,7 @@ The business operating system for Indian companies, startups and MSMEs. It has o
 |---|---|
 | **Database** | PostgreSQL 16 · 125 tables · row-level security on every tenant table → [`db/`](db/README.md) |
 | **API** | OpenAPI 3.1 · 270 operations · 16 webhook events → [`api/openapi.yaml`](api/openapi.yaml), [`docs/API_GUIDE.md`](docs/API_GUIDE.md) |
-| **Reference server** | FastAPI + job worker + compliance engine + M2 ledger and sales-to-cash, 121 tests → [`server/`](server/) |
+| **Reference server** | FastAPI + job worker + compliance engine + M2 ledger and sales-to-cash + M3 purchases, GST and tax, 174 tests → [`server/`](server/) |
 | **Designs** | 26 screens: landing, onboarding, dashboards, compliance engine, copilot, finance, payroll, GST, legal, vault, billing, mobile → [`design/`](design/README.md) |
 
 ## Quick start

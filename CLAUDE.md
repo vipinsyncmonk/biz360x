@@ -66,7 +66,7 @@ The tests expect the demo data. Rebuild the database before a full test run, bec
 
 ## Backlog (in order)
 
-Done: compliance engine evaluator (`server/app/engine.py`, migrations 12-13); ledger posting for sales documents and receipts, quotes to cash, bank matching and period close (`ledger.py`, `routes_orders.py`, `routes_finance.py`, `receivables.py`). Bill and payroll posting templates arrive with M3 and M4.
+Done: compliance engine evaluator (`server/app/engine.py`, migrations 12-13); ledger posting for sales documents and receipts, quotes to cash, bank matching and period close (`ledger.py`, `routes_orders.py`, `routes_finance.py`, `receivables.py`). Bill posting, purchases, GST returns, 2B matching, TDS and advance tax are in (`routes_purchases.py`, `routes_gst.py`, `taxcalc.py`; migrations 14-15). Payroll posting arrives with M4.
 
 3. Remaining spec operations (onboarding, quotes, purchases, GST returns, payroll, legal, documents, copilot).
 4. Real auth: OTP provider, OIDC/SAML. Development OTP `000000` must never reach production.
