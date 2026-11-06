@@ -24,7 +24,7 @@ docker compose up -d db                                   # loads db/*.sql on fi
 docker compose exec db psql -U postgres -d biz360x -f /docker-entrypoint-initdb.d/tests/demo_and_checks.sql
 
 # without Docker: a PostgreSQL 16 superuser connection is enough
-for f in db/0*.sql db/10_*.sql db/11_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -f "$f"; done
+for f in db/[0-9][0-9]_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -f "$f"; done
 psql -d biz360x -v ON_ERROR_STOP=1 -f db/tests/demo_and_checks.sql      # prints ALL CHECKS PASSED
 
 # API
@@ -39,6 +39,8 @@ npx @redocly/cli@1.25.0 build-docs api/openapi.yaml -o api/api-reference.html   
 ```
 
 The tests expect the demo data. Rebuild the database before a full test run, because the tests change it.
+
+**Before every push run the local CI mirror:** `bash scripts/ci-local.sh` (WSL/Linux) or `powershell -ExecutionPolicy Bypass -File scripts/ci-local.ps1`. Setup: `docs/DEV_SETUP.md`. Migrations: `python scripts/migrate.py`.
 
 ## Rules that must hold
 

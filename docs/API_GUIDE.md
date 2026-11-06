@@ -150,7 +150,7 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `parties`, `sale
 | Legal & Contracts | `GET /contracts?notice_within_days=30`, `GET /contracts/{id}`, `POST …/extract-terms`, `POST …/notices`, `GET /signature-requests`, `GET /contract-templates` |
 | Document Vault | `GET /documents?q=…&folder=…`, `POST /documents` (signed upload), `GET /documents?expiring_within_days=90`, `GET /document-requests`, `POST /document-requests/{id}/share` |
 | Group view | `GET /organizations/{id}/entities`, `GET /organizations/{id}/workload`, `POST /organizations/{id}/client-reminders` |
-| Settings | `/members`, `/advisor-grants`, `/dsc-certificates`, `/portal-connections` (+ `/renew`), `/me/notification-preferences`, `/webhooks` |
+| Settings | `/members`, `/advisor-grants`, `/dsc-certificates`, `/portal-connections` (+ `/portal-connections/{id}/renew`), `/me/notification-preferences`, `/webhooks` |
 | Sales & Billing | `GET /sales/summary`, `GET /sales-documents?payment_status=…`, `GET /dunning-sequences`, `GET /recurring-invoices` |
 | New GST invoice | `POST /sales-documents/preview` (every change), `POST /sales-documents`, `POST /sales-documents/{id}/issue` |
 | Quotes | `GET /quotes`, `POST /quotes/{id}/revise`, `POST /quotes/{id}/accept`, `POST /sales-orders/{id}/invoice` |
@@ -177,7 +177,7 @@ Its 14 end-to-end tests run against PostgreSQL 16 and cover the IGST and CGST+SG
 
 ```bash
 pip install -r server/requirements.txt
-createdb biz360x && for f in db/0*.sql db/10_*.sql db/11_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -f $f; done
+createdb biz360x && for f in db/[0-9][0-9]_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -f $f; done
 psql -d biz360x -f db/tests/demo_and_checks.sql
 cd server && DATABASE_URL=postgresql://postgres@localhost/biz360x pytest -q
 DATABASE_URL=… uvicorn app.main:app --reload        # API on :8000, spec at /v1/openapi.yaml

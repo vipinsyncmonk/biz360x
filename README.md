@@ -20,4 +20,6 @@ cd server && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/biz360x 
 
 Or run everything: `docker compose up --build`. The API is then on http://localhost:8000 and the contract at `/v1/openapi.yaml`.
 
+Developer setup (Windows/WSL, no Docker) and the local CI mirror: [`docs/DEV_SETUP.md`](docs/DEV_SETUP.md).
+
 Working with Claude Code? Start with [`CLAUDE.md`](CLAUDE.md).
