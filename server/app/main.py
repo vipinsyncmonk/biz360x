@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from .core import ApiError, problem_response
 from .routes_compliance import router as compliance
+from .routes_engine import router as engine_routes
 from .routes_platform import router as platform
 from .routes_sales import router as sales
 
@@ -42,5 +43,5 @@ def health():
     return JSONResponse({"ok": True})
 
 
-for r in (platform, compliance, sales):
+for r in (platform, compliance, engine_routes, sales):
     app.include_router(r, prefix="/v1")
