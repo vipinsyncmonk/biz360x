@@ -49,7 +49,25 @@ def handle_generate_irn(cur, job: dict) -> dict:
     return {"irn": out["irn"], "ack_no": out["ack_no"], "number": d["number"]}
 
 
-HANDLERS = {"einvoice.generate_irn": handle_generate_irn}
+def handle_run_engine(cur, job: dict) -> dict:
+    from . import engine
+    run = engine.run_engine(cur, job["entity_id"], (job["payload"] or {}).get("trigger", "schedule"))
+    return {"engine_run_id": str(run["id"]), "obligations_created": run["obligations_created"],
+            "obligations_changed": run["obligations_changed"]}
+
+
+def schedule_engine_runs(cur) -> int:
+    """Queue a daily engine run for every active entity that has not had one in 24 hours
+    (dates roll over, so obligations go overdue and late fees grow without any fact changing)."""
+    cur.execute("""SELECT e.id FROM entities e
+                    WHERE e.is_active AND NOT EXISTS (SELECT 1 FROM engine_runs r WHERE r.entity_id = e.id AND r.started_at > now() - interval '24 hours')""")
+    ids = [r["id"] for r in cur.fetchall()]
+    for i in ids:
+        cur.execute("SELECT app.enqueue_engine_run(%s, 'schedule')", (i,))
+    return len(ids)
+
+
+HANDLERS = {"einvoice.generate_irn": handle_generate_irn, "compliance.run_engine": handle_run_engine}
 
 
 def run_once() -> bool:
@@ -76,7 +94,12 @@ def run_once() -> bool:
 
 
 def main():
+    last_schedule = 0.0
     while True:
+        if time.monotonic() - last_schedule > 3600:
+            with tx(None, role="biz_worker") as cur:
+                schedule_engine_runs(cur)
+            last_schedule = time.monotonic()
         if not run_once():
             time.sleep(1)
 
