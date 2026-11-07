@@ -13,6 +13,8 @@ export default function Shell({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => { if (status === "anon") router.replace("/login"); }, [status, router]);
+  const noWorkspace = status === "authed" && (me?.entities ?? []).length === 0;
+  useEffect(() => { if (noWorkspace) router.replace("/onboarding"); }, [noWorkspace, router]);
 
   if (status !== "authed" || !me) return <div className="empty" role="status">Loading…</div>;
 

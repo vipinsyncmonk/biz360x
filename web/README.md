@@ -11,7 +11,7 @@ npm run gen:api        # regenerate src/api/schema.d.ts after the contract chang
 npm run typecheck && npm test
 ```
 
-Start the API first (see `CLAUDE.md`). In development sign in with any seeded email, for example `ananya@example.in`, and the code `000000`.
+Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a company that is not already cached also run the worker (`python -m app.worker`); the development registry knows `U72900MH2022PTC999999` (Orchid Labs), which has no demo workspace. In development sign in with any seeded email, for example `ananya@example.in`, and the code `000000`.
 
 ## What is here
 
@@ -22,7 +22,9 @@ Start the API first (see `CLAUDE.md`). In development sign in with any seeded em
 | `src/lib/session.tsx` | Who is signed in, the entity switcher (remembered in localStorage) |
 | `src/lib/format.ts`, `compliance.ts` | Pure helpers (Indian money grouping on strings, never floats; statuses; KPIs; calendar grouping). Unit-tested |
 | `src/components/Shell.tsx`, `nav.ts` | Sidebar, entity switcher, route guard. `nav.ts` marks which screens are built |
-| `src/app/login` | One-time-code sign-in, with the authenticator step for users who have MFA |
+| `src/app/login` | One-time-code sign-in (authenticator step for MFA users) and **Create workspace**, which signs a new person up |
+| `src/app/onboarding` | Four steps: look up a CIN/LLPIN/GSTIN/PAN, confirm the company and its GSTINs, answer four questions with a live obligation preview, then create the workspace |
+| `src/lib/onboarding.ts` | Identifier formats, answer bands, hint text. Unit-tested |
 | `src/app/(app)/page.tsx` | Today (Command Center) |
 | `src/app/(app)/compliance` | Obligations with the reason each applies, calendar, thresholds, re-run engine |
 | `src/app/(app)/m/[slug]` | Placeholder for screens that are not built yet |
@@ -41,4 +43,4 @@ The access token lives in memory; the refresh token is in `sessionStorage` (it s
 
 ## Not built yet
 
-Create workspace and onboarding (needs `POST /onboarding/workspaces` on the server), the invoice editor and billing screens, finance, GST, payroll, legal, documents, group view, settings, mobile layouts for Today/Compliance/Copilot/More, and the customer payment page. The design for each is in `design/screens/`.
+Advisor invites at the end of onboarding, the incorporation checklist for companies that do not exist yet, the invoice editor and billing screens, finance, GST, payroll, legal, documents, group view, settings, mobile layouts for Today/Compliance/Copilot/More, and the customer payment page. The design for each is in `design/screens/`.

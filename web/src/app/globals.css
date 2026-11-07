@@ -135,3 +135,27 @@ dl.facts dd { margin: 0; }
 .go:hover { background: var(--cobalt); }
 .go:disabled { opacity: 0.6; cursor: wait; }
 @media (max-width: 640px) { .brandpanel { padding: 28px 20px; gap: 24px; } .brandpanel h1 { font-size: 34px; } }
+
+.trackbtn { text-align: left; padding: 12px; border-radius: 12px; border: 1px solid var(--line-strong); background: #fff; color: var(--ink); display: flex; flex-direction: column; gap: 4px; min-height: 76px; }
+.trackbtn[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+.steps { margin: 0 0 0 auto; padding: 12px 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.steps li { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 999px; font-size: 14px; background: var(--paper); color: var(--muted); }
+.steps li[aria-current="step"] { background: var(--ink); color: #fff; }
+.steps li.done { background: var(--green-soft); color: var(--green); }
+.steps .n { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: #E2E1DA; color: var(--ink-2); }
+.steps li[aria-current="step"] .n { background: #fff; color: var(--ink); }
+.steps li.done .n { background: var(--green); color: #fff; }
+.ob { max-width: 1120px; width: 100%; margin: 0 auto; padding: 56px 24px 72px; display: flex; flex-direction: column; gap: 28px; }
+.ob h1 { margin: 0; font-size: 48px; line-height: 1.02; font-weight: 700; text-wrap: balance; }
+.ob .lead { margin: 0; font-size: 18px; line-height: 1.55; color: var(--ink-2); max-width: 560px; }
+.panel { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.panel h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.dark { background: var(--side); color: #ECEDEF; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.pillbtn { height: 44px; padding: 0 16px; border-radius: 999px; font-size: 15px; border: 1px solid var(--line-strong); background: #fff; color: var(--ink); }
+.pillbtn[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+.authbar { display: grid; grid-template-columns: 96px minmax(0, 1fr) 28px; gap: 10px; align-items: center; }
+.authbar .track { height: 8px; border-radius: 0 4px 4px 0; background: #1F232B; }
+.authbar .track > div { height: 100%; border-radius: 0 4px 4px 0; background: #8EA2FF; }
+.gstbox { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; min-height: 44px; border: 1px solid var(--line); cursor: pointer; }
+.gstbox.on { border-color: var(--ink); }
+@media (max-width: 640px) { .ob { padding: 28px 16px 48px; } .ob h1 { font-size: 34px; } }

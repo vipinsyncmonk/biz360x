@@ -149,12 +149,19 @@ class SandboxEway:
 
 class SandboxMca:
     registry = {"U26510KA2019PTC123456": {
-        "kind": "cin", "legal_name": "Nimbus Instruments Private Limited", "constitution": "private_limited", "incorporated_on": "2019-08-14", "registered_state": "29",
+        "kind": "cin", "cin": "U26510KA2019PTC123456", "legal_name": "Nimbus Instruments Private Limited", "constitution": "private_limited", "incorporated_on": "2019-08-14", "registered_state": "29",
         "registered_address": "Peenya, Bengaluru, Karnataka", "paid_up_capital": "29500000.00", "nic_code": "26510", "last_agm_on": "2026-09-30",
         "directors": [{"name": "Ananya Rao", "din": "08123456"}, {"name": "Ravi Kumar", "din": "08234567"}, {"name": "Meera Iyer", "din": "08345678"}],
         "gstins": [{"gstin": "29AAHCN1234Q1Z8", "state_code": "29", "status": "active", "filing_frequency": "monthly", "label": "Karnataka principal place"},
                    {"gstin": "33AAHCN1234Q1Z4", "state_code": "33", "status": "active", "filing_frequency": "monthly", "label": "Tamil Nadu branch"}],
-        "udyam": {"number": "UDYAM-KA-03-0054321", "class": "small"}}}
+        "udyam": {"number": "UDYAM-KA-03-0054321", "class": "small"}},
+        # a second company that exists in no demo workspace, so a developer can walk through onboarding on a seeded database
+        "U72900MH2022PTC999999": {
+        "kind": "cin", "cin": "U72900MH2022PTC999999", "legal_name": "Orchid Labs Private Limited", "constitution": "private_limited", "incorporated_on": "2022-06-01",
+        "registered_state": "27", "registered_address": "Powai, Mumbai, Maharashtra", "paid_up_capital": "1000000.00", "nic_code": "62099", "last_agm_on": "2026-09-25",
+        "directors": [{"name": "Kavya Nair", "din": "09123456"}],
+        "gstins": [{"gstin": "27AAKCO5678M1Z2", "state_code": "27", "status": "active", "filing_frequency": "monthly", "label": "Maharashtra principal place"}],
+        "udyam": None}}
 
     def lookup(self, identifier, kind):
         if identifier == "U99999KA2020PTC000000":
