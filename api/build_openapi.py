@@ -699,6 +699,9 @@ schema("TdsReceivable", {"id": RO_UUID, "party_id": UUID, "sales_document_id": N
                          "quarter": I(), "seen_in_26as_at": NULLABLE(TS), "form16a_document_id": NULLABLE(UUID)}, extra={"readOnly": True})
 _op("get", E + "/tds-receivables", "GST & tax", "listTdsReceivables", "TDS customers deducted from us (26AS matching)", "tds:read",
     params=[P("Limit"), P("Cursor"), q("fy", FY), q("unmatched", B())], resp=page_of("TdsReceivable"))
+action(E + "/tds-receivables/sync", "GST & tax", "syncForm26as", "Fetch Form 26AS and match it to the TDS customers deducted", "tds:write",
+       body=schema("Sync26as", {"fy": FY}, required=("fy",)), status="202",
+       desc="A job asks TRACES for the entity's Form 26AS and marks each receivable it finds (same section, quarter and amount within Rs 1).")
 
 # =================================================================== FINANCE
 tag("Finance & books", "Chart of accounts, journals, periods, banking, reconciliation, close and reports")
@@ -933,6 +936,10 @@ action(E + "/portal-connections/{id}/renew", "Portals & jobs", "renewPortalSessi
 schema("AaConsent", {"id": RO_UUID, "bank_account_ids": ARR(UUID), "status": S(readOnly=True), "valid_until": TS, "redirect_url": S(format="uri", readOnly=True)},
        required=("bank_account_ids", "valid_until"))
 collection(E + "/aa-consents", "Portals & jobs", "AaConsent", "settings")
+_op("post", "/integrations/aa/notify", "Portals & jobs", "aaConsentNotification", "Account Aggregator consent callback",
+    body=schema("AaNotification", {"consent_handle": S(), "status": ENUM("ACTIVE", "PAUSED", "REVOKED", "REJECTED", "EXPIRED")}, required=("consent_handle", "status")),
+    status="204", security=[], params=[{"name": "X-AA-Signature", "in": "header", "required": True, "schema": S(), "description": "Hex HMAC-SHA256 of the raw body with the shared secret"}],
+    desc="Called by the aggregator, not by users. An ACTIVE consent queues an immediate pull of the linked accounts.")
 _op("get", "/jobs/{id}", "Portals & jobs", "getJob", "Get a job", resp=ref("Job"))
 _op("post", "/jobs/{id}/otp", "Portals & jobs", "submitJobOtp", "Provide the OTP a paused job is waiting for",
     body=schema("OtpSubmission", {"otp": S(pattern=r"^[0-9]{6}$")}, required=("otp",)), resp=ref("Job"))

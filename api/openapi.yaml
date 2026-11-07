@@ -5502,6 +5502,47 @@ paths:
         '429':
           $ref: '#/components/responses/TooMany'
       x-permission: tds:read
+  /entities/{entityId}/tds-receivables/sync:
+    post:
+      tags:
+      - GST & tax
+      operationId: syncForm26as
+      summary: Fetch Form 26AS and match it to the TDS customers deducted
+      description: A job asks TRACES for the entity's Form 26AS and marks each receivable it finds (same section, quarter
+        and amount within Rs 1).
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Sync26as'
+      responses:
+        '202':
+          description: Accepted — follow the job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          headers:
+            Location:
+              schema:
+                type: string
+              description: /jobs/{jobId}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: tds:write
   /entities/{entityId}/accounts:
     get:
       tags:
@@ -9130,6 +9171,42 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: settings:write
+  /integrations/aa/notify:
+    post:
+      tags:
+      - Portals & jobs
+      operationId: aaConsentNotification
+      summary: Account Aggregator consent callback
+      description: Called by the aggregator, not by users. An ACTIVE consent queues an immediate pull of the linked accounts.
+      parameters:
+      - name: X-AA-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Hex HMAC-SHA256 of the raw body with the shared secret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AaNotification'
+      responses:
+        '204':
+          description: Done
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      security: []
   /jobs/{id}:
     get:
       tags:
@@ -14120,6 +14197,13 @@ components:
       required:
       - data
       - next_cursor
+    Sync26as:
+      type: object
+      properties:
+        fy:
+          $ref: '#/components/schemas/FyLabel'
+      required:
+      - fy
     LedgerAccount:
       type: object
       properties:
@@ -16159,6 +16243,22 @@ components:
       required:
       - data
       - next_cursor
+    AaNotification:
+      type: object
+      properties:
+        consent_handle:
+          type: string
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - REVOKED
+          - REJECTED
+          - EXPIRED
+      required:
+      - consent_handle
+      - status
     OtpSubmission:
       type: object
       properties:

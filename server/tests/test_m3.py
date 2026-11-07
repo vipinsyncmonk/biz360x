@@ -391,6 +391,9 @@ def test_gstr3b_claims_only_what_is_in_2b_and_files(client, h, ha, db):
     assert client.post(url(f"/gst-returns/{ret['id']}/file"), headers={**h, **key()}, json={}).json()["code"] == "conflict"          # already submitted
     assert client.post(url(f"/gst-returns/{ret['id']}/compute"), headers=h).status_code == 202                                       # queued, will be refused
     run_worker(db)
+    assert job_status(db, f.json()["id"])["status"] == "waiting_for_otp"                                                              # the EVC OTP is asked for
+    assert client.post(f"/v1/jobs/{f.json()['id']}/otp", headers=h, json={"otp": "123456"}).json()["status"] == "queued"
+    run_worker(db)
     done = client.get(url(f"/gst-returns/{ret['id']}"), headers=h).json()
     assert done["status"] == "filed" and done["arn"].startswith("AA") and done["filed_at"]
     o = db.execute("SELECT status::text AS st, acknowledgement FROM obligations WHERE id = %s", (ob,)).fetchone()
