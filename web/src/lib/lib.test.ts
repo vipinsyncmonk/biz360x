@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { AUTHORITY_LABEL, blankNotice, canDraft, deskTotals, noticeBody, noticeMoves, noticeProblem, replyState } from "./notices";
 import { MAX_UPLOAD_BYTES, editBody, editProblem, mimeOf, registerBody, sameOriginUrl, sha256Hex, shareable, titleFromFile, toHex, uploadProblem } from "./vault";
 import { blankContract, blankMeeting, blankResolution, contractBody, contractProblem, gapWarning, heldProblem, istDate, istTime, meetingBody, meetingReady, meetingState, nextResolutionNumber, resolutionActions, resolutionBody, resolutionReady, termKeyFrom, termKeyOk, termReady, CONTRACT_NEXT } from "./board";
 import { blankConn, blankHook, canRenew, connBody, connReady, deliveryState, eventsLabel, hookBody, hookProblem, jobStage, otpReady } from "./integrations";
@@ -689,5 +690,54 @@ describe("vault upload", () => {
     expect(editProblem({ title: " ", folder: "tax", period: "", validUntil: "" })).toMatch(/title/);
     expect(editBody({ title: " Minutes ", folder: "board", period: " ", validUntil: "" })).toEqual({ title: "Minutes", folder: "board", period_label: null, valid_until: null });
     expect(shareable([{ download_url: "u" }, { download_url: null }])).toEqual([{ download_url: "u" }]);
+  });
+});
+
+describe("notice desk", () => {
+  const today = new Date(2026, 10, 7);
+  const n = (over: object) => ({ id: "n", authority_code: "GSTN", registration_id: null, form_code: "ASMT-10", reference_no: null, period_label: null, received_on: "2026-11-01", reply_due_on: null,
+    hearing_on: null, demand_amount: null, status: "open", summary: null, linked_obligation_id: null, document_ids: [], ...over });
+  it("words how close a reply is", () => {
+    expect(replyState(n({ reply_due_on: "2026-11-05" }), today)).toEqual({ label: "Reply overdue by 2 days", tone: "due" });
+    expect(replyState(n({ reply_due_on: "2026-11-06" }), today)?.label).toBe("Reply overdue by 1 day");
+    expect(replyState(n({ reply_due_on: "2026-11-07" }), today)?.label).toBe("Reply due today");
+    expect(replyState(n({ reply_due_on: "2026-11-14" }), today)).toEqual({ label: "Reply due in 7 days", tone: "due" });
+    expect(replyState(n({ reply_due_on: "2026-11-30" }), today)).toEqual({ label: "Reply due in 23 days", tone: "wait" });
+    expect(replyState(n({ reply_due_on: null }), today)).toBeNull();
+    expect(replyState(n({ reply_due_on: "2026-11-01", status: "replied" }), today)).toBeNull();
+    expect(replyState(n({ reply_due_on: "2026-11-01", status: "closed" }), today)).toBeNull();
+  });
+  it("totals the desk without counting closed notices", () => {
+    const list = [n({ reply_due_on: "2026-11-05", demand_amount: "1000.50" }), n({ reply_due_on: "2026-11-10", demand_amount: "250.00" }), n({ reply_due_on: "2026-12-30" }),
+      n({ status: "closed", demand_amount: "99999.00", reply_due_on: "2026-11-01" }), n({ status: "replied", reply_due_on: "2026-11-01" })];
+    expect(deskTotals(list as never, today)).toEqual({ open: 4, dueSoon: 1, overdue: 1, demand: "1250.50" });
+    expect(deskTotals([], today)).toEqual({ open: 0, dueSoon: 0, overdue: 0, demand: "0.00" });
+  });
+  it("offers the next steps for each status", () => {
+    expect(noticeMoves("open").map(([k]) => k)).toEqual(["replied", "hearing", "closed"]);
+    expect(noticeMoves("appealed").map(([k]) => k)).toEqual(["closed"]);
+    expect(noticeMoves("closed")).toEqual([]);
+    expect(canDraft({ status: "open" })).toBe(true);
+    expect(canDraft({ status: "draft_reply" })).toBe(true);
+    expect(canDraft({ status: "replied" })).toBe(false);
+    expect(canDraft({ status: "closed" })).toBe(false);
+  });
+  it("checks a notice form and sends only what was filled", () => {
+    const f = { ...blankNotice("2026-11-07"), form: "ASMT-10" };
+    expect(noticeProblem(f)).toBeNull();
+    expect(noticeProblem({ ...f, form: " " })).toMatch(/code/);
+    expect(noticeProblem({ ...f, received: "" })).toMatch(/received/);
+    expect(noticeProblem({ ...f, replyDue: "2026-11-01" })).toMatch(/reply date/);
+    expect(noticeProblem({ ...f, hearing: "2026-11-01" })).toMatch(/hearing/);
+    expect(noticeProblem({ ...f, demand: "1,000" })).toMatch(/amount/);
+    expect(noticeBody(f)).toEqual({ authority_code: "GSTN", form_code: "ASMT-10", received_on: "2026-11-07" });
+    expect(noticeBody({ ...f, reference: " ZD2911 ", replyDue: "2026-11-30", demand: "125000.5", summary: " Mismatch " })).toEqual({
+      authority_code: "GSTN", form_code: "ASMT-10", received_on: "2026-11-07", reference_no: "ZD2911", reply_due_on: "2026-11-30", demand_amount: "125000.50", summary: "Mismatch",
+    });
+    expect(AUTHORITY_LABEL.CBDT).toBe("Income Tax");
+  });
+  it("labels a finished job with the caller's words", () => {
+    expect(jobStage({ status: "succeeded", error: null }, "Draft ready").label).toBe("Draft ready");
+    expect(jobStage({ status: "succeeded", error: null }).label).toBe("Renewed");
   });
 });

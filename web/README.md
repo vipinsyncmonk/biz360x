@@ -35,6 +35,7 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/pay/[code]` | The customer payment page: no sign-in, no app shell. Invoice summary, bank-transfer details, payment methods, raise a query. Talks to the public `/pay` endpoints without a token (`src/lib/pay.ts`) |
 | `src/app/(app)/more` | The phone's More tab: switch entity, every module, account. On screens up to 820px wide the sidebar gives way to a top bar and a bottom tab bar (Today, Compliance, Copilot, More) |
 | `src/app/(app)/board` | Board and resolutions: schedule meetings, mark them held with quorum, draft resolutions and move them to circulated, passed, failed or withdrawn (a passed special resolution raises MGT-14) |
+| `src/app/(app)/notices` | Notice desk: record a notice from an authority, see reply dates and demand, draft a reply from your own records (background job, saved to the vault), move it through replied, hearing, appealed and closed |
 | `src/app/(app)/billing/receivables` | Collections: ageing by customer, record a receipt with allocation, allocate what is left of an advance, pause reminders, see the reminder sequence, pause or resume recurring invoices |
 | `src/app/(app)/billing/quotes/new` | New quote; totals come from the invoice preview, so quote and invoice tax agree |
 | `src/lib/billing.ts` | Tab queries, status labels, line validation, request bodies. Unit-tested |
@@ -54,6 +55,7 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/components/SettingsForms.tsx` | The invite, advisor, certificate and API key forms |
 | `src/lib/board.ts` | Contract, meeting and resolution form rules, IST display of meeting times. Unit-tested |
 | `src/lib/vault.ts` | File hashing, upload body, same-origin upload address, edit rules. Unit-tested |
+| `src/lib/notices.ts` | Notice wording, reply urgency, desk totals, form rules. Unit-tested |
 | `src/lib/settings.ts` | Form rules, notification matrix, certificate status, grid ordering. Unit-tested |
 | `src/app/(app)/m/[slug]` | Placeholder for screens that are not built yet |
 

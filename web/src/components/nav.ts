@@ -25,6 +25,7 @@ export const NAV: NavGroup[] = [
   { h: "WORKSPACE", items: [
     { t: "Today", href: "/", icon: I.today, built: true },
     { t: "Compliance", href: "/compliance", icon: I.shield, built: true },
+    { t: "Notice desk", href: "/notices", icon: I.legal, built: true },
     soon("Copilot", "copilot", I.spark),
     { t: "Documents", href: "/documents", icon: I.folder, built: true },
   ] },

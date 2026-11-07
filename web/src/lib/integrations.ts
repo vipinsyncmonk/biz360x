@@ -21,10 +21,10 @@ export interface JobError { code?: string; title?: string; detail?: string }
 export interface Job { id: string; kind: string; status: string; progress: number; result: Record<string, unknown> | null; error: JobError | string | null }
 const errorText = (e: JobError | string | null): string => (!e ? "" : typeof e === "string" ? e : e.detail || e.title || e.code || "")
 /** Where an OTP renewal stands, in words. */
-export function jobStage(j: Pick<Job, "status" | "error">): { label: string; tone: Tone; needsOtp: boolean; finished: boolean } {
+export function jobStage(j: Pick<Job, "status" | "error">, doneLabel = "Renewed"): { label: string; tone: Tone; needsOtp: boolean; finished: boolean } {
   switch (j.status) {
     case "waiting_for_otp": return { label: "Waiting for the one-time code", tone: "wait", needsOtp: true, finished: false };
-    case "succeeded": return { label: "Renewed", tone: "ok", needsOtp: false, finished: true };
+    case "succeeded": return { label: doneLabel, tone: "ok", needsOtp: false, finished: true };
     case "failed": return { label: errorText(j.error) ? `Failed: ${errorText(j.error)}` : "Failed", tone: "due", needsOtp: false, finished: true };
     case "cancelled": return { label: "Cancelled", tone: "prep", needsOtp: false, finished: true };
     case "running": return { label: "Working…", tone: "wait", needsOtp: false, finished: false };
