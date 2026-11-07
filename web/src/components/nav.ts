@@ -34,7 +34,7 @@ export const NAV: NavGroup[] = [
     { t: "Payroll & HR", href: "/payroll", icon: I.people, built: true }, { t: "Legal & Contracts", href: "/legal", icon: I.legal, built: true },
   ] },
   { h: "TRACKS", items: [soon("Startup", "startup", I.rocket), soon("MSME", "msme", I.factory), soon("All modules", "modules", I.grid)] },
-  { h: "ADMIN", items: [soon("Group view", "group", I.group), soon("Settings", "settings", I.cog)] },
+  { h: "ADMIN", items: [{ t: "Group view", href: "/group", icon: I.group, built: true }, { t: "Settings", href: "/settings", icon: I.cog, built: true }] },
 ];
 
 export const SOON_TITLES: Record<string, string> = Object.fromEntries(
