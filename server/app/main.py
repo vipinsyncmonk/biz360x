@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from . import ratelimit, security
 from .core import ApiError, problem_response
+from .routes_billing import router as billing
 from .routes_compliance import router as compliance
 from .receivables import router as receivables
 from .routes_engine import router as engine_routes
@@ -56,7 +57,7 @@ def health():
     return JSONResponse({"ok": True})
 
 
-_ROUTERS = (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal, portals, integrations)
+_ROUTERS = (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal, portals, integrations, billing)
 for r in _ROUTERS:
     app.include_router(r, prefix="/v1")
 ratelimit.register_heavy_routes(_ROUTERS, "/v1")
