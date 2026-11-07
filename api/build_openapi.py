@@ -115,7 +115,7 @@ schema("Problem", {
                  "two_person_rule", "permission_denied", "period_locked", "journal_unbalanced",
                  "tax_split_mismatch", "b2b_needs_gstin", "note_needs_original", "number_too_long",
                  "over_settlement", "msme_terms_exceeded", "rule_version_overlap", "portal_session_expired",
-                 "portal_rejected", "approval_required", "rate_limited", "internal"),
+                 "portal_rejected", "approval_required", "rate_limited", "unauthorized", "mfa_required", "internal"),
     "errors": ARR(schema("FieldError", {"field": S(examples=["lines[2].hsn_sac"]), "message": S()})),
     "request_id": S(),
 }, required=("type", "title", "status", "code"), desc="RFC 9457 problem details. `code` is stable; `title`/`detail` are for humans.")
@@ -237,14 +237,15 @@ tag("Auth", "Sign-in. Email + password, mobile OTP, Google/Microsoft OIDC, or SA
 schema("TokenResponse", {"access_token": S(), "refresh_token": S(), "token_type": ENUM("Bearer"), "expires_in": I(examples=[900])},
        required=("access_token", "token_type", "expires_in"))
 _op("post", "/auth/otp", "Auth", "requestOtp", "Send a one-time code", body=schema("OtpRequest", {"mobile_e164": S(), "email": S(format="email")}),
-    status="204", security=[], desc="Rate-limited to 5 per hour per identifier.")
+    status="204", security=[], desc="Rate-limited to 5 per hour per identifier. The answer is the same whether or not the person exists.")
 _op("post", "/auth/token", "Auth", "issueToken", "Exchange credentials, an OTP or a refresh token for tokens",
     body=schema("TokenRequest", {
         "grant_type": ENUM("password", "otp", "refresh_token", "authorization_code"),
         "email": S(format="email"), "password": S(format="password"), "mobile_e164": S(), "otp": S(pattern=r"^[0-9]{6}$"),
         "refresh_token": S(), "code": S(), "redirect_uri": S(format="uri"), "mfa_code": S()}, required=("grant_type",)),
     resp=ref("TokenResponse"), security=[])
-_op("post", "/auth/logout", "Auth", "logout", "Revoke the refresh token", status="204")
+_op("post", "/auth/logout", "Auth", "logout", "Revoke the refresh token and its whole session family",
+    body=schema("LogoutRequest", {"refresh_token": S()}, required=("refresh_token",)), status="204")
 
 tag("Me", "The signed-in user, their entities and preferences")
 schema("EntitySummary", {"id": UUID, "legal_name": S(), "constitution": S(), "track": ENUM("business", "startup", "msme"),
@@ -989,6 +990,19 @@ schema("WebhookEndpoint", {"id": RO_UUID, "url": S(format="uri"), "events": ARR(
 collection(E + "/webhooks", "Events & webhooks", "WebhookEndpoint", "settings")
 item(E + "/webhooks", "Events & webhooks", "WebhookEndpoint", "settings", delete=True)
 action(E + "/webhooks/{id}/test", "Events & webhooks", "testWebhook", "Send a test event", "settings:write", status="204")
+schema("WebhookDelivery", {"id": I(), "event_id": I(), "type": S(), "attempt": I(), "status_code": NULLABLE(I()), "error": NULLABLE(S()),
+                           "attempted_at": NULLABLE(TS), "delivered_at": NULLABLE(TS), "next_retry_at": NULLABLE(TS)}, extra={"readOnly": True})
+_op("get", E + "/webhooks/{id}/deliveries", "Events & webhooks", "listWebhookDeliveries", "Delivery attempts for an endpoint", "settings:read",
+    params=[P("Limit"), P("Cursor")], resp=page_of("WebhookDelivery"))
+
+tag("API keys", "Server-to-server keys. A key acts as a named service user, limited to the permissions listed on it. It can never approve, file or pay.")
+schema("ApiKey", {"id": RO_UUID, "name": S(), "prefix": S(readOnly=True, examples=["bzx_live_ab12cd34"]),
+                  "permissions": ARR(S(pattern=r"^[a-z_]+:(read|write|use)$"), examples=[["sales:read", "sales:write"]]),
+                  "expires_at": NULLABLE(TS), "last_used_at": NULLABLE(TS), "revoked_at": NULLABLE(TS), "created_at": TS,
+                  "key": S(readOnly=True, description="The full key, returned once when the key is created. Only its hash is stored.")}, required=("name", "permissions"))
+collection(E + "/api-keys", "API keys", "ApiKey", "settings")
+_op("delete", E + "/api-keys/{id}", "API keys", "revokeApiKey", "Revoke an API key", "settings:write", status="204",
+    desc="Revoked at once; the key's service user loses its membership.")
 
 EVENTS = {
     "obligation.created": "Engine switched on a new obligation",
@@ -1030,7 +1044,7 @@ _op("get", E + "/audit-log/verify", "Audit", "verifyAuditChain", "Verify the has
 # ---------------------------------------------------------------- finish
 SPEC["tags"] = [{"name": k, "description": v} for k, v in TAGS.items()]
 SPEC["x-tagGroups"] = [
-    {"name": "Platform", "tags": ["Auth", "Me", "Onboarding", "Entities", "Organizations", "Portals & jobs", "Events & webhooks", "Audit"]},
+    {"name": "Platform", "tags": ["Auth", "Me", "Onboarding", "Entities", "Organizations", "Portals & jobs", "Events & webhooks", "API keys", "Audit"]},
     {"name": "Govern", "tags": ["Compliance", "Approvals", "Legal & board", "Documents"]},
     {"name": "Run", "tags": ["Parties & items", "Sales & billing", "Public pay", "Purchases", "GST & tax", "Finance & books", "Payroll & HR"]},
     {"name": "Grow", "tags": ["Capital", "Schemes & credit", "Copilot"]},

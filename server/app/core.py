@@ -6,8 +6,10 @@ import contextlib
 import logging
 import datetime as dt
 import hashlib
+import hmac
 import json
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from decimal import Decimal
@@ -113,6 +115,7 @@ def map_db_error(e: psycopg.Error) -> ApiError:
 class Principal:
     user_id: uuid.UUID
     email: str
+    api_key_id: uuid.UUID | None = None          # set when the caller is an API key, not a person
 
 
 def issue_access_token(user_id: uuid.UUID, email: str) -> str:
@@ -121,14 +124,46 @@ def issue_access_token(user_id: uuid.UUID, email: str) -> str:
                       JWT_SECRET, algorithm="HS256")
 
 
+API_KEY_RE = re.compile(r"bzx_live_([0-9a-f]{8})_([A-Za-z0-9_-]{32,})")
+
+
+def hash_api_key(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def _api_key_principal(token: str) -> Principal:
+    m = API_KEY_RE.fullmatch(token)
+    bad = ApiError(401, "unauthorized", "Invalid API key")
+    if not m:
+        raise bad
+    with tx(None, role="biz_worker") as cur:                      # the key is looked up before any identity exists
+        cur.execute("""SELECT k.id, k.secret_hash, k.revoked_at, (k.expires_at IS NULL OR k.expires_at > now()) AS live, u.id AS uid, u.email
+                         FROM api_keys k JOIN users u ON u.id = k.acts_as_user WHERE k.prefix = %s""", (m.group(1),))
+        k = cur.fetchone()
+        if not k or not hmac.compare_digest(hash_api_key(token), k["secret_hash"].strip()) or k["revoked_at"] or not k["live"]:
+            raise bad
+        cur.execute("UPDATE api_keys SET last_used_at = now() WHERE id = %s AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute')", (k["id"],))
+    return Principal(k["uid"], k["email"], k["id"])
+
+
 def current_principal(authorization: str = Header(default="")) -> Principal:
     if not authorization.startswith("Bearer "):
         raise ApiError(401, "unauthorized", "Missing bearer token")
+    token = authorization[7:]
+    if token.startswith("bzx_"):
+        return _api_key_principal(token)
     try:
-        claims = jwt.decode(authorization[7:], JWT_SECRET, algorithms=["HS256"])
+        claims = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     except jwt.PyJWTError:
         raise ApiError(401, "unauthorized", "Invalid or expired token")
+    if claims.get("typ") != "access":
+        raise ApiError(401, "unauthorized", "Invalid or expired token")
     return Principal(uuid.UUID(claims["sub"]), claims.get("email", ""))
+
+
+def is_production() -> bool:
+    """Anything that is not explicitly development or test is treated as production."""
+    return ENV not in ("dev", "test")
 
 
 # ------------------------------------------------------------------ permissions
@@ -147,6 +182,13 @@ def require(cur, entity_id: uuid.UUID, permission: str) -> None:
     cur.execute("SELECT 1 FROM entities WHERE id = %s", (entity_id,))
     if cur.fetchone() is None:
         raise ApiError(404, "not_found", "Not found")
+    cur.execute("SELECT entity_id, permissions FROM api_keys WHERE acts_as_user = app.current_user_id()")
+    key = cur.fetchone()                                    # an API key acts as a service user and is limited to its list
+    if key:
+        if key["entity_id"] != entity_id:
+            raise ApiError(404, "not_found", "Not found")
+        if permission not in key["permissions"] and f"{module}:*" not in key["permissions"]:
+            raise ApiError(403, "permission_denied", f"This API key lacks {permission}")
     cur.execute("""SELECT role::text, modules FROM memberships
                     WHERE entity_id = %s AND user_id = app.current_user_id() AND revoked_at IS NULL""", (entity_id,))
     m = cur.fetchone()

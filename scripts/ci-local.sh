@@ -37,7 +37,10 @@ trap cleanup EXIT
 
 step "Python dependencies"
 [ -d "$VENV" ] || python3 -m venv "$VENV"
-"$VENV/bin/pip" install -q -r server/requirements.txt pyyaml openapi-spec-validator
+"$VENV/bin/pip" install -q -r server/requirements.txt pyyaml openapi-spec-validator pip-audit
+
+step "Dependency vulnerability scan"
+"$VENV/bin/pip-audit" -r server/requirements.txt
 
 step "Load schema (migration runner, then a second run must be a no-op)"
 "$VENV/bin/python" scripts/migrate.py
