@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { DEPOSIT_RULE, depositNote, depositOptions, plainError, blankChallan, canPay, canValidate, challanBody, challanProblem, deductionTotals, fyChoices, fyOf, instalmentState, nextInstalment, unmatched, validationNote } from "./tds";
 import { ACTION_LABEL, canCompute, canFile, fileBody, isOpen, lastMonth, matchActions, periodOk, remindLabel, remindable, resolveBody, syncBody, taxNote } from "./gst";
 import { SKIP_REASON, addClientHref, chaseLabel, chaseSummary, chaseTargets, orgFromSearch } from "./group";
 import { badEmails, blankRoom, expiryNote, parseEmails, roomBody, roomForm, roomProblem, viewerNote } from "./rooms";
@@ -842,5 +843,71 @@ describe("GST actions", () => {
     const fmt = (v: string) => `Rs ${v}`;
     expect(taxNote({ books_tax: "1800.00", portal_tax: "1500.00" }, fmt)).toBe("Books Rs 1800.00, Portal Rs 1500.00");
     expect(taxNote({ books_tax: null, portal_tax: "90.00" }, fmt)).toBe("Portal Rs 90.00");
+  });
+});
+
+describe("TDS screen", () => {
+  it("finds the financial year, April to March", () => {
+    expect(fyOf(new Date(2026, 10, 8))).toBe("2026-27");
+    expect(fyOf(new Date(2027, 2, 31))).toBe("2026-27");
+    expect(fyOf(new Date(2027, 3, 1))).toBe("2027-28");
+    expect(fyOf(new Date(2099, 11, 1))).toBe("2099-00");
+    expect(fyChoices(new Date(2026, 10, 8))).toEqual(["2026-27", "2025-26", "2024-25"]);
+  });
+  it("checks a challan and sends exact amounts", () => {
+    const f = { ...blankChallan(), period: "Oct 2026", amount: "12500.5" };
+    expect(challanProblem(f)).toBeNull();
+    expect(challanProblem({ ...f, period: " " })).toMatch(/period/);
+    expect(challanProblem({ ...f, amount: "0" })).toMatch(/above zero/);
+    expect(challanProblem({ ...f, amount: "1,000" })).toMatch(/amount/);
+    expect(challanProblem({ ...f, amount: "12.345" })).toMatch(/amount/);
+    expect(challanProblem({ ...f, interest: "abc" })).toMatch(/Interest/);
+    expect(challanProblem({ ...f, penalty: "-1" })).toMatch(/Penalty/);
+    expect(challanBody(f)).toEqual({ kind: "itns281_tds", period_label: "Oct 2026", amount: "12500.50" });
+    expect(challanBody({ ...f, interest: "120", penalty: "200.5" })).toEqual({ kind: "itns281_tds", period_label: "Oct 2026", amount: "12500.50", interest: "120.00", penalty: "200.50" });
+  });
+  it("totals deductions that are not on a challan", () => {
+    const d = (tds: string, challan: string | null) => ({ id: tds, deductee_pan: "AAAPA1234A", section: "194C", deducted_on: "2026-10-05", base_amount: "10000.00", rate_pct: 1, tds_amount: tds, challan_id: challan, tds_return_id: null });
+    expect(deductionTotals([d("100.10", null), d("250.20", "c1"), d("0.30", null)])).toEqual({ deducted: "350.60", unpaid: "100.40", unpaidCount: 2 });
+    expect(deductionTotals([])).toEqual({ deducted: "0.00", unpaid: "0.00", unpaidCount: 0 });
+  });
+  it("tells which advance tax instalment is next", () => {
+    const i = (n: number, due: string, est: string, paid: string) => ({ instalment_no: n, due_date: due, cumulative_pct: 15, estimated_tax: est, paid, challan_id: null });
+    const rows = [i(1, "2026-06-15", "15000.00", "15000.00"), i(2, "2026-09-15", "45000.00", "0.00"), i(3, "2026-12-15", "75000.00", "0.00")];
+    expect(instalmentState(rows[0]!, "2026-11-08")).toEqual({ label: "Paid", tone: "ok" });
+    expect(instalmentState(rows[1]!, "2026-11-08")).toEqual({ label: "Past due", tone: "due" });
+    expect(instalmentState(rows[2]!, "2026-11-08")).toEqual({ label: "Upcoming", tone: "wait" });
+    expect(nextInstalment(rows, "2026-11-08")?.instalment_no).toBe(2);
+    expect(nextInstalment([i(1, "2026-06-15", "0.00", "0.00")], "2026-11-08")).toBeNull();
+  });
+  it("words a validation result and the buttons each state allows", () => {
+    expect(validationNote({ valid: true, token: "FVU123" })).toEqual({ ok: true, lines: ["Validated. Token FVU123"] });
+    expect(validationNote({ valid: false, errors: ["The return has no deductions"] })).toEqual({ ok: false, lines: ["The return has no deductions"] });
+    expect(validationNote({ valid: false })).toEqual({ ok: false, lines: ["The return did not validate."] });
+    expect(validationNote(null)).toEqual({ ok: false, lines: [] });
+    expect([canValidate("drafting"), canValidate("ready"), canValidate("filed")]).toEqual([true, true, false]);
+    expect([canPay("scheduled"), canPay("failed"), canPay("paid")]).toEqual([true, true, false]);
+    expect(unmatched([{ id: "1", section: "194C", amount: "1.00", fy: "2026-27", quarter: 2, seen_in_26as_at: null }, { id: "2", section: "194C", amount: "1.00", fy: "2026-27", quarter: 2, seen_in_26as_at: "2026-10-01T00:00:00Z" }])).toHaveLength(1);
+  });
+});
+
+describe("TDS deposit", () => {
+  it("lists the months that can still be prepared", () => {
+    const o = (id: string, status: string, period: string, due: string, code = DEPOSIT_RULE) => ({ id, status, period_label: period, due_date: due, rule: { code } });
+    expect(depositOptions([o("b", "upcoming", "Nov 2026", "2026-12-07"), o("a", "overdue", "Oct 2026", "2026-11-07"), o("x", "filed", "Sep 2026", "2026-10-07"), o("g", "upcoming", "Oct 2026", "2026-11-11", "GST.GSTR1.MONTHLY")]))
+      .toEqual([{ id: "a", label: "Oct 2026 · due 07/11" }, { id: "b", label: "Nov 2026 · due 07/12" }]);
+    expect(depositOptions([])).toEqual([]);
+  });
+  it("words what preparing did", () => {
+    const fmt = (v: string) => `Rs ${v}`;
+    expect(depositNote({ challan_id: null, note: "No TDS was deducted in this period" }, fmt)).toBe("No TDS was deducted in this period");
+    expect(depositNote({ challan_id: "c", amount: "6200.00", interest: "0.00", deductions: 3 }, fmt)).toBe("Challan ready for Rs 6200.00, covering 3 deductions.");
+    expect(depositNote({ challan_id: "c", amount: "100.00", interest: "2.00", deductions: 1 }, fmt)).toBe("Challan ready for Rs 100.00 plus Rs 2.00 late interest, covering 1 deduction.");
+    expect(depositNote(null, fmt)).toBe("Done.");
+  });
+  it("hides ids in what the server says", () => {
+    expect(plainError("Deduction 49f4a4ab-5694-4fa5-b51e-32dc36dd9cdc (194C) has no challan")).toBe("A 194C deduction has no challan");
+    expect(plainError("The return has no deductions")).toBe("The return has no deductions");
+    expect(validationNote({ valid: false, errors: ["Deduction 49f4a4ab-5694-4fa5-b51e-32dc36dd9cdc (194J) is on a challan that is not paid"] }).lines).toEqual(["A 194J deduction is on a challan that is not paid"]);
   });
 });

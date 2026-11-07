@@ -40,6 +40,8 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/billing/quotes/new` | New quote; totals come from the invoice preview, so quote and invoice tax agree |
 | `src/lib/billing.ts` | Tab queries, status labels, line validation, request bodies. Unit-tested |
 | `src/app/(app)/finance` | Finance & Books: key numbers (`GET /finance/summary`), close checklist and month lock, bank reconciliation (accept or reject suggested matches), profit & loss in lakh |
+| `src/app/(app)/tds` | TDS & Advance tax: deducted vs on a challan, record and pay challans (background job), validate quarterly returns (shows what blocks them), advance tax instalments, Form 26AS match |
+| `src/lib/tds.ts` | Financial year, challan form rules and body, totals, instalment state, validation wording. Unit-tested |
 | `src/app/(app)/gst` | GST & Tax: returns by GSTIN with Recompute and File (background jobs; filing stops for the one-time code), purchase register vs GSTR-2B with fetch-and-match, settle each difference, remind suppliers, electronic ledger balances |
 | `src/lib/gst.ts` | Which actions each kind of difference offers, month and request bodies, wording. Unit-tested |
 | `src/lib/finance.ts` | Period choice, lakh display, GST ledger totals. Unit-tested |
