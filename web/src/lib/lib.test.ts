@@ -230,3 +230,31 @@ describe("payroll helpers", () => {
     expect(stepIndex("paid")).toBe(4);
   });
 });
+
+import { versionLabel, byUrgency, daysUntil, expiryLabel, fileExt, fileSize, nextDate, type Contract } from "./legal";
+
+describe("legal helpers", () => {
+  const c = (title: string, over: Partial<Contract> = {}): Contract => ({ id: title, counterparty_name: null, title, kind: "vendor", start_date: null, end_date: null, auto_renews: false, notice_days: null, notice_deadline: null,
+    value_amount: null, value_period: null, status: "active", signed_document_id: null, terms: [], alerts: [], ...over });
+  it("picks the date to watch and puts warnings first", () => {
+    expect(nextDate(c("a", { auto_renews: true, notice_deadline: "2026-11-01", end_date: "2026-12-01" }))).toEqual({ label: "Notice by", date: "2026-11-01" });
+    expect(nextDate(c("b", { end_date: "2026-12-01" }))).toEqual({ label: "Ends", date: "2026-12-01" });
+    expect(nextDate(c("c"))).toBeNull();
+    const warn = [{ code: "x", level: "warn", title: "t", detail: "d" }];
+    const out = byUrgency([c("late", { end_date: "2027-01-01" }), c("soon", { end_date: "2026-12-01" }), c("warned", { end_date: "2027-06-01", alerts: warn }), c("none")]);
+    expect(out.map((x) => x.title)).toEqual(["warned", "soon", "late", "none"]);
+  });
+  it("shows template versions once", () => { expect(versionLabel("v1")).toBe("v1"); expect(versionLabel(2)).toBe("v2"); });
+  it("describes files and expiry without timezone drift", () => {
+    expect(fileSize(512)).toBe("512 B");
+    expect(fileSize(2048)).toBe("2 KB");
+    expect(fileSize(5 * 1024 * 1024)).toBe("5.0 MB");
+    expect(fileExt("GSTR-3B Oct.pdf")).toBe("PDF");
+    expect(fileExt("README")).toBe("FILE");
+    const today = new Date(2026, 10, 7);
+    expect(daysUntil("2026-11-10", today)).toBe(3);
+    expect(expiryLabel("2026-11-08", today)).toBe("Expires in 1 day");
+    expect(expiryLabel("2026-11-07", today)).toBe("Expires today");
+    expect(expiryLabel("2026-11-04", today)).toBe("Expired 3 days ago");
+  });
+});
