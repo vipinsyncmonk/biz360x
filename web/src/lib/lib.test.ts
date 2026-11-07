@@ -284,3 +284,45 @@ describe("settings and group helpers", () => {
     expect(byTrouble(rows).map((r) => r.legal_name)).toEqual(["Also late", "Late", "Waiting", "Calm"]);
   });
 });
+
+import { creditLines, creditProblem, creditReady, quoteActions, quoteBody, quoteReady, type DocLine, type QuoteForm } from "./billing";
+
+describe("quotes and credit notes", () => {
+  const line = { description: "Transmitter", hsn_sac: "902620", qty: "1", rate: "1000", gst_rate: "18", discount: "0" };
+  const form = (over: Partial<QuoteForm> = {}): QuoteForm => ({ registrationId: "r", partyId: "p", partyGstId: "", title: "  Lot 2 ", validUntil: "", terms: "", advance: "", lines: [line], ...over });
+  it("builds the quote body and checks the optional fields", () => {
+    expect(quoteReady(form())).toBe(true);
+    expect(quoteReady(form({ advance: "101" }))).toBe(false);
+    expect(quoteReady(form({ advance: "25.5", terms: "45" }))).toBe(true);
+    expect(quoteReady(form({ partyId: "" }))).toBe(false);
+    const b = quoteBody(form({ advance: "25", terms: "45", validUntil: "2026-12-31" }));
+    expect(b).toMatchObject({ title: "Lot 2", valid_until: "2026-12-31", payment_terms_days: 45, advance_pct: 25 });
+    expect("title" in quoteBody(form({ title: " " }))).toBe(false);
+  });
+  it("offers the right actions for each status", () => {
+    expect(quoteActions({ status: "draft", sales_order_id: null, invoiced_pct: 0 })).toEqual(["send", "revise", "lost"]);
+    expect(quoteActions({ status: "negotiating", sales_order_id: null, invoiced_pct: 0 })).toEqual(["accept", "lost"]);
+    expect(quoteActions({ status: "accepted", sales_order_id: "o", invoiced_pct: 40 })).toEqual(["invoice"]);
+    expect(quoteActions({ status: "accepted", sales_order_id: "o", invoiced_pct: 100 })).toEqual([]);
+    expect(quoteActions({ status: "lost", sales_order_id: null, invoiced_pct: 0 })).toEqual([]);
+    expect(quoteActions({ status: "superseded", sales_order_id: null, invoiced_pct: 0 })).toEqual([]);
+  });
+  const inv: DocLine[] = [{ line_no: 1, description: "A", hsn_sac: "902620", qty: "17", uqc: "NOS", rate: "1000.00", discount: "170.00", gst_rate: "18.00" }, { line_no: 2, description: "B", hsn_sac: "9987", qty: "1", uqc: "NOS", rate: "500.00", discount: "0.00", gst_rate: 18 }];
+  it("validates credit quantities against what was supplied", () => {
+    expect(creditProblem("", "17")).toBeNull();
+    expect(creditProblem("0", "17")).toMatch(/above zero/);
+    expect(creditProblem("abc", "17")).toMatch(/above zero/);
+    expect(creditProblem("17", "17")).toBeNull();
+    expect(creditProblem("17.5", "17")).toMatch(/No more than 17/);
+    expect(creditReady(inv, {})).toBe(false);
+    expect(creditReady(inv, { 1: "2" })).toBe(true);
+    expect(creditReady(inv, { 1: "2", 2: "5" })).toBe(false);
+  });
+  it("credits at the invoice's rate with the discount in proportion", () => {
+    const [a] = creditLines(inv, { 1: "2" });
+    expect(a).toMatchObject({ qty: "2", rate: "1000.00", gst_rate: 18, discount: "20.00" });          // 170.00 x 2 / 17
+    expect(creditLines(inv, { 2: "1" })[0]).toMatchObject({ discount: "0.00" });
+    expect(creditLines(inv, { 1: "1" })[0]!.discount).toBe("10.00");
+    expect(creditLines(inv, { 1: "  " })).toEqual([]);
+  });
+});

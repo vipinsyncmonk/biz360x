@@ -29,8 +29,10 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/compliance` | Obligations with the reason each applies, calendar, thresholds, re-run engine |
 | `src/app/(app)/billing` | Sales & Billing: KPIs, invoice list with tabs and search, issue a draft, how customers paid |
 | `src/app/(app)/billing/new` | Invoice editor. Every change calls `POST /sales-documents/preview`, so the tax shown is the server's, never recomputed in the browser |
-| `src/app/(app)/billing/[id]` | One document: lines, totals, e-invoice state, issue a draft |
-| `src/app/(app)/billing/quotes` | Quotes list (read-only for now) |
+| `src/app/(app)/billing/[id]` | One document: lines, totals, e-invoice state, issue a draft, start a credit note |
+| `src/app/(app)/billing/[id]/credit-note` | Credit note: reason, quantity per item, live preview from the server, save as draft or issue |
+| `src/app/(app)/billing/quotes` | Quotes list with send, new version, accept, mark lost and create invoice from an accepted quote |
+| `src/app/(app)/billing/quotes/new` | New quote; totals come from the invoice preview, so quote and invoice tax agree |
 | `src/lib/billing.ts` | Tab queries, status labels, line validation, request bodies. Unit-tested |
 | `src/app/(app)/finance` | Finance & Books: key numbers (`GET /finance/summary`), close checklist and month lock, bank reconciliation (accept or reject suggested matches), profit & loss in lakh |
 | `src/app/(app)/gst` | GST & Tax: returns by GSTIN, purchase register vs GSTR-2B summary, electronic ledger balances |
