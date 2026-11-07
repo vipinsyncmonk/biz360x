@@ -66,6 +66,7 @@ N = lambda **kw: dict(type="number", **kw)
 UUID = S(format="uuid")
 RO_UUID = S(format="uuid", readOnly=True)
 DATE = S(format="date")
+DATE_RO = S(format="date", readOnly=True)
 TS = S(format="date-time")
 RO_TS = S(format="date-time", readOnly=True)
 def ENUM(*v, **kw): return S(enum=list(v), **kw)
@@ -346,7 +347,7 @@ schema("Obligation", {
     "id": RO_UUID, "rule": ref("ObligationRule"),
     "registration": NULLABLE(schema("RegistrationRef", {"id": UUID, "kind": S(), "number": S(), "label": S()})),
     "fy": FY, "period_label": S(examples=["Oct 2026"]), "period_start": DATE, "period_end": DATE,
-    "due_date": DATE, "extended_due_date": NULLABLE(DATE), "days_left": I(readOnly=True),
+    "due_date": DATE, "extended_due_date": NULLABLE(DATE), "due_on": DATE_RO, "days_left": I(readOnly=True),
     "status": ENUM("upcoming", "in_preparation", "awaiting_client", "awaiting_approval", "ready_to_file", "filed", "overdue", "not_applicable", "waived"),
     "owner_user_id": NULLABLE(UUID), "approver_user_id": NULLABLE(UUID),
     "late_fee_accrued": MONEY, "interest_accrued": MONEY,

@@ -11542,6 +11542,10 @@ components:
           - type: string
             format: date
           - type: 'null'
+        due_on:
+          type: string
+          format: date
+          readOnly: true
         days_left:
           type: integer
           readOnly: true
