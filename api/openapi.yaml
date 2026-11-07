@@ -74,6 +74,9 @@ tags:
   description: Organisation-level views for business groups and CA / CS firms
 - name: Events & webhooks
   description: Server-sent events for the UI and signed webhooks for integrations
+- name: API keys
+  description: Server-to-server keys. A key acts as a named service user, limited to the permissions listed on it. It can
+    never approve, file or pay.
 - name: Audit
   description: Append-only, hash-chained audit trail
 paths:
@@ -83,7 +86,7 @@ paths:
       - Auth
       operationId: requestOtp
       summary: Send a one-time code
-      description: Rate-limited to 5 per hour per identifier.
+      description: Rate-limited to 5 per hour per identifier. The answer is the same whether or not the person exists.
       requestBody:
         required: true
         content:
@@ -146,7 +149,13 @@ paths:
       tags:
       - Auth
       operationId: logout
-      summary: Revoke the refresh token
+      summary: Revoke the refresh token and its whole session family
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
       responses:
         '204':
           description: Done
@@ -9832,6 +9841,126 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: settings:write
+  /entities/{entityId}/webhooks/{id}/deliveries:
+    get:
+      tags:
+      - Events & webhooks
+      operationId: listWebhookDeliveries
+      summary: Delivery attempts for an endpoint
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDeliveryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: settings:read
+  /entities/{entityId}/api-keys:
+    get:
+      tags:
+      - API keys
+      operationId: listApiKeys
+      summary: List api keys
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: settings:read
+    post:
+      tags:
+      - API keys
+      operationId: createApiKey
+      summary: Create api key
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKey'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKey'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: settings:write
+  /entities/{entityId}/api-keys/{id}:
+    delete:
+      tags:
+      - API keys
+      operationId: revokeApiKey
+      summary: Revoke an API key
+      description: Revoked at once; the key's service user loses its membership.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '204':
+          description: Done
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: settings:write
   /entities/{entityId}/audit-log:
     get:
       tags:
@@ -10555,6 +10684,8 @@ components:
           - portal_rejected
           - approval_required
           - rate_limited
+          - unauthorized
+          - mfa_required
           - internal
         errors:
           type: array
@@ -10677,6 +10808,13 @@ components:
           type: string
       required:
       - grant_type
+    LogoutRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+      required:
+      - refresh_token
     EntitySummary:
       type: object
       properties:
@@ -16544,6 +16682,116 @@ components:
       required:
       - data
       - next_cursor
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: integer
+        event_id:
+          type: integer
+        type:
+          type: string
+        attempt:
+          type: integer
+        status_code:
+          oneOf:
+          - type: integer
+          - type: 'null'
+        error:
+          oneOf:
+          - type: string
+          - type: 'null'
+        attempted_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        delivered_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        next_retry_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+      readOnly: true
+    WebhookDeliveryPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookDelivery'
+        next_cursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - data
+      - next_cursor
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        prefix:
+          type: string
+          readOnly: true
+          examples:
+          - bzx_live_ab12cd34
+        permissions:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z_]+:(read|write|use)$
+          examples:
+          - - sales:read
+            - sales:write
+        expires_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        last_used_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        revoked_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+        key:
+          type: string
+          readOnly: true
+          description: The full key, returned once when the key is created. Only its hash is stored.
+      required:
+      - name
+      - permissions
+    ApiKeyPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKey'
+        next_cursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - data
+      - next_cursor
     AuditEntry:
       type: object
       properties:
@@ -16622,6 +16870,7 @@ x-tagGroups:
   - Organizations
   - Portals & jobs
   - Events & webhooks
+  - API keys
   - Audit
 - name: Govern
   tags:
