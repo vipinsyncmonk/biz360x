@@ -4,7 +4,9 @@ import { api, unwrap } from "@/lib/api";
 import { GstBalance, GstReturn, HEADS, ITC_LABEL, ItcBucket, RETURN_LABEL, RETURN_STATUS, ledgerTotals, returnPeriod, totalOf } from "@/lib/finance";
 import { formatInr } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
+import { ItcMatch } from "@/lib/gst";
 import { useSession } from "@/lib/session";
+import { MatchesPanel, ReturnActions } from "@/components/GstActions";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
 interface Reg { id: string; number: string; label: string | null; state_code: string | null }
@@ -18,6 +20,8 @@ export default function Gst() {
   const returns = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/gst-returns", { params: { path: { entityId: id! }, query: { limit: 50, ...(reg ? { registration_id: reg } : {}) } } })).data as unknown as GstReturn[], id ? `${id}|${reg}` : null);
   const ledgers = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/gst/ledger-balances", { params: { path: { entityId: id! }, query: reg ? { registration_id: reg } : {} } })) as unknown as GstBalance[], id ? `${id}|${reg}` : null);
   const itc = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/itc-matches/summary", { params: { path: { entityId: id! } } })) as unknown as ItcBucket[], id);
+  const matches = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/itc-matches", { params: { path: { entityId: id! }, query: { limit: 100, ...(reg ? { registration_id: reg } : {}) } } })).data as unknown as ItcMatch[], id ? `${id}|${reg}` : null);
+  const refresh = () => { returns.reload(); ledgers.reload(); itc.reload(); matches.reload(); };
 
   const gstins = regs.data ?? [];
   const label = (rid: string) => { const g = gstins.find((x) => x.id === rid); return g ? `${g.label ?? g.state_code ?? ""} · ${g.number}` : ""; };
@@ -42,10 +46,10 @@ export default function Gst() {
       <section className="card" style={{ overflow: "hidden" }}>
         <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--line-2)" }}><h2 style={{ margin: 0 }}>Returns</h2></div>
         <div style={{ padding: "0 20px" }}><ErrorNote error={returns.error ?? regs.error} /></div>
-        {returns.loading ? <Loading what="returns" /> : (
+        {returns.loading && !returns.data ? <Loading what="returns" /> : (
           <div className="tablewrap">
-            <table style={{ minWidth: 760 }}>
-              <thead><tr><th scope="col">Return</th><th scope="col">Period</th><th scope="col" style={{ textAlign: "right" }}>Output tax</th><th scope="col" style={{ textAlign: "right" }}>ITC claimed</th><th scope="col" style={{ textAlign: "right" }}>Cash paid</th><th scope="col">Status</th></tr></thead>
+            <table style={{ minWidth: 900 }}>
+              <thead><tr><th scope="col">Return</th><th scope="col">Period</th><th scope="col" style={{ textAlign: "right" }}>Output tax</th><th scope="col" style={{ textAlign: "right" }}>ITC claimed</th><th scope="col" style={{ textAlign: "right" }}>Cash paid</th><th scope="col">Status</th><th scope="col">Next step</th></tr></thead>
               <tbody>
                 {rows.map((r) => {
                   const st = RETURN_STATUS[r.status] ?? { label: r.status, tone: "prep" as const };
@@ -57,6 +61,7 @@ export default function Gst() {
                       <td className="mono" style={{ textAlign: "right" }}>{formatInr(r.itc_claimed)}</td>
                       <td className="mono" style={{ textAlign: "right" }}>{formatInr(r.cash_paid)}</td>
                       <td><Pill tone={st.tone}>{st.label}</Pill>{r.arn && <span className="mono t13" style={{ display: "block" }}>ARN {r.arn}</span>}</td>
+                      <td>{id && r.status !== "filed" ? <ReturnActions entityId={id} returnId={r.id} status={r.status} onChanged={refresh} /> : <span className="t13">–</span>}</td>
                     </tr>
                   );
                 })}
@@ -81,6 +86,7 @@ export default function Gst() {
               </div>
             ))}
           </section>
+          {id && <MatchesPanel entityId={id} registrationId={reg} matches={matches.data ?? []} loading={matches.loading} error={matches.error} onChanged={refresh} />}
         </div>
         <aside className="col-side">
           <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 6 }}>

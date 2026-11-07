@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { ACTION_LABEL, canCompute, canFile, fileBody, isOpen, lastMonth, matchActions, periodOk, remindLabel, remindable, resolveBody, syncBody, taxNote } from "./gst";
 import { SKIP_REASON, addClientHref, chaseLabel, chaseSummary, chaseTargets, orgFromSearch } from "./group";
 import { badEmails, blankRoom, expiryNote, parseEmails, roomBody, roomForm, roomProblem, viewerNote } from "./rooms";
 import { AUTHORITY_LABEL, blankNotice, canDraft, deskTotals, noticeBody, noticeMoves, noticeProblem, replyState } from "./notices";
@@ -800,5 +801,46 @@ describe("group actions", () => {
     expect(orgFromSearch("")).toBeNull();
     expect(answersBody("L1", "business", [], DEFAULT_ANSWERS, id).organization_id).toBe(id);
     expect("organization_id" in answersBody("L1", "business", [], DEFAULT_ANSWERS)).toBe(false);
+  });
+});
+
+describe("GST actions", () => {
+  const m = (over: object) => ({ id: "m", status: "not_in_portal", supplier_gstin: "29AAAAA0000A1Z5", supplier_name: "Acme", purchase_bill_id: "b", books_tax: "1800.00", portal_tax: null, tax_difference: "1800.00", finding: "", suggested_action: "remind_supplier", action: null, action_taken_at: null, ...over });
+  it("offers only what the server allows for each kind of difference", () => {
+    expect(matchActions("matched").map(([k]) => k)).toEqual(["claim", "defer"]);
+    expect(matchActions("amount_differs").map(([k]) => k)).toEqual(["claim_lower", "ask_to_amend", "investigate", "defer"]);
+    expect(matchActions("not_in_portal").map(([k]) => k)).toEqual(["remind_supplier", "defer", "reject"]);
+    expect(matchActions("not_in_books").map(([k]) => k)).toEqual(["book_bill", "investigate", "reject"]);
+    expect(matchActions("unknown")).toEqual([]);
+    expect(ACTION_LABEL.claim_lower).toBe("Claim the lower amount");
+    expect(resolveBody("defer", "  ")).toEqual({ action: "defer" });
+    expect(resolveBody("defer", " wait for Nov ")).toEqual({ action: "defer", note: "wait for Nov" });
+  });
+  it("counts what can be reminded", () => {
+    const list = [m({}), m({ id: "2" }), m({ id: "3", status: "matched" }), m({ id: "4", action_taken_at: "2026-11-01T00:00:00Z", action: "remind_supplier" })];
+    expect(list.filter(isOpen)).toHaveLength(3);
+    expect(remindable(list as never)).toBe(2);
+    expect(remindLabel(0)).toBe("No supplier to remind");
+    expect(remindLabel(1)).toBe("Remind suppliers (1 invoice)");
+    expect(remindLabel(2)).toBe("Remind suppliers (2 invoices)");
+  });
+  it("proposes last month and checks the month", () => {
+    expect(lastMonth(new Date(2026, 10, 8))).toBe("2026-10");
+    expect(lastMonth(new Date(2027, 0, 3))).toBe("2026-12");
+    expect(periodOk("2026-10")).toBe(true);
+    expect(periodOk("2026-13")).toBe(false);
+    expect(periodOk("Oct 2026")).toBe(false);
+    expect(syncBody("2026-10", "2B", "")).toEqual({ period: "2026-10", source: "2B" });
+    expect(syncBody("2026-10", "2A", "r1")).toEqual({ period: "2026-10", source: "2A", registration_ids: ["r1"] });
+  });
+  it("lets a return be recomputed until it is submitted, and filed once ready", () => {
+    expect([canCompute("drafting"), canCompute("ready"), canCompute("submitted"), canCompute("filed")]).toEqual([true, true, false, false]);
+    expect([canFile("drafting"), canFile("ready"), canFile("submitted"), canFile("filed")]).toEqual([false, true, false, false]);
+    expect(fileBody("dsc")).toEqual({ signing: "dsc" });
+  });
+  it("words the two sides of a difference", () => {
+    const fmt = (v: string) => `Rs ${v}`;
+    expect(taxNote({ books_tax: "1800.00", portal_tax: "1500.00" }, fmt)).toBe("Books Rs 1800.00, Portal Rs 1500.00");
+    expect(taxNote({ books_tax: null, portal_tax: "90.00" }, fmt)).toBe("Portal Rs 90.00");
   });
 });
