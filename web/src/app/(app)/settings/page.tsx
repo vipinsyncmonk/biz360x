@@ -1,28 +1,35 @@
 "use client";
 import { useEffect, useState } from "react";
-import { api, unwrap } from "@/lib/api";
+import { api, unwrap, unwrapEmpty } from "@/lib/api";
 import { shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
-import { CHANNELS, CONN_STATUS, Dsc, EVENTS, GRANT_STATUS, Grant, KIND_LABEL, Member, PORTAL_LABEL, PortalConn, Pref, ROLE_LABEL, SCOPE_LABEL, dscStatus, modulesLabel, prefBody, prefKey, prefState } from "@/lib/settings";
+import { AddCertificate, CreateApiKey, GrantAdvisor, InvitePerson } from "@/components/SettingsForms";
+import { ApiKeyRow, CHANNELS, CONN_STATUS, Dsc, EVENTS, GRANT_STATUS, Grant, KIND_LABEL, Member, PORTAL_LABEL, PortalConn, Pref, ROLE_LABEL, SCOPE_LABEL, dscStatus, modulesLabel, permissionLabel, prefBody, prefKey, prefState } from "@/lib/settings";
 import { useSession } from "@/lib/session";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
 interface Verify { intact: boolean; checked: number }
+type PanelKey = "invite" | "grant" | "dsc" | "key" | null;
 
 export default function Settings() {
-  const { entity } = useSession();
+  const { entity, me } = useSession();
   const id = entity?.id ?? null;
   const members = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/members", { params: { path: { entityId: id! } } })).data as unknown as Member[], id);
   const grants = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/advisor-grants", { params: { path: { entityId: id! } } })).data as unknown as Grant[], id);
   const dsc = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/dsc-certificates", { params: { path: { entityId: id! } } })).data as unknown as Dsc[], id);
   const portals = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/portal-connections", { params: { path: { entityId: id! } } })).data as unknown as PortalConn[], id);
   const prefs = useLoad(async () => unwrap(await api.GET("/me/notification-preferences")) as unknown as Pref[], id);
+  const keys = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/api-keys", { params: { path: { entityId: id! } } })).data as unknown as ApiKeyRow[], id);
   const audit = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/audit-log/verify", { params: { path: { entityId: id! } } })) as unknown as Verify, id);
 
   const [state, setState] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
+  const [panel, setPanel] = useState<PanelKey>(null);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
+  const [newKey, setNewKey] = useState<string | null>(null);
   useEffect(() => { if (prefs.data && id) setState(prefState(prefs.data, id)); }, [prefs.data, id]);
 
   async function toggle(event: string, channel: string) {
@@ -39,6 +46,23 @@ export default function Settings() {
     }
   }
 
+  /** Run a delete-style call, then reload what it changed. */
+  async function remove(path: "members" | "advisor-grants" | "api-keys", rowId: string, reload: () => void) {
+    setActionError(null);
+    try {
+      unwrapEmpty(await api.DELETE(`/entities/{entityId}/${path}/{id}` as "/entities/{entityId}/members/{id}", { params: { path: { entityId: id!, id: rowId } } }));
+      setConfirm(null); reload();
+    } catch (e) { setActionError(e); setConfirm(null); }
+  }
+  const done = (reload: () => void) => () => { setPanel(null); reload(); };
+  const Confirm = ({ rowId, what, reload, path }: { rowId: string; what: string; reload: () => void; path: "members" | "advisor-grants" | "api-keys" }) =>
+    confirm === rowId ? (
+      <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+        <button type="button" className="btn" style={{ height: 32, color: "var(--amber)" }} onClick={() => void remove(path, rowId, reload)}>{what}</button>
+        <button type="button" className="linkbtn" style={{ color: "var(--cobalt)" }} onClick={() => setConfirm(null)}>Keep</button>
+      </span>
+    ) : <button type="button" className="linkbtn" style={{ color: "var(--cobalt)" }} onClick={() => setConfirm(rowId)}>{path === "api-keys" ? "Revoke" : path === "advisor-grants" ? "Revoke" : "Remove"}</button>;
+
   return (
     <main className="page">
       <div>
@@ -47,17 +71,22 @@ export default function Settings() {
       </div>
 
       <section className="card" style={{ overflow: "hidden" }}>
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--line-2)" }}><h2 style={{ margin: 0 }}>People{members.data ? ` · ${members.data.length}` : ""}</h2></div>
-        <div style={{ padding: "0 20px" }}><ErrorNote error={members.error} /></div>
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <h2 style={{ margin: 0 }}>People{members.data ? ` · ${members.data.length}` : ""}</h2>
+          <button type="button" className="btn" onClick={() => setPanel(panel === "invite" ? null : "invite")}>+ Invite person</button>
+        </div>
+        <div style={{ padding: "0 20px" }}><ErrorNote error={members.error ?? actionError} /></div>
+        {panel === "invite" && <div style={{ padding: 16 }}><InvitePerson entityId={id!} onDone={done(members.reload)} onCancel={() => setPanel(null)} /></div>}
         {members.loading ? <Loading what="people" /> : (
           <div className="tablewrap">
             <table style={{ minWidth: 640 }}>
-              <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Modules</th><th scope="col">Sign-in</th></tr></thead>
+              <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Modules</th><th scope="col">Sign-in</th><th scope="col"><span className="sr">Actions</span></th></tr></thead>
               <tbody>
                 {(members.data ?? []).map((m) => (
                   <tr key={m.id}>
                     <td><span style={{ fontWeight: 500 }}>{m.full_name}</span><span className="t13" style={{ display: "block" }}>{m.email}{m.accepted_at ? "" : " · invited"}</span></td>
                     <td>{ROLE_LABEL[m.role] ?? m.role}</td><td>{modulesLabel(m.modules)}</td><td className="t13">{m.auth}</td>
+                    <td style={{ textAlign: "right" }}>{m.email !== me?.email && <Confirm rowId={m.id} what="Remove access" reload={members.reload} path="members" />}</td>
                   </tr>
                 ))}
               </tbody>
@@ -69,23 +98,25 @@ export default function Settings() {
       <div className="cols">
         <div className="col-main">
           <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <h2 style={{ margin: 0 }}>Advisors</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><h2 style={{ margin: 0 }}>Advisors</h2><button type="button" className="btn" onClick={() => setPanel(panel === "grant" ? null : "grant")}>+ Add advisor</button></div>
             <ErrorNote error={grants.error} />
+            {panel === "grant" && <GrantAdvisor entityId={id!} onDone={done(grants.reload)} onCancel={() => setPanel(null)} />}
             {!grants.loading && (grants.data ?? []).length === 0 && <span className="t13">No advisor has access.</span>}
             {(grants.data ?? []).map((g) => {
               const st = GRANT_STATUS[g.status] ?? { label: g.status, tone: "prep" as const };
               return (
                 <div key={g.id} style={{ borderTop: "1px solid var(--line-2)", paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 }}>
                   <span>{g.advisor_name}<span className="t13" style={{ display: "block" }}>{KIND_LABEL[g.advisor_kind] ?? g.advisor_kind} · {Object.entries(g.scopes).map(([k, v]) => `${k.replace(/_/g, " ")}: ${SCOPE_LABEL[v] ?? v}`).join(", ")}{g.expires_on ? ` · until ${shortDate(g.expires_on)}` : ""}</span></span>
-                  <Pill tone={st.tone}>{st.label}</Pill>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}><Pill tone={st.tone}>{st.label}</Pill>{(g.status === "active" || g.status === "invited") && <Confirm rowId={g.id} what="Revoke access" reload={grants.reload} path="advisor-grants" />}</span>
                 </div>
               );
             })}
           </section>
 
           <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <h2 style={{ margin: 0 }}>Digital signature certificates</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><h2 style={{ margin: 0 }}>Digital signature certificates</h2><button type="button" className="btn" onClick={() => setPanel(panel === "dsc" ? null : "dsc")}>+ Add certificate</button></div>
             <ErrorNote error={dsc.error} />
+            {panel === "dsc" && <AddCertificate entityId={id!} onDone={done(dsc.reload)} onCancel={() => setPanel(null)} />}
             {!dsc.loading && (dsc.data ?? []).length === 0 && <span className="t13">No certificates recorded.</span>}
             {(dsc.data ?? []).map((d) => {
               const st = dscStatus(d.valid_until);
@@ -112,6 +143,26 @@ export default function Settings() {
                 </div>
               );
             })}
+          </section>
+          <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><h2 style={{ margin: 0 }}>API keys</h2><button type="button" className="btn" onClick={() => { setPanel(panel === "key" ? null : "key"); setNewKey(null); }}>+ Create key</button></div>
+            <span className="t13">For connecting other software. A key acts as its own named user and can never approve, file or pay.</span>
+            <ErrorNote error={keys.error} />
+            {newKey && (
+              <div role="status" style={{ background: "var(--green-soft)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                <strong>Copy this key now. It is not shown again.</strong>
+                <code className="mono" style={{ wordBreak: "break-all", fontSize: 13 }}>{newKey}</code>
+                <button type="button" className="btn" style={{ alignSelf: "flex-start" }} onClick={() => setNewKey(null)}>I have copied it</button>
+              </div>
+            )}
+            {panel === "key" && <CreateApiKey entityId={id!} onDone={(k) => { setPanel(null); setNewKey(k); keys.reload(); }} onCancel={() => setPanel(null)} />}
+            {!keys.loading && (keys.data ?? []).length === 0 && <span className="t13">No keys yet.</span>}
+            {(keys.data ?? []).map((k) => (
+              <div key={k.id} style={{ borderTop: "1px solid var(--line-2)", paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 }}>
+                <span>{k.name}<span className="t13" style={{ display: "block" }}><span className="mono">{k.prefix}…</span> · {permissionLabel(k.permissions)} · {k.last_used_at ? `used ${shortDate(k.last_used_at)}` : "never used"}</span></span>
+                {k.revoked_at ? <Pill tone="prep">Revoked</Pill> : <Confirm rowId={k.id} what="Revoke key" reload={keys.reload} path="api-keys" />}
+              </div>
+            ))}
           </section>
         </div>
 

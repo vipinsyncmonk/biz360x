@@ -2,18 +2,23 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
+import re
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Query, Response
+from pydantic import BaseModel, Field
 
-from .core import ApiError, Auth, Principal, require, tx
+from .core import ApiError, Auth, Principal, audit, require, tx
 from .routes_orders import js, offset_of, page
 
 router = APIRouter()
 E = "/entities/{entity_id}"
 
+EMAIL_PATTERN = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+MODULE_RE = re.compile(r"^[a-z_]{1,40}$")
 AUTH_LABEL = {"password": "Password", "otp": "One-time code", "google": "Google", "microsoft": "Microsoft", "saml": "SSO", "service": "API key"}
 
 
@@ -54,6 +59,138 @@ def list_dsc(entity_id: uuid.UUID, p: Principal = Auth, limit: int = Query(defau
                          FROM dsc_certificates c JOIN persons p ON p.id = c.person_id WHERE c.entity_id = %s ORDER BY c.valid_until, c.id LIMIT %s OFFSET %s""",
                     (entity_id, limit + 1, off))
         return page(js(cur.fetchall()), limit, off)
+
+
+# ------------------------------------------------------------------ writes: people, advisors, certificates
+class MemberIn(BaseModel):
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=254)
+    full_name: str | None = Field(default=None, max_length=120)
+    role: Literal["owner", "approver", "maker", "viewer"]
+    modules: list[str] = Field(default=["*"], min_length=1, max_length=40)
+
+
+def _member_row(cur, entity_id, member_id) -> dict:
+    cur.execute("""SELECT m.id, m.user_id, u.email, u.full_name, m.role::text, m.modules, m.accepted_at, u.auth_provider, u.mfa_enabled
+                     FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.id = %s AND m.entity_id = %s""", (member_id, entity_id))
+    r = cur.fetchone()
+    provider, mfa = r.pop("auth_provider"), r.pop("mfa_enabled")
+    r["auth"] = AUTH_LABEL.get(provider, provider) + (" · 2FA" if mfa else "")
+    return js(r)
+
+
+@router.post(E + "/members", status_code=201, tags=["Entities"])
+def invite_member(entity_id: uuid.UUID, body: MemberIn, p: Principal = Auth):
+    """Invite a person by email. They sign in with a one-time code to that address; nothing is emailed until the notification service exists."""
+    for m in body.modules:
+        if m != "*" and not MODULE_RE.match(m):
+            raise ApiError(400, "validation_failed", f"'{m}' is not a module name")
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "settings:write")
+        cur.execute("SELECT app.invite_member(%s, %s, %s, %s::member_role, %s) AS id",
+                    (entity_id, str(body.email).lower(), body.full_name, body.role, ["*"] if "*" in body.modules else sorted(set(body.modules))))
+        mid = cur.fetchone()["id"]
+        if mid is None:
+            raise ApiError(409, "conflict", "That person already has access to this entity")
+        audit(cur, entity_id, "member.invited", "memberships", mid, after={"email": str(body.email).lower(), "role": body.role})
+        return _member_row(cur, entity_id, mid)
+
+
+@router.delete(E + "/members/{member_id}", status_code=204, tags=["Entities"])
+def remove_member(entity_id: uuid.UUID, member_id: uuid.UUID, p: Principal = Auth):
+    """Revokes access. The person's name stays on past work."""
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "settings:write")
+        cur.execute("""SELECT m.id, m.user_id, m.role::text AS role FROM memberships m JOIN users u ON u.id = m.user_id
+                        WHERE m.id = %s AND m.entity_id = %s AND m.revoked_at IS NULL AND u.auth_provider <> 'service'""", (member_id, entity_id))
+        m = cur.fetchone()
+        if not m:
+            raise ApiError(404, "not_found", "Not found")
+        cur.execute("SELECT app.current_user_id() AS me")
+        if m["user_id"] == cur.fetchone()["me"]:
+            raise ApiError(409, "conflict", "You cannot remove your own access", "Ask another owner to do it.")
+        if m["role"] == "owner":
+            cur.execute("SELECT count(*) AS n FROM memberships WHERE entity_id = %s AND role = 'owner' AND revoked_at IS NULL AND id <> %s", (entity_id, member_id))
+            if cur.fetchone()["n"] == 0:
+                raise ApiError(409, "conflict", "An entity needs at least one owner")
+        cur.execute("UPDATE memberships SET revoked_at = now() WHERE id = %s", (member_id,))
+        audit(cur, entity_id, "member.removed", "memberships", member_id, after={"role": m["role"]})
+    return Response(status_code=204)
+
+
+class GrantIn(BaseModel):
+    advisor_name: str = Field(min_length=1, max_length=120)
+    advisor_kind: Literal["chartered_accountant", "company_secretary", "counsel", "lender", "investor", "auditor"]
+    invite_email: str | None = Field(default=None, pattern=EMAIL_PATTERN, max_length=254)
+    scopes: dict[str, Literal["read", "comment", "prepare", "certify"]] = Field(min_length=1)
+    document_folders: list[str] | None = None
+    expires_on: dt.date | None = None
+
+
+GRANT_COLS = "id, advisor_org_id, advisor_name, advisor_kind, scopes, document_folders, expires_on, status"
+
+
+@router.post(E + "/advisor-grants", status_code=201, tags=["Entities"])
+def create_advisor_grant(entity_id: uuid.UUID, body: GrantIn, p: Principal = Auth):
+    """Invites an advisor. The grant starts as `invited` and becomes active when their firm accepts."""
+    for k in body.scopes:
+        if not MODULE_RE.match(k):
+            raise ApiError(400, "validation_failed", f"'{k}' is not a module name")
+    if body.expires_on and body.expires_on <= dt.date.today():
+        raise ApiError(400, "validation_failed", "expires_on must be in the future")
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "settings:write")
+        cur.execute(f"""INSERT INTO advisor_grants (entity_id, advisor_name, advisor_kind, scopes, document_folders, expires_on)
+                        VALUES (%s, %s, %s, %s, %s, %s) RETURNING {GRANT_COLS}""",
+                    (entity_id, body.advisor_name.strip(), body.advisor_kind, json.dumps(body.scopes), body.document_folders, body.expires_on))
+        g = cur.fetchone()
+        audit(cur, entity_id, "advisor_grant.created", "advisor_grants", g["id"], after={"advisor": body.advisor_name, "scopes": body.scopes})
+        return js(g)
+
+
+@router.delete(E + "/advisor-grants/{grant_id}", status_code=204, tags=["Entities"])
+def revoke_advisor_grant(entity_id: uuid.UUID, grant_id: uuid.UUID, p: Principal = Auth):
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "settings:write")
+        cur.execute("UPDATE advisor_grants SET status = 'revoked' WHERE id = %s AND entity_id = %s RETURNING id", (grant_id, entity_id))
+        if not cur.fetchone():
+            raise ApiError(404, "not_found", "Not found")
+        audit(cur, entity_id, "advisor_grant.revoked", "advisor_grants", grant_id)
+    return Response(status_code=204)
+
+
+class DscIn(BaseModel):
+    person_name: str = Field(min_length=1, max_length=120)
+    dsc_class: str = Field(default="class3", pattern="^class[23]$")
+    valid_from: dt.date
+    valid_until: dt.date
+    registered_on: list[Literal["MCA", "GSTN", "ITD"]] = []
+    serial: str = Field(min_length=4, max_length=80, description="The certificate serial, as printed by the token software. Only its hash is stored.")
+
+
+@router.post(E + "/dsc-certificates", status_code=201, tags=["Entities"])
+def add_dsc(entity_id: uuid.UUID, body: DscIn, p: Principal = Auth):
+    """Records a certificate's details so expiry can be watched. The token itself never leaves the signer."""
+    if body.valid_until <= body.valid_from:
+        raise ApiError(400, "validation_failed", "valid_until must be after valid_from")
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "settings:write")
+        cur.execute("SELECT id FROM persons WHERE entity_id = %s AND lower(full_name) = lower(%s) ORDER BY created_at LIMIT 1", (entity_id, body.person_name.strip()))
+        person = cur.fetchone()
+        if person:
+            pid = person["id"]
+        else:
+            cur.execute("INSERT INTO persons (entity_id, full_name) VALUES (%s, %s) RETURNING id", (entity_id, body.person_name.strip()))
+            pid = cur.fetchone()["id"]
+        serial_hash = hashlib.sha256(body.serial.strip().encode()).hexdigest()
+        cur.execute("SELECT 1 FROM dsc_certificates WHERE entity_id = %s AND serial_hash = %s", (entity_id, serial_hash))
+        if cur.fetchone():
+            raise ApiError(409, "conflict", "This certificate is already recorded")
+        cur.execute("""INSERT INTO dsc_certificates (entity_id, person_id, dsc_class, valid_from, valid_until, serial_hash, registered_on)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""", (entity_id, pid, body.dsc_class, body.valid_from, body.valid_until, serial_hash, body.registered_on))
+        cid = cur.fetchone()["id"]
+        audit(cur, entity_id, "dsc.added", "dsc_certificates", cid, after={"person": body.person_name, "valid_until": body.valid_until})
+        return js({"id": cid, "person_name": body.person_name.strip(), "dsc_class": body.dsc_class, "valid_from": body.valid_from,
+                   "valid_until": body.valid_until, "registered_on": body.registered_on})
 
 
 # ------------------------------------------------------------------ the signed-in person's notification choices

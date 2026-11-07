@@ -4359,6 +4359,8 @@ export interface components {
             /** Format: date */
             valid_until: string;
             registered_on?: ("MCA" | "GSTN" | "ITD")[];
+            /** @description The certificate serial as printed by the token software; only its hash is stored. Required when adding. */
+            serial?: string;
         };
         DscCertificatePage: {
             data: components["schemas"]["DscCertificate"][];
