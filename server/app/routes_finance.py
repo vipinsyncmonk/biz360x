@@ -665,3 +665,39 @@ def get_report(entity_id: uuid.UUID, report: Literal["profit-and-loss", "balance
         rows = _balances(cur, entity_id, ["liability"], start, end)           # gst-liability
         out = [{"line": f"{r['code']} {r['name']}", "values": [money(r["cr"] - r["dr"])]} for r in rows if r["code"].startswith("23")]
         return {"columns": ["Output tax liability"], "rows": out, "provisional": True}
+
+
+# ------------------------------------------------------------------ headline numbers
+@router.get(E + "/finance/summary", tags=["Finance & books"])
+def finance_summary(entity_id: uuid.UUID, p: Principal = Auth, from_: dt.date | None = Query(default=None, alias="from"), to: dt.date | None = None):
+    """Tiles for the finance screen, from posted journals. Period defaults to this financial year so far; runway uses the period's average monthly burn."""
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "finance:read")
+        start, end = _fy_bounds(cur, from_, to)
+        if end < start:
+            raise ApiError(400, "validation_failed", "`to` must be on or after `from`")
+        cur.execute("""SELECT coalesce(sum(l.credit - l.debit) FILTER (WHERE a.type = 'income' AND a.subtype IS DISTINCT FROM 'round_off'), 0) AS revenue,
+                              coalesce(sum(l.debit - l.credit) FILTER (WHERE a.subtype = 'purchases'), 0) AS purchases,
+                              coalesce(sum(l.debit - l.credit) FILTER (WHERE a.type = 'expense' AND a.subtype IS DISTINCT FROM 'interest_penalty'), 0) AS opex
+                         FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id AND e.status IN ('posted', 'reversed')
+                         JOIN ledger_accounts a ON a.id = l.account_id
+                        WHERE a.entity_id = %s AND e.entry_date BETWEEN %s AND %s""", (entity_id, start, end))
+        t = cur.fetchone()
+        cur.execute("""SELECT coalesce(sum(l.debit - l.credit) FILTER (WHERE e.entry_date <= %s), 0) AS closing,
+                              coalesce(sum(l.debit - l.credit) FILTER (WHERE e.entry_date < %s), 0) AS opening
+                         FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id AND e.status IN ('posted', 'reversed')
+                         JOIN ledger_accounts a ON a.id = l.account_id
+                        WHERE a.entity_id = %s AND a.subtype IN ('bank', 'cash')""", (end, start, entity_id))
+        c = cur.fetchone()
+        cur.execute("""SELECT coalesce(sum(balance_due), 0) AS receivables, coalesce(sum(balance_due) FILTER (WHERE due_date < current_date), 0) AS overdue
+                         FROM sales_documents WHERE entity_id = %s AND status = 'issued' AND balance_due > 0
+                          AND doc_type IN ('tax_invoice', 'export_invoice', 'bill_of_supply', 'debit_note')""", (entity_id,))
+        r = cur.fetchone()
+    revenue, change = t["revenue"], c["closing"] - c["opening"]
+    margin = ((revenue - t["purchases"]) / revenue * 100).quantize(Decimal("0.1")) if revenue > 0 else ZERO
+    months = max(Decimal((end - start).days + 1) / Decimal("30.4"), Decimal(1))
+    burn = (-change / months).quantize(Decimal("0.01")) if change < 0 else None
+    runway = float((c["closing"] / burn).quantize(Decimal("0.1"))) if burn and c["closing"] > 0 else None
+    return {"revenue": money(revenue), "gross_margin_pct": float(margin), "ebitda": money(revenue - t["opex"]), "cash_in_bank": money(c["closing"]),
+            "cash_change": money(change), "receivables": money(r["receivables"]), "receivables_overdue": money(r["overdue"]),
+            "runway_months": runway, "net_burn": money(burn) if burn is not None else None}

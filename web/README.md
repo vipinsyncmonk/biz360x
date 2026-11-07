@@ -32,6 +32,9 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/billing/[id]` | One document: lines, totals, e-invoice state, issue a draft |
 | `src/app/(app)/billing/quotes` | Quotes list (read-only for now) |
 | `src/lib/billing.ts` | Tab queries, status labels, line validation, request bodies. Unit-tested |
+| `src/app/(app)/finance` | Finance & Books: key numbers (`GET /finance/summary`), close checklist and month lock, bank reconciliation (accept or reject suggested matches), profit & loss in lakh |
+| `src/app/(app)/gst` | GST & Tax: returns by GSTIN, purchase register vs GSTR-2B summary, electronic ledger balances |
+| `src/lib/finance.ts` | Period choice, lakh display, GST ledger totals. Unit-tested |
 | `src/app/(app)/m/[slug]` | Placeholder for screens that are not built yet |
 
 ## Rules for new screens

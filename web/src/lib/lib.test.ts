@@ -178,3 +178,34 @@ describe("billing helpers", () => {
     expect(hasBlock([{ level: "warn" }])).toBe(false);
   });
 });
+
+import { closeCounts, currentPeriod, lakh, ledgerTotals, periodName, returnPeriod, totalOf, type Period } from "./finance";
+
+describe("finance helpers", () => {
+  const per = (start: string, status: string): Period => ({ id: start, fy: "2026-27", period_start: start, period_end: start.slice(0, 8) + "28", status, locked_at: null, close_progress: { done: 0, total: 0 } });
+  it("names periods and picks the month being closed", () => {
+    expect(periodName("2026-10-01")).toBe("October 2026");
+    expect(returnPeriod("2026-10")).toBe("Oct 2026");
+    const ps = [per("2026-09-01", "locked"), per("2026-10-01", "open"), per("2026-11-01", "open"), per("2026-12-01", "open")];
+    expect(currentPeriod(ps, new Date(2026, 10, 7))?.period_start).toBe("2026-10-01");     // latest unlocked month that has ended
+    expect(currentPeriod([per("2026-09-01", "locked")], new Date(2026, 10, 7))?.period_start).toBe("2026-09-01");
+    expect(currentPeriod([])).toBeUndefined();
+  });
+  it("shows lakh to one decimal without floats", () => {
+    expect(lakh("1234567.00")).toBe("12.3");
+    expect(lakh("1250000.00")).toBe("12.5");
+    expect(lakh("-642000.00")).toBe("-6.4");
+    expect(lakh("0.00")).toBe("0.0");
+    expect(lakh("-100.00")).toBe("0.0");               // rounds to zero: no negative zero
+  });
+  it("counts close tasks and sums GST ledgers per head", () => {
+    expect(closeCounts([{ id: "a", task_key: "a", title: "a", is_automatic: false, done_at: "x" }, { id: "b", task_key: "b", title: "b", is_automatic: true, done_at: null }])).toEqual({ done: 1, total: 2 });
+    const rows = [
+      { registration_id: "r1", ledger: "credit", head: "igst", as_of: "2026-10-31", balance: "100.10" },
+      { registration_id: "r2", ledger: "credit", head: "igst", as_of: "2026-10-31", balance: "0.20" },
+      { registration_id: "r1", ledger: "cash", head: "cgst", as_of: "2026-10-31", balance: "50.00" },
+    ];
+    expect(ledgerTotals(rows, "credit")).toEqual({ igst: "100.30", cgst: "0.00", sgst: "0.00", cess: "0.00" });
+    expect(totalOf(ledgerTotals(rows, "cash"))).toBe("50.00");
+  });
+});
