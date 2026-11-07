@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { blankConn, blankHook, canRenew, connBody, connReady, deliveryState, eventsLabel, hookBody, hookProblem, jobStage, otpReady } from "./integrations";
 import { annualOf, blankEmployee, defaultComponents, draftFromRows, employeeBody, employeeProblem, inputProblem, inputsBody, inputsProblem, monthlyEarnings, structureBody, structureProblem } from "./payroll";
 import { orderMethods, overdueLabel, pageState, queryReady } from "./pay";
 import { blankDsc, blankGrant, blankInvite, dscBody, dscReady, emailOk, grantBody, grantReady, inviteBody, inviteReady, keyPermissions, keyReady, permissionLabel, scopesBody } from "./settings";
@@ -515,5 +516,54 @@ describe("payroll employees and inputs", () => {
     expect(draftFromRows([{ employee_id: "a", lop_days: "3", overtime: "0.00", bonus: "0.00", reimbursements: "0.00", other_deductions: "500.00" }])).toEqual({
       a: { lop_days: "3", overtime: "", bonus: "", reimbursements: "", other_deductions: "500.00" },
     });
+  });
+});
+
+describe("portals and webhooks", () => {
+  it("sends credentials only when both parts are given", () => {
+    const f = blankConn();
+    expect(connReady(f)).toBe(true);
+    expect(connReady({ ...f, username: "m6.gst" })).toBe(false);
+    expect(connReady({ ...f, password: "x" })).toBe(false);
+    expect(connBody(f)).toEqual({ portal: "gstn" });
+    expect(connBody({ ...f, via: "GSP", username: " m6.gst ", password: "pw" })).toEqual({ portal: "gstn", via: "GSP", credentials: { username: "m6.gst", password: "pw" } });
+    expect(connReady({ ...f, portal: "nope" })).toBe(false);
+  });
+  it("offers renewal only for OTP portals that are connected", () => {
+    expect(canRenew({ portal: "gstn", status: "expiring" })).toBe(true);
+    expect(canRenew({ portal: "gstn", status: "not_connected" })).toBe(false);
+    expect(canRenew({ portal: "gstn", status: "revoked" })).toBe(false);
+    expect(canRenew({ portal: "udyam", status: "connected" })).toBe(false);
+  });
+  it("describes a renewal job", () => {
+    expect(jobStage({ status: "queued", error: null }).finished).toBe(false);
+    expect(jobStage({ status: "waiting_for_otp", error: null })).toMatchObject({ needsOtp: true, finished: false });
+    expect(jobStage({ status: "succeeded", error: null })).toMatchObject({ label: "Renewed", finished: true });
+    expect(jobStage({ status: "failed", error: "OTP expired" }).label).toBe("Failed: OTP expired");
+    expect(jobStage({ status: "failed", error: { code: "otp_invalid", title: "OTP incorrect", detail: "The OTP is incorrect" } }).label).toBe("Failed: The OTP is incorrect");
+    expect(jobStage({ status: "failed", error: null }).label).toBe("Failed");
+    expect(otpReady("123456")).toBe(true);
+    expect(otpReady("12345")).toBe(false);
+    expect(otpReady("12345a")).toBe(false);
+  });
+  it("needs an https address and some events", () => {
+    const f = { ...blankHook(), url: "https://example.in/hook", events: ["sales_document.paid"] };
+    expect(hookProblem(f)).toBeNull();
+    expect(hookProblem({ ...f, url: "http://example.in/hook" })).toMatch(/https/);
+    expect(hookProblem({ ...f, url: "not a url" })).toMatch(/full address/);
+    expect(hookProblem({ ...f, url: "https://u:p@example.in/" })).toMatch(/user name/);
+    expect(hookProblem({ ...f, events: [] })).toMatch(/event/);
+    expect(hookProblem({ ...f, events: [], all: true })).toBeNull();
+    expect(hookBody({ ...f, events: ["b.x", "a.y"] })).toEqual({ url: "https://example.in/hook", events: ["a.y", "b.x"] });
+    expect(hookBody({ ...f, all: true }).events).toEqual(["*"]);
+    expect(eventsLabel(["*"])).toBe("All events");
+    expect(eventsLabel(["a.b", "c.d"])).toBe("a.b, c.d");
+    expect(eventsLabel(["a.b", "c.d", "e.f"])).toBe("3 events");
+  });
+  it("describes a delivery attempt", () => {
+    expect(deliveryState({ delivered_at: "2026-11-07T10:00:00Z", status_code: 200, next_retry_at: null, error: null })).toMatchObject({ label: "Delivered (200)", tone: "ok" });
+    expect(deliveryState({ delivered_at: null, status_code: 500, next_retry_at: "2026-11-07T11:00:00Z", error: null }).label).toBe("Will retry after 500");
+    expect(deliveryState({ delivered_at: null, status_code: 404, next_retry_at: null, error: null }).tone).toBe("due");
+    expect(deliveryState({ delivered_at: null, status_code: null, next_retry_at: null, error: null }).label).toBe("Pending");
   });
 });
