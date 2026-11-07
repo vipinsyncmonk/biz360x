@@ -13,7 +13,7 @@ ORG_OTHER = "00000000-0000-0000-0000-000000000601"
 E1, E2, E3 = ("00000000-0000-0000-0000-00000000061%d" % i for i in (1, 2, 3))
 U_PARTNER, U_STAFF, U_VIEWER, U_STRANGER, U_MIA = ("00000000-0000-0000-0000-00000000062%d" % i for i in (1, 2, 3, 4, 5))
 PARTNER, STAFF, VIEWER, STRANGER, MIA = "st-partner@example.in", "st-staff@example.in", "st-viewer@example.in", "st-stranger@example.in", "st-mia@example.in"
-TODAY = dt.datetime.now(dt.timezone.utc).date()   # the database counts days in UTC
+TODAY = dt.date.today()
 
 
 @pytest.fixture(scope="module")
