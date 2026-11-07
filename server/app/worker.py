@@ -93,7 +93,7 @@ def _m3_handlers() -> dict:
     from . import routes_gst as g, routes_purchases as pu
     return {"obligation.prepare": g.handle_prepare, "gst.compute_return": g.handle_compute_return, "gst.file_return": g.handle_file_return,
             "gst.inward_sync": g.handle_inward_sync, "tax.pay_challan": g.handle_pay_challan, "tds.validate_return": g.handle_validate_tds_return,
-            "bank.release_payment": pu.handle_release_payment, "payroll.bank_file": __import__("app.routes_payroll", fromlist=["x"]).handle_bank_file, "purchases.msme_alerts": pu.handle_msme_alerts}
+            "bank.release_payment": pu.handle_release_payment, "legal.extract_terms": __import__("app.routes_legal", fromlist=["x"]).handle_extract_terms, "legal.draft_notice": __import__("app.routes_legal", fromlist=["x"]).handle_draft_notice, "notice.draft_reply": __import__("app.routes_legal", fromlist=["x"]).handle_draft_reply, "payroll.bank_file": __import__("app.routes_payroll", fromlist=["x"]).handle_bank_file, "purchases.msme_alerts": pu.handle_msme_alerts}
 
 
 HANDLERS = {"einvoice.generate_irn": handle_generate_irn, "compliance.run_engine": handle_run_engine,

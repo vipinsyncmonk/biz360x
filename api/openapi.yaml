@@ -2054,6 +2054,96 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: approvals:read
+  /entities/{entityId}/signature-requests/{id}/signers/{signerId}/sign:
+    post:
+      tags:
+      - Approvals
+      operationId: signAsSigner
+      summary: Sign (the signer themselves, or an approver recording it)
+      description: Signers sign in order. When the last one signs the request completes; a contract becomes active with this
+        document as its signed copy.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: signerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignAction'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignatureRequest'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: approvals:read
+  /entities/{entityId}/signature-requests/{id}/signers/{signerId}/decline:
+    post:
+      tags:
+      - Approvals
+      operationId: declineAsSigner
+      summary: Decline to sign
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: signerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeclineAction'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignatureRequest'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: approvals:read
   /entities/{entityId}/tasks:
     get:
       tags:
@@ -8458,6 +8548,60 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
       x-permission: documents:write
+  /storage/{token}:
+    put:
+      tags:
+      - Documents
+      operationId: uploadObject
+      summary: Upload the bytes to a signed URL (size and SHA-256 are checked)
+      description: The URL comes from `POST /documents` and expires after 15 minutes. The token is the credential; send no
+        Authorization header.
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Done
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      security: []
+    get:
+      tags:
+      - Documents
+      operationId: downloadObject
+      summary: Download from a short-lived signed URL
+      description: The URL is the `download_url` of a document and expires after 5 minutes.
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      security: []
   /entities/{entityId}/document-requests:
     get:
       tags:
@@ -11607,6 +11751,14 @@ components:
     Signer:
       type: object
       properties:
+        id:
+          type: integer
+          readOnly: true
+        person_name:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
         person_id:
           oneOf:
           - type: string
@@ -11700,6 +11852,16 @@ components:
       required:
       - data
       - next_cursor
+    SignAction:
+      type: object
+      properties:
+        evidence:
+          type: string
+    DeclineAction:
+      type: object
+      properties:
+        reason:
+          type: string
     Task:
       type: object
       properties:
