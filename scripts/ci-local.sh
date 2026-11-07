@@ -6,10 +6,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SKIP_LINT=0; KEEP_DB=0; PYTEST_ARGS=()
+SKIP_LINT=0; SKIP_WEB=0; KEEP_DB=0; PYTEST_ARGS=()
 for a in "$@"; do
   case "$a" in
     --skip-lint) SKIP_LINT=1 ;;
+    --skip-web) SKIP_WEB=1 ;;
     --keep-db) KEEP_DB=1 ;;
     *) PYTEST_ARGS+=("$a") ;;
   esac
@@ -61,6 +62,18 @@ fi
 
 step "Docs map references real operations"
 "$VENV/bin/python" scripts/check_docs_map.py
+
+step "Web: generated types are current, typecheck, tests, build, audit"
+if [ "$SKIP_WEB" = 1 ]; then
+  echo "(web skipped)"
+else
+  # A copy outside the checkout: node_modules installed by Windows hold binaries WSL cannot run, and a copy keeps this checkout clean.
+  WEBTMP="$(mktemp -d)"; mkdir -p "$WEBTMP/api"
+  cp api/openapi.yaml "$WEBTMP/api/"
+  tar -C web --exclude=node_modules --exclude=.next --exclude='*.tsbuildinfo' -cf - . | (mkdir -p "$WEBTMP/web" && tar -C "$WEBTMP/web" -xf -)
+  (cd "$WEBTMP/web" && npm ci --no-audit --no-fund --loglevel=error      && npm run -s gen:api >/dev/null && diff -u --strip-trailing-cr "$OLDPWD/web/src/api/schema.d.ts" src/api/schema.d.ts      && npm run -s typecheck && npm test --silent && npx next build >/dev/null && npm audit --omit=dev)
+  rm -rf "$WEBTMP"
+fi
 
 step "End-to-end API tests"
 (cd server && "$VENV/bin/python" -m pytest -q "${PYTEST_ARGS[@]}")
