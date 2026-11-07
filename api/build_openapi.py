@@ -800,6 +800,7 @@ _op("get", E + "/payroll-runs/{id}", "Payroll & HR", "getPayrollRun", "Get a pay
 schema("PayrollInput", {"employee_id": UUID, "lop_days": N(), "overtime": MONEY, "bonus": MONEY, "reimbursements": MONEY, "other_deductions": MONEY}, required=("employee_id",))
 _op("put", E + "/payroll-runs/{id}/inputs", "Payroll & HR", "putPayrollInputs", "Set attendance and one-off inputs", "payroll:write",
     body=ARR(ref("PayrollInput")), resp=ref("PayrollRun"))
+_op("get", E + "/payroll-runs/{id}/inputs", "Payroll & HR", "getPayrollInputs", "What was last set for the month", "payroll:read", resp=ARR(ref("PayrollInput")))
 action(E + "/payroll-runs/{id}/compute", "Payroll & HR", "computePayrollRun", "Compute payslips, PF, ESI, PT and TDS", "payroll:write", resp=ref("PayrollRun"))
 action(E + "/payroll-runs/{id}/submit", "Payroll & HR", "submitPayrollRun", "Send for approval", "payroll:write", resp=ref("ApprovalRequest"), status="201")
 action(E + "/payroll-runs/{id}/bank-file", "Payroll & HR", "createPayrollBankFile", "Generate the bank upload file (after approval)", "payroll:pay",

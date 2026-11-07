@@ -302,6 +302,25 @@ def put_inputs(entity_id: uuid.UUID, run_id: uuid.UUID, body: list[InputIn], p: 
         return load_run(cur, entity_id, run_id)
 
 
+@router.get(E + "/payroll-runs/{run_id}/inputs", tags=["Payroll & HR"])
+def get_inputs(entity_id: uuid.UUID, run_id: uuid.UUID, p: Principal = Auth):
+    """What was last set for the month: one row per employee that has any attendance or one-off figure. Money as two-decimal strings."""
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "payroll:read")
+        cur.execute("SELECT 1 FROM payroll_runs WHERE id = %s AND entity_id = %s", (run_id, entity_id))
+        if not cur.fetchone():
+            raise ApiError(404, "not_found", "Not found")
+        cur.execute("SELECT inputs FROM payroll_run_inputs WHERE run_id = %s", (run_id,))
+        stored = (cur.fetchone() or {}).get("inputs") or {}
+    out = []
+    for emp_id, v in stored.items():
+        row = {"employee_id": emp_id, "lop_days": str(Decimal(v.get("lop_days", "0")).normalize() if Decimal(v.get("lop_days", "0")) else "0")}
+        for k in ("overtime", "bonus", "reimbursements", "other_deductions"):
+            row[k] = money(Decimal(v.get(k, "0")))
+        out.append(row)
+    return sorted(out, key=lambda r: r["employee_id"])
+
+
 def _history(cur, entity_id, employee_id, month_start: dt.date) -> dict:
     cur.execute("SELECT app.fy_of(%s::date) AS fy", (month_start,))
     fy = cur.fetchone()["fy"]

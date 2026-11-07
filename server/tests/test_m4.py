@@ -206,6 +206,11 @@ def test_inputs_and_compute(client, h):
     r = client.put(url(f"/payroll-runs/{rid}/inputs"), headers=h, json=[
         {"employee_id": S["EMP-3"]["id"], "lop_days": "3"}, {"employee_id": S["EMP-4"]["id"], "overtime": "2000", "other_deductions": "500"}])
     assert r.status_code == 200 and r.json()["status"] == "inputs_open"
+    got = {x["employee_id"]: x for x in client.get(url(f"/payroll-runs/{rid}/inputs"), headers=h).json()}
+    assert set(got) == {S["EMP-3"]["id"], S["EMP-4"]["id"]}
+    assert (got[S["EMP-3"]["id"]]["lop_days"], got[S["EMP-3"]["id"]]["overtime"]) == ("3", "0.00")
+    assert (got[S["EMP-4"]["id"]]["overtime"], got[S["EMP-4"]["id"]]["other_deductions"]) == ("2000.00", "500.00")
+    assert client.get(url(f"/payroll-runs/{uuid.uuid4()}/inputs"), headers=h).status_code == 404
     run = client.post(url(f"/payroll-runs/{rid}/compute"), headers=h).json()
     assert run["status"] == "computed" and run["headcount"] == 6
     ps = payslips(client, h, rid)

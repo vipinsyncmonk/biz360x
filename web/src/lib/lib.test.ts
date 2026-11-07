@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { annualOf, blankEmployee, defaultComponents, draftFromRows, employeeBody, employeeProblem, inputProblem, inputsBody, inputsProblem, monthlyEarnings, structureBody, structureProblem } from "./payroll";
 import { orderMethods, overdueLabel, pageState, queryReady } from "./pay";
 import { blankDsc, blankGrant, blankInvite, dscBody, dscReady, emailOk, grantBody, grantReady, inviteBody, inviteReady, keyPermissions, keyReady, permissionLabel, scopesBody } from "./settings";
 import { NAV, TABS, activeTab } from "../components/nav";
@@ -463,5 +464,56 @@ describe("settings write actions", () => {
     expect(keyReady("", { sales: "read" })).toBe(false);
     expect(keyReady("Zapier", {})).toBe(false);
     expect(permissionLabel(["sales:read", "sales:write", "gst:read"])).toBe("Sales & billing read/write, GST read");
+  });
+});
+
+describe("payroll employees and inputs", () => {
+  const ok = { ...blankEmployee(), code: "EMP-1", name: "Meera Iyer", joined: "2026-04-01", state: "29" };
+  it("checks an employee form the way the server does", () => {
+    expect(employeeProblem(ok)).toBeNull();
+    expect(employeeProblem({ ...ok, code: " " })).toMatch(/code/);
+    expect(employeeProblem({ ...ok, state: "Karnataka" })).toMatch(/state code/);
+    expect(employeeProblem({ ...ok, pan: "abcde1234f" })).toBeNull();
+    expect(employeeProblem({ ...ok, pan: "ABC" })).toMatch(/PAN/);
+    expect(employeeProblem({ ...ok, uan: "123" })).toMatch(/UAN/);
+    expect(employeeProblem({ ...ok, account: "123456789" })).toMatch(/both/);
+    expect(employeeProblem({ ...ok, account: "123456789", ifsc: "hdfc0001234" })).toBeNull();
+    expect(employeeProblem({ ...ok, account: "12", ifsc: "HDFC0001234" })).toMatch(/6 to 18/);
+  });
+  it("sends only what was filled, upper-casing PAN and IFSC", () => {
+    expect(employeeBody({ ...ok, pan: "abcde1234f", account: "123456789", ifsc: "hdfc0001234" })).toEqual({
+      employee_code: "EMP-1", full_name: "Meera Iyer", date_of_joining: "2026-04-01", work_state: "29", tax_regime: "new", employment_type: "permanent",
+      pan: "ABCDE1234F", bank_account: { account_no: "123456789", ifsc: "HDFC0001234" },
+    });
+  });
+  const comps = () => defaultComponents().map((c, i) => ({ ...c, amount: ["25000", "10000", "5000.50"][i]! }));
+  it("adds a salary structure exactly and demands basic pay", () => {
+    expect(annualOf(comps())).toBe("480006.00");
+    expect(structureProblem("2026-11-01", comps())).toBeNull();
+    expect(structureProblem("", comps())).toMatch(/starts/);
+    expect(structureProblem("2026-11-01", comps().map((c) => ({ ...c, in_wages: false })))).toMatch(/Basic pay/);
+    expect(structureProblem("2026-11-01", [...comps(), { ...comps()[0]!, code: "basic" }])).toMatch(/twice/);
+    expect(structureProblem("2026-11-01", comps().map((c, i) => (i === 1 ? { ...c, amount: "abc" } : c)))).toMatch(/monthly amount/);
+    expect(structureBody("2026-11-01", comps())).toMatchObject({ effective_from: "2026-11-01", ctc_annual: "480006.00" });
+    expect(structureBody("2026-11-01", comps()).components[2]).toEqual({ code: "SPECIAL", monthly_amount: "5000.50", kind: "earning", in_wages: false, taxable: true });
+    expect(monthlyEarnings(structureBody("2026-11-01", comps()).components)).toBe("40000.50");
+  });
+  it("validates inputs and drops blanks and zeros", () => {
+    expect(inputProblem("lop_days", "3")).toBeNull();
+    expect(inputProblem("lop_days", "32")).toMatch(/0 to 31/);
+    expect(inputProblem("lop_days", "1.5")).toBeNull();
+    expect(inputProblem("overtime", "2,000")).toMatch(/amount/);
+    expect(inputProblem("overtime", "")).toBeNull();
+    expect(inputsProblem({ a: { overtime: "x" } })).toBe(true);
+    expect(inputsProblem({ a: { overtime: "100" } })).toBe(false);
+    expect(inputsBody({ a: { lop_days: "3", overtime: "" }, b: { bonus: "0" }, c: { overtime: "2000", other_deductions: "500.5" } })).toEqual([
+      { employee_id: "a", lop_days: "3", overtime: "0", bonus: "0", reimbursements: "0", other_deductions: "0" },
+      { employee_id: "c", lop_days: "0", overtime: "2000.00", bonus: "0", reimbursements: "0", other_deductions: "500.50" },
+    ]);
+  });
+  it("shows saved inputs without the zeros", () => {
+    expect(draftFromRows([{ employee_id: "a", lop_days: "3", overtime: "0.00", bonus: "0.00", reimbursements: "0.00", other_deductions: "500.00" }])).toEqual({
+      a: { lop_days: "3", overtime: "", bonus: "", reimbursements: "", other_deductions: "500.00" },
+    });
   });
 });

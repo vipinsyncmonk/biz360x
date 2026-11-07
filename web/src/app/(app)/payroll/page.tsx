@@ -1,6 +1,7 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
-import { api, unwrap } from "@/lib/api";
+import { api, newIdempotencyKey, unwrap } from "@/lib/api";
 import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { LABOUR_STATUS, Labour, RUN_STATUS, Run, STEPS, Slip, WAGE_FLAG, nextAction, nextRunMonth, runName, stepIndex } from "@/lib/payroll";
@@ -62,6 +63,8 @@ export default function Payroll() {
               </select></div>
           )}
           <button type="button" className="btn" disabled={busy || runs.loading} onClick={() => void act("start")}>Start {runName(nextRunMonth(list))} run</button>
+          <Link href="/payroll/employees" className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Employees</Link>
+          {run && (run.status === "inputs_open" || run.status === "computed") && <Link href={`/payroll/inputs/${run.id}`} className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Enter inputs</Link>}
           {action === "compute" && <button type="button" className="btn primary" disabled={busy} onClick={() => void act("compute")}>{busy ? "Computing…" : "Compute pay"}</button>}
           {action === "submit" && <button type="button" className="btn primary" disabled={busy} onClick={() => void act("submit")}>{busy ? "Sending…" : "Send for approval"}</button>}
           {action === "waiting" && <Pill tone="wait">Waiting for approval</Pill>}
@@ -121,6 +124,7 @@ export default function Payroll() {
             </div>
 
             <aside className="col-side">
+              {run.status === "approved" && <BankFile entityId={id!} runId={run.id} onDone={() => { runs.reload(); setNote("The bank file is being prepared. The run moves on once it is sent."); }} />}
               <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <h2 style={{ margin: 0 }}>Statutory deposits</h2>
                 {run.statutory.length === 0 && <span className="t13">They appear once the run is approved.</span>}
@@ -172,5 +176,41 @@ function Tile({ label, value, note }: { label: string; value: string; note: stri
       <span className="disp v" style={{ fontSize: 28 }}>{value}</span>
       <span className="t13">{note}</span>
     </div>
+  );
+}
+
+interface Bank { id: string; bank_name: string; account_last4: string }
+
+/** After approval: pick the account salaries are paid from. Generating the file is a background job. */
+function BankFile({ entityId, runId, onDone }: { entityId: string; runId: string; onDone: () => void }) {
+  const banks = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/bank-accounts", { params: { path: { entityId } } })).data as unknown as Bank[], entityId);
+  const [pick, setPick] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const list = banks.data ?? [];
+  const chosen = pick || list[0]?.id || "";
+
+  async function go() {
+    setBusy(true); setError(null);
+    try {
+      unwrap(await api.POST("/entities/{entityId}/payroll-runs/{id}/bank-file", { params: { path: { entityId, id: runId }, header: { "Idempotency-Key": newIdempotencyKey() } }, body: { bank_account_id: chosen } as never }));
+      onDone();
+    } catch (e) { setError(e); }
+    setBusy(false);
+  }
+  return (
+    <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <h2 style={{ margin: 0 }}>Pay salaries</h2>
+      <span className="t13">The run is approved. Choose the account the salaries go out from and prepare the bank upload file.</span>
+      <ErrorNote error={banks.error ?? error} />
+      {list.length === 0 && !banks.loading && <span className="t13">No bank account is set up. Add one under Finance &amp; Books first.</span>}
+      {list.length > 0 && (
+        <>
+          <div className="field"><label htmlFor="bank">Pay from</label>
+            <select id="bank" className="input" value={chosen} onChange={(e) => setPick(e.target.value)}>{list.map((b) => <option key={b.id} value={b.id}>{b.bank_name} ••{b.account_last4}</option>)}</select></div>
+          <button type="button" className="btn primary" disabled={busy || !chosen} onClick={() => void go()}>{busy ? "Preparing…" : "Prepare bank file"}</button>
+        </>
+      )}
+    </section>
   );
 }
