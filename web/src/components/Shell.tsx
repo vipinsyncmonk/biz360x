@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { useSession } from "@/lib/session";
 import { initials } from "@/lib/format";
-import { NAV } from "./nav";
+import { NAV, TABS, activeTab } from "./nav";
 import { Icon, Logo } from "./ui";
 
 export default function Shell({ children }: { children: ReactNode }) {
@@ -58,7 +58,23 @@ export default function Shell({ children }: { children: ReactNode }) {
           </span>
         </div>
       </aside>
-      <div className="main">{children}</div>
+      <div className="main">
+        <header className="mtop">
+          <Link href="/" aria-label="Biz360X home"><Logo size={22} /></Link>
+          <label className="sr" htmlFor="m-entity">Entity</label>
+          <select id="m-entity" value={entity?.id ?? ""} onChange={(e) => setEntityId(e.target.value)}>
+            {entities.map((e) => <option key={e.id} value={e.id}>{e.legal_name}</option>)}
+          </select>
+        </header>
+        {children}
+      </div>
+      <nav className="tabbar" aria-label="Main">
+        {TABS.map((t) => (
+          <Link key={t.key} href={t.href} aria-current={activeTab(path) === t.key ? "page" : undefined}>
+            <Icon d={t.icon} size={22} />{t.t}
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }

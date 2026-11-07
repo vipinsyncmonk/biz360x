@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { NAV, TABS, activeTab } from "../components/nav";
 import { allocatedTotal, allocationBody, allocationProblem, offsetLabel, pauseReady, receiptReady, recurringState, stepSentence, suggestAllocation, unallocated } from "./receivables";
 
 describe("money", () => {
@@ -386,5 +387,21 @@ describe("empty responses", () => {
     expect(() => unwrapEmpty({ response: new Response(null, { status: 204 }) })).not.toThrow();
     expect(() => unwrapEmpty({ error: { code: "not_found", title: "Not found" }, response: new Response(null, { status: 404 }) })).toThrow(/Not found/);
     expect(() => unwrapEmpty({ response: new Response(null, { status: 500 }) })).toThrow();
+  });
+});
+
+describe("phone tabs", () => {
+  it("highlights the tab a screen belongs to, and More for the rest", () => {
+    expect(activeTab("/")).toBe("today");
+    expect(activeTab("/compliance")).toBe("compliance");
+    expect(activeTab("/compliance/abc")).toBe("compliance");
+    expect(activeTab("/m/copilot")).toBe("copilot");
+    expect(activeTab("/billing/receivables")).toBe("more");
+    expect(activeTab("/more")).toBe("more");
+    expect(activeTab("/m/startup")).toBe("more");
+  });
+  it("every tab leads somewhere", () => {
+    const known = new Set([...NAV.flatMap((g) => g.items.map((i) => i.href)), "/more"]);
+    for (const t of TABS) expect(known.has(t.href)).toBe(true);
   });
 });
