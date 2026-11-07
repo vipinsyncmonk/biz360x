@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, unwrap, unwrapEmpty } from "@/lib/api";
 import { shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
+import { PortalsSection, WebhooksSection } from "@/components/IntegrationsPanels";
 import { AddCertificate, CreateApiKey, GrantAdvisor, InvitePerson } from "@/components/SettingsForms";
 import { ApiKeyRow, CHANNELS, CONN_STATUS, Dsc, EVENTS, GRANT_STATUS, Grant, KIND_LABEL, Member, PORTAL_LABEL, PortalConn, Pref, ROLE_LABEL, SCOPE_LABEL, dscStatus, modulesLabel, permissionLabel, prefBody, prefKey, prefState } from "@/lib/settings";
 import { useSession } from "@/lib/session";
@@ -17,7 +18,6 @@ export default function Settings() {
   const members = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/members", { params: { path: { entityId: id! } } })).data as unknown as Member[], id);
   const grants = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/advisor-grants", { params: { path: { entityId: id! } } })).data as unknown as Grant[], id);
   const dsc = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/dsc-certificates", { params: { path: { entityId: id! } } })).data as unknown as Dsc[], id);
-  const portals = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/portal-connections", { params: { path: { entityId: id! } } })).data as unknown as PortalConn[], id);
   const prefs = useLoad(async () => unwrap(await api.GET("/me/notification-preferences")) as unknown as Pref[], id);
   const keys = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/api-keys", { params: { path: { entityId: id! } } })).data as unknown as ApiKeyRow[], id);
   const audit = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/audit-log/verify", { params: { path: { entityId: id! } } })) as unknown as Verify, id);
@@ -129,21 +129,7 @@ export default function Settings() {
             })}
           </section>
 
-          <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <h2 style={{ margin: 0 }}>Connected portals</h2>
-            <span className="t13">Credentials are never stored in plain text. Sessions that need an OTP ask the owner to renew.</span>
-            <ErrorNote error={portals.error} />
-            {!portals.loading && (portals.data ?? []).length === 0 && <span className="t13">No portal is connected.</span>}
-            {(portals.data ?? []).map((c) => {
-              const st = CONN_STATUS[c.status] ?? { label: c.status, tone: "prep" as const };
-              return (
-                <div key={c.id} style={{ borderTop: "1px solid var(--line-2)", paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 }}>
-                  <span>{PORTAL_LABEL[c.portal] ?? c.portal}<span className="t13" style={{ display: "block" }}>{c.last_sync_at ? `Last synced ${shortDate(c.last_sync_at)}` : "Not synced yet"}{c.last_error ? ` · ${c.last_error}` : ""}</span></span>
-                  <Pill tone={st.tone}>{st.label}</Pill>
-                </div>
-              );
-            })}
-          </section>
+          <PortalsSection entityId={id!} />
           <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><h2 style={{ margin: 0 }}>API keys</h2><button type="button" className="btn" onClick={() => { setPanel(panel === "key" ? null : "key"); setNewKey(null); }}>+ Create key</button></div>
             <span className="t13">For connecting other software. A key acts as its own named user and can never approve, file or pay.</span>
@@ -164,6 +150,7 @@ export default function Settings() {
               </div>
             ))}
           </section>
+          <WebhooksSection entityId={id!} />
         </div>
 
         <aside className="col-side">

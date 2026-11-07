@@ -47,8 +47,9 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/legal` | Legal & Contracts: register ordered by urgency, key terms and alerts for the selected contract, out for signature, templates |
 | `src/app/(app)/documents` | Document vault: folder and full-text search, expiring soon, advisor requests. Upload comes later |
 | `src/lib/legal.ts` | Contract dates and urgency, file and expiry labels. Unit-tested |
-| `src/app/(app)/settings` | Settings: people (invite, remove), advisors (grant, revoke), signature certificates (record), API keys (create, revoke; the key is shown once), connected portals, notification choices (saved per person), audit-chain check |
+| `src/app/(app)/settings` | Settings: people (invite, remove), advisors (grant, revoke), signature certificates (record), API keys (create, revoke; the key is shown once), portals (connect, OTP renewal), webhooks, notification choices (saved per person), audit-chain check |
 | `src/app/(app)/group` | Group view for firms: clients × authorities grid, filters, open items per client, team load |
+| `src/components/IntegrationsPanels.tsx` | Portal connections (connect, renew with the OTP flow, disconnect) and webhooks (add, pause, test, deliveries, delete) |
 | `src/components/SettingsForms.tsx` | The invite, advisor, certificate and API key forms |
 | `src/lib/settings.ts` | Form rules, notification matrix, certificate status, grid ordering. Unit-tested |
 | `src/app/(app)/m/[slug]` | Placeholder for screens that are not built yet |
