@@ -184,3 +184,21 @@ def test_the_sales_summary(client, db):
     assert narrow["invoiced"] == "0.00" and narrow["collected"] == "0.00" and narrow["outstanding"] == "13700.00"       # outstanding is as of today
     assert client.get(url("/sales/summary"), headers=h, params={"from": "2026-05-02", "to": "2026-05-01"}).status_code == 400
     assert client.get(url("/sales/summary", EB2), headers=h).status_code == 404
+
+
+# ------------------------------------------------------------------ finance summary
+def test_the_finance_summary(client):
+    h = login(client, OWNER)
+    fy_start = dt.date(TODAY.year if TODAY.month >= 4 else TODAY.year - 1, 4, 1)
+    revenue = D("10000.00") + (D("5000.00") if TODAY - dt.timedelta(days=60) >= fy_start else D(0))
+    s = client.get(url("/finance/summary"), headers=h).json()
+    assert s["revenue"] == f"{revenue:.2f}" and s["gross_margin_pct"] == 100.0           # no purchases posted
+    assert s["receivables"] == "13700.00" and s["receivables_overdue"] == "5900.00"
+    assert s["cash_in_bank"] == "4000.00" and s["cash_change"] == "4000.00"              # the UPI receipt, banked
+    assert s["net_burn"] is None and s["runway_months"] is None                           # cash grew, so there is no burn
+    tomorrow = (TODAY + dt.timedelta(days=1)).isoformat()
+    quiet = client.get(url("/finance/summary"), headers=h, params={"from": tomorrow, "to": tomorrow}).json()
+    assert quiet["revenue"] == "0.00" and quiet["cash_change"] == "0.00" and quiet["gross_margin_pct"] == 0.0
+    assert client.get(url("/finance/summary"), headers=h, params={"from": "2026-05-02", "to": "2026-05-01"}).status_code == 400
+    assert client.get(url("/finance/summary", EB2), headers=h).status_code == 404
+    assert client.get(url("/finance/summary"), headers=login(client, VIEWER)).status_code == 200
