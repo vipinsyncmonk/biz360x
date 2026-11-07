@@ -4,6 +4,7 @@ import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from ".
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
 import { orderMethods, overdueLabel, pageState, queryReady } from "./pay";
+import { blankDsc, blankGrant, blankInvite, dscBody, dscReady, emailOk, grantBody, grantReady, inviteBody, inviteReady, keyPermissions, keyReady, permissionLabel, scopesBody } from "./settings";
 import { NAV, TABS, activeTab } from "../components/nav";
 import { allocatedTotal, allocationBody, allocationProblem, offsetLabel, pauseReady, receiptReady, recurringState, stepSentence, suggestAllocation, unallocated } from "./receivables";
 
@@ -425,5 +426,42 @@ describe("customer payment page", () => {
     expect(queryReady({ email: "a@b.in", message: "Wrong GSTIN" })).toBe(true);
     expect(queryReady({ email: "a@b", message: "x" })).toBe(false);
     expect(queryReady({ email: "a@b.in", message: "   " })).toBe(false);
+  });
+});
+
+describe("settings write actions", () => {
+  it("checks an email loosely and the invite fully", () => {
+    expect(emailOk("a@b.in")).toBe(true);
+    expect(emailOk("a b@c.in")).toBe(false);
+    expect(inviteReady({ ...blankInvite(), email: "x@y.in" })).toBe(true);
+    expect(inviteReady({ ...blankInvite(), email: "x" })).toBe(false);
+  });
+  it("sends every module when none is ticked", () => {
+    expect(inviteBody({ ...blankInvite(), email: " x@y.in ", name: " Nina " })).toEqual({ email: "x@y.in", role: "maker", modules: ["*"], full_name: "Nina" });
+    expect(inviteBody({ ...blankInvite(), email: "x@y.in", modules: ["gst"] }).modules).toEqual(["gst"]);
+  });
+  it("needs a name, at least one scope and a future end date for an advisor", () => {
+    const g = { ...blankGrant(), name: "Rao and Co", levels: { gst: "prepare", finance: "" } };
+    expect(scopesBody(g.levels)).toEqual({ gst: "prepare" });
+    expect(grantReady(g, "2026-11-07")).toBe(true);
+    expect(grantReady({ ...g, expires: "2026-11-07" }, "2026-11-07")).toBe(false);
+    expect(grantReady({ ...g, expires: "2026-12-01" }, "2026-11-07")).toBe(true);
+    expect(grantReady({ ...g, levels: { gst: "" } }, "2026-11-07")).toBe(false);
+    expect(grantReady({ ...g, email: "nope" }, "2026-11-07")).toBe(false);
+    expect(grantBody({ ...g, email: "ca@rao.in", expires: "2026-12-01" })).toEqual({ advisor_name: "Rao and Co", advisor_kind: "chartered_accountant", scopes: { gst: "prepare" }, invite_email: "ca@rao.in", expires_on: "2026-12-01" });
+  });
+  it("needs dates in order and a serial for a certificate", () => {
+    const d = { ...blankDsc(), person: "Director", serial: "5A3F", from: "2026-01-01", until: "2028-01-01" };
+    expect(dscReady(d)).toBe(true);
+    expect(dscReady({ ...d, until: "2026-01-01" })).toBe(false);
+    expect(dscReady({ ...d, serial: "5A" })).toBe(false);
+    expect(dscBody(d)).toMatchObject({ person_name: "Director", valid_until: "2028-01-01", serial: "5A3F", registered_on: [] });
+  });
+  it("turns access choices into key permissions and never offers approve, file or pay", () => {
+    expect(keyPermissions({ sales: "write", gst: "read", payroll: "" })).toEqual(["gst:read", "sales:read", "sales:write"]);
+    expect(keyReady("Zapier", { sales: "read" })).toBe(true);
+    expect(keyReady("", { sales: "read" })).toBe(false);
+    expect(keyReady("Zapier", {})).toBe(false);
+    expect(permissionLabel(["sales:read", "sales:write", "gst:read"])).toBe("Sales & billing read/write, GST read");
   });
 });

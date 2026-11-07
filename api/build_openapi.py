@@ -335,7 +335,9 @@ action(E + "/facts", "Entities", "recordFacts", "Record facts (each is a new, da
        body=ARR(ref("Fact")), resp=ARR(ref("Fact")), status="201",
        desc="A changed fact triggers an engine run when it can switch an obligation on or off.")
 schema("DscCertificate", {"id": RO_UUID, "person_name": S(), "dsc_class": S(), "valid_from": DATE, "valid_until": DATE,
-                          "registered_on": ARR(ENUM("MCA", "GSTN", "ITD"))}, required=("person_name", "valid_from", "valid_until"))
+                          "registered_on": ARR(ENUM("MCA", "GSTN", "ITD")),
+                          "serial": S(writeOnly=True, description="The certificate serial as printed by the token software; only its hash is stored. Required when adding.")},
+                   required=("person_name", "valid_from", "valid_until"))
 collection(E + "/dsc-certificates", "Entities", "DscCertificate", "settings")
 
 # =================================================================== COMPLIANCE ENGINE

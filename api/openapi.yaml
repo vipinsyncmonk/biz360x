@@ -11467,6 +11467,10 @@ components:
             - MCA
             - GSTN
             - ITD
+        serial:
+          type: string
+          writeOnly: true
+          description: The certificate serial as printed by the token software; only its hash is stored. Required when adding.
       required:
       - person_name
       - valid_from

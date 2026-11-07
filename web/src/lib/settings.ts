@@ -71,3 +71,56 @@ export function byTrouble(rows: Standing[]): Standing[] {
   const rank = (r: Standing) => (Object.values(r.cells).includes("overdue") ? 0 : Object.values(r.cells).includes("client") ? 1 : 2);
   return [...rows].sort((a, b) => rank(a) - rank(b) || a.legal_name.localeCompare(b.legal_name));
 }
+
+// ---- write actions: invite, advisors, certificates, API keys. The server decides who may do what; these only stop useless calls.
+export const MODULES: Array<[string, string]> = [
+  ["sales", "Sales & billing"], ["purchases", "Purchases"], ["finance", "Finance & books"], ["gst", "GST"], ["tds", "TDS"],
+  ["payroll", "Payroll & HR"], ["legal", "Legal & contracts"], ["documents", "Documents"], ["compliance", "Compliance"],
+];
+export const ROLES: Array<[string, string, string]> = [
+  ["owner", "Owner", "Everything, including people and settings"],
+  ["approver", "Approver", "Prepare, approve, file and pay"],
+  ["maker", "Preparer", "Prepare work; cannot approve"],
+  ["viewer", "Viewer", "Read only"],
+];
+export const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+
+export interface InviteForm { email: string; name: string; role: string; modules: string[] }
+export const blankInvite = (): InviteForm => ({ email: "", name: "", role: "maker", modules: [] });
+export const inviteReady = (f: InviteForm) => emailOk(f.email) && ROLES.some(([r]) => r === f.role);
+/** No module ticked means every module. */
+export const inviteBody = (f: InviteForm) => ({ email: f.email.trim(), role: f.role, modules: f.modules.length ? f.modules : ["*"], ...(f.name.trim() ? { full_name: f.name.trim() } : {}) });
+
+export const LEVELS: Array<[string, string]> = [["read", "View"], ["comment", "Comment"], ["prepare", "Prepare"], ["certify", "Certify"]];
+export interface GrantForm { name: string; kind: string; email: string; levels: Record<string, string>; expires: string }
+export const blankGrant = (): GrantForm => ({ name: "", kind: "chartered_accountant", email: "", levels: {}, expires: "" });
+export const scopesBody = (levels: Record<string, string>) => Object.fromEntries(Object.entries(levels).filter(([, v]) => v));
+export function grantReady(f: GrantForm, today: string): boolean {
+  return f.name.trim().length > 0 && Object.keys(scopesBody(f.levels)).length > 0 && (f.email.trim() === "" || emailOk(f.email)) && (f.expires === "" || f.expires > today);
+}
+export const grantBody = (f: GrantForm) => ({
+  advisor_name: f.name.trim(), advisor_kind: f.kind, scopes: scopesBody(f.levels),
+  ...(f.email.trim() ? { invite_email: f.email.trim() } : {}), ...(f.expires ? { expires_on: f.expires } : {}),
+});
+
+export const PORTALS_FOR_DSC: Array<[string, string]> = [["MCA", "MCA"], ["GSTN", "GST portal"], ["ITD", "Income tax"]];
+export interface DscForm { person: string; cls: string; from: string; until: string; on: string[]; serial: string }
+export const blankDsc = (): DscForm => ({ person: "", cls: "class3", from: "", until: "", on: [], serial: "" });
+export const dscReady = (f: DscForm) => f.person.trim().length > 0 && f.serial.trim().length >= 4 && !!f.from && !!f.until && f.until > f.from;
+export const dscBody = (f: DscForm) => ({ person_name: f.person.trim(), dsc_class: f.cls, valid_from: f.from, valid_until: f.until, registered_on: f.on, serial: f.serial.trim() });
+
+export interface ApiKeyRow { id: string; name: string; prefix: string; permissions: string[]; last_used_at: string | null; expires_at: string | null; revoked_at: string | null; created_at: string }
+/** "read" gives module:read; "write" gives module:read and module:write. Approving, filing and paying are never available to a key. */
+export function keyPermissions(access: Record<string, string>): string[] {
+  const out: string[] = [];
+  for (const [m, a] of Object.entries(access)) {
+    if (a === "read" || a === "write") out.push(`${m}:read`);
+    if (a === "write") out.push(`${m}:write`);
+  }
+  return out.sort();
+}
+export const keyReady = (name: string, access: Record<string, string>) => name.trim().length > 0 && keyPermissions(access).length > 0;
+export const permissionLabel = (p: string[]) => {
+  const mods = [...new Set(p.map((x) => x.split(":")[0]!))];
+  return mods.map((m) => `${(MODULES.find(([k]) => k === m)?.[1] ?? m)} ${p.includes(`${m}:write`) ? "read/write" : "read"}`).join(", ");
+};

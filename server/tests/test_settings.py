@@ -126,3 +126,79 @@ def test_the_grid_and_workload_are_for_the_firms_own_people(client):
         assert client.get(f"/v1/organizations/{ORG}/workload", headers=h).status_code == 404
     load = client.get(f"/v1/organizations/{ORG}/workload", headers=login(client, STAFF)).json()
     assert {x["name"]: x["filings_due"] for x in load} == {"Sam Staff": 2, "Priya Partner": 0}                              # the overdue one and the one due in 3 days
+
+
+# ------------------------------------------------------------------ writes
+def test_inviting_and_removing_people(client, db):
+    h = login(client, PARTNER)
+    url = f"/v1/entities/{E1}/members"
+    r = client.post(url, headers=h, json={"email": "New.Person@Example.in", "full_name": "Nina New", "role": "maker", "modules": ["gst", "finance"]})
+    assert r.status_code == 201, r.text
+    m = r.json()
+    assert m["email"] == "new.person@example.in" and m["full_name"] == "Nina New" and m["role"] == "maker" and m["modules"] == ["finance", "gst"]
+    assert m["accepted_at"] is None and m["auth"] == "One-time code"
+    assert m["email"] in {x["email"] for x in client.get(url, headers=h).json()["data"]}
+    assert client.post(url, headers=h, json={"email": "new.person@example.in", "role": "viewer"}).json()["code"] == "conflict"        # already a member
+    assert client.post(url, headers=h, json={"email": PARTNER, "role": "viewer"}).status_code == 409
+    assert client.post(url, headers=h, json={"email": "not-an-email", "role": "viewer"}).status_code == 400
+    assert client.post(url, headers=h, json={"email": "x@example.in", "role": "boss"}).status_code == 400
+    assert client.post(url, headers=h, json={"email": "x@example.in", "role": "viewer", "modules": ["Bad Name"]}).status_code == 400
+    assert client.post(url, headers=login(client, VIEWER), json={"email": "y@example.in", "role": "viewer"}).json()["code"] == "permission_denied"
+    assert client.post(url, headers=login(client, STRANGER), json={"email": "y@example.in", "role": "viewer"}).status_code == 404
+
+    assert client.delete(f"{url}/{m['id']}", headers=login(client, VIEWER)).status_code == 403
+    assert client.delete(f"{url}/{m['id']}", headers=h).status_code == 204
+    assert m["email"] not in {x["email"] for x in client.get(url, headers=h).json()["data"]}
+    assert client.delete(f"{url}/{m['id']}", headers=h).status_code == 404                                                        # already gone
+    again = client.post(url, headers=h, json={"email": m["email"], "role": "viewer"})                                              # a returning person is re-invited
+    assert again.status_code == 201 and again.json()["id"] == m["id"] and again.json()["role"] == "viewer"
+
+    me = next(x for x in client.get(url, headers=h).json()["data"] if x["email"] == PARTNER)
+    own = client.delete(f"{url}/{me['id']}", headers=h)
+    assert own.status_code == 409 and own.json()["code"] == "conflict"                                                             # not your own access
+    assert db.execute("SELECT count(*) AS n FROM audit_log WHERE entity_id = %s AND action IN ('member.invited', 'member.removed')", (E1,)).fetchone()["n"] == 3
+
+
+def test_granting_and_revoking_an_advisor(client):
+    h = login(client, PARTNER)
+    url = f"/v1/entities/{E1}/advisor-grants"
+    ok = client.post(url, headers=h, json={"advisor_name": "Rao and Associates", "advisor_kind": "chartered_accountant", "invite_email": "ca@rao.in",
+                                           "scopes": {"gst": "prepare", "finance": "read"}, "expires_on": (TODAY + dt.timedelta(days=90)).isoformat()})
+    assert ok.status_code == 201, ok.text
+    g = ok.json()
+    assert g["status"] == "invited" and g["scopes"] == {"gst": "prepare", "finance": "read"} and g["expires_on"] == (TODAY + dt.timedelta(days=90)).isoformat()
+    assert g["id"] in {x["id"] for x in client.get(url, headers=h).json()["data"]}
+    bad = lambda **kw: client.post(url, headers=h, json={"advisor_name": "X", "advisor_kind": "auditor", "scopes": {"gst": "read"}, **kw})
+    assert bad(scopes={}).status_code == 400
+    assert bad(scopes={"gst": "own"}).status_code == 400
+    assert bad(scopes={"GST!": "read"}).status_code == 400
+    assert bad(advisor_kind="plumber").status_code == 400
+    assert bad(expires_on=TODAY.isoformat()).status_code == 400
+    assert client.post(url, headers=login(client, VIEWER), json={"advisor_name": "X", "advisor_kind": "auditor", "scopes": {"gst": "read"}}).status_code == 403
+
+    assert client.delete(f"{url}/{g['id']}", headers=login(client, VIEWER)).status_code == 403
+    assert client.delete(f"{url}/{g['id']}", headers=h).status_code == 204
+    assert next(x for x in client.get(url, headers=h).json()["data"] if x["id"] == g["id"])["status"] == "revoked"
+    assert client.delete(f"{url}/{uuid.uuid4()}", headers=h).status_code == 404
+    assert client.delete(f"/v1/entities/{E3}/advisor-grants/{g['id']}", headers=h).status_code == 404
+
+
+def test_recording_a_certificate(client, db):
+    h = login(client, PARTNER)
+    url = f"/v1/entities/{E1}/dsc-certificates"
+    body = {"person_name": "Director One", "valid_from": (TODAY - dt.timedelta(days=30)).isoformat(), "valid_until": (TODAY + dt.timedelta(days=700)).isoformat(),
+            "registered_on": ["MCA"], "serial": "5A3F9C01"}
+    ok = client.post(url, headers=h, json=body)
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["person_name"] == "Director One" and ok.json()["dsc_class"] == "class3" and "serial" not in ok.json()
+    assert db.execute("SELECT count(*) AS n FROM persons WHERE entity_id = %s AND full_name = 'Director One'", (E1,)).fetchone()["n"] == 1      # the existing person is reused
+    assert db.execute("SELECT serial_hash FROM dsc_certificates WHERE id = %s", (ok.json()["id"],)).fetchone()["serial_hash"] != "5A3F9C01"       # only a hash is kept
+    assert client.post(url, headers=h, json=body).json()["code"] == "conflict"                                                                  # same serial twice
+    new = client.post(url, headers=h, json={**body, "person_name": "Cfo Two", "serial": "77AA1234"})
+    assert new.status_code == 201
+    assert db.execute("SELECT count(*) AS n FROM persons WHERE entity_id = %s AND full_name = 'Cfo Two'", (E1,)).fetchone()["n"] == 1
+    assert client.post(url, headers=h, json={**body, "serial": "BB00", "valid_until": body["valid_from"]}).status_code == 400
+    assert client.post(url, headers=h, json={**body, "serial": "BB11", "registered_on": ["RBI"]}).status_code == 400
+    assert client.post(url, headers=h, json={k: v for k, v in body.items() if k != "serial"}).status_code == 400
+    assert client.post(url, headers=login(client, VIEWER), json={**body, "serial": "CC22CC22"}).status_code == 403
+    assert len(client.get(url, headers=h).json()["data"]) == 3
