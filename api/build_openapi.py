@@ -974,6 +974,7 @@ action(E + "/copilot/actions/{id}/request-approval", "Copilot", "requestCopilotA
 # =================================================================== GROUP / ORGANIZATIONS
 tag("Organizations", "Organisation-level views for business groups and CA / CS firms")
 schema("EntityStanding", {"entity_id": UUID, "legal_name": S(), "constitution": S(), "owner_staff": NULLABLE(S()),
+                          "waiting_filings": I(description="Open filings that wait on the client, whatever the cell colour says"),
                           "cells": {"type": "object", "additionalProperties": ENUM("clear", "due", "client", "overdue", "na"),
                                     "examples": [{"MCA": "client", "GST": "due", "TDS": "client", "EPFO_ESIC": "due", "INCOME_TAX": "clear"}]},
                           "open_items": ARR(schema("OpenItem", {"title": S(), "detail": S(), "due_on": DATE}))})
@@ -983,7 +984,12 @@ _op("get", "/organizations/{id}/entities", "Organizations", "listOrganizationEnt
 schema("StaffLoad", {"user_id": UUID, "name": S(), "filings_due": I()})
 _op("get", "/organizations/{id}/workload", "Organizations", "getStaffWorkload", "Filings assigned per staff member this week", resp=ARR(ref("StaffLoad")))
 action("/organizations/{id}/client-reminders", "Organizations", "chaseClients", "Send document / approval reminders to clients that are blocking filings",
-       None, body=schema("ChaseClients", {"entity_ids": ARR(UUID)}), status="202", idem=True)
+       None, body=schema("ChaseClients", {"entity_ids": ARR(UUID, maxItems=200, description="Leave out to chase every client that has filings waiting on them.")}),
+       resp=schema("ChaseResult", {
+           "reminded": ARR(schema("ChaseReminded", {"entity_id": UUID, "legal_name": S(), "items": I(), "recipients": I()})),
+           "skipped": ARR(schema("ChaseSkipped", {"entity_id": UUID, "legal_name": S(), "reason": ENUM("nothing_waiting", "no_client_contact", "reminded_recently")}))}),
+       status="202", idem=True,
+       desc="Queues one email reminder per client owner. Reminders go to the client's own owners, never to the firm's staff. A client reminded in the last 24 hours is skipped.")
 
 # =================================================================== EVENTS, WEBHOOKS, AUDIT
 tag("Events & webhooks", "Server-sent events for the UI and signed webhooks for integrations")

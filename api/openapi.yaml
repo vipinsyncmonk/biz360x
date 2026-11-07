@@ -9648,6 +9648,8 @@ paths:
       - Organizations
       operationId: chaseClients
       summary: Send document / approval reminders to clients that are blocking filings
+      description: Queues one email reminder per client owner. Reminders go to the client's own owners, never to the firm's
+        staff. A client reminded in the last 24 hours is skipped.
       parameters:
       - $ref: '#/components/parameters/Id'
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -16626,6 +16628,9 @@ components:
           oneOf:
           - type: string
           - type: 'null'
+        waiting_filings:
+          type: integer
+          description: Open filings that wait on the client, whatever the cell colour says
         cells:
           type: object
           additionalProperties:
@@ -16692,6 +16697,45 @@ components:
           items:
             type: string
             format: uuid
+          maxItems: 200
+          description: Leave out to chase every client that has filings waiting on them.
+    ChaseReminded:
+      type: object
+      properties:
+        entity_id:
+          type: string
+          format: uuid
+        legal_name:
+          type: string
+        items:
+          type: integer
+        recipients:
+          type: integer
+    ChaseSkipped:
+      type: object
+      properties:
+        entity_id:
+          type: string
+          format: uuid
+        legal_name:
+          type: string
+        reason:
+          type: string
+          enum:
+          - nothing_waiting
+          - no_client_contact
+          - reminded_recently
+    ChaseResult:
+      type: object
+      properties:
+        reminded:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChaseReminded'
+        skipped:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChaseSkipped'
     Event:
       type: object
       properties:

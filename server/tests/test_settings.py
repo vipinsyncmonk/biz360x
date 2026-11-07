@@ -110,6 +110,7 @@ def test_the_client_grid_for_a_firm(client):
     a = by["Alpha Client Pvt Ltd"]
     assert a["cells"]["GST"] == "client" and a["cells"]["MCA"] == "overdue" and a["cells"]["TDS"] == "na" and a["owner_staff"] == "Sam Staff"
     assert [i["title"] for i in a["open_items"]] and a["open_items"][0]["due_on"] < a["open_items"][1]["due_on"]            # earliest first
+    assert a["waiting_filings"] == 1 and by["Beta Client Pvt Ltd"]["waiting_filings"] == 0
     assert by["Beta Client Pvt Ltd"]["cells"]["GST"] == "clear" and by["Beta Client Pvt Ltd"]["open_items"] == []
     waiting = client.get(f"/v1/organizations/{ORG}/entities?filter=waiting_on_client", headers=h).json()["data"]
     assert [r["legal_name"] for r in waiting] == ["Alpha Client Pvt Ltd"]
@@ -202,3 +203,40 @@ def test_recording_a_certificate(client, db):
     assert client.post(url, headers=h, json={k: v for k, v in body.items() if k != "serial"}).status_code == 400
     assert client.post(url, headers=login(client, VIEWER), json={**body, "serial": "CC22CC22"}).status_code == 403
     assert len(client.get(url, headers=h).json()["data"]) == 3
+
+
+def test_chasing_clients_reminds_their_owners_not_the_firm(client, db):
+    h, url = login(client, PARTNER), f"/v1/organizations/{ORG}/client-reminders"
+    key = lambda: {**h, "Idempotency-Key": str(uuid.uuid4())}      # noqa: E731
+    assert client.post(url, headers=h, json={}).status_code == 400                                      # a key is required
+    first = client.post(url, headers=key(), json={})
+    assert first.status_code == 202, first.text
+    assert [s["reason"] for s in first.json()["skipped"] if s["entity_id"] == E1] == ["no_client_contact"]   # only the firm's own people are on it
+    assert first.json()["reminded"] == []
+
+    owner = uuid.uuid4()
+    db.execute("INSERT INTO users (id, email, full_name) VALUES (%s, 'st-client-owner@example.in', 'Client Owner')", (owner,))
+    db.execute("INSERT INTO memberships (entity_id, user_id, role, accepted_at) VALUES (%s, %s, 'owner', now())", (E1, owner))
+    try:
+        k = key()
+        ok = client.post(url, headers=k, json={"entity_ids": [E1, E2]})
+        assert ok.status_code == 202, ok.text
+        assert ok.json()["reminded"] == [{"entity_id": E1, "legal_name": "Alpha Client Pvt Ltd", "items": 1, "recipients": 1}]
+        assert ok.json()["skipped"] == [{"entity_id": E2, "legal_name": "Beta Client Pvt Ltd", "reason": "nothing_waiting"}]
+        rows = db.execute("SELECT user_id, event_type, channel, status FROM notifications WHERE entity_id = %s", (E1,)).fetchall()
+        assert [(str(r["user_id"]), r["event_type"], r["channel"], r["status"]) for r in rows] == [(str(owner), "client_reminder", "email", "queued")]
+        assert db.execute("SELECT count(*) AS n FROM audit_log WHERE entity_id = %s AND action = 'client_reminder.queued'", (E1,)).fetchone()["n"] == 1
+
+        assert client.post(url, headers=k, json={"entity_ids": [E1, E2]}).json() == ok.json()          # the same key replays the answer
+        assert db.execute("SELECT count(*) AS n FROM notifications WHERE entity_id = %s", (E1,)).fetchone()["n"] == 1
+        again = client.post(url, headers=key(), json={})                                                # pressing it again does not nag
+        assert [s["reason"] for s in again.json()["skipped"] if s["entity_id"] == E1] == ["reminded_recently"]
+        assert db.execute("SELECT count(*) AS n FROM notifications WHERE entity_id = %s", (E1,)).fetchone()["n"] == 1
+
+        assert client.post(url, headers=key(), json={"entity_ids": [E3]}).status_code == 400           # another firm's client
+        assert client.post(url, headers=login(client, STRANGER), json={}).status_code in (400, 404)
+        assert client.post(url, headers={**login(client, STRANGER), "Idempotency-Key": str(uuid.uuid4())}, json={}).status_code == 404
+    finally:
+        db.execute("DELETE FROM notifications WHERE entity_id = %s", (E1,))
+        db.execute("DELETE FROM memberships WHERE user_id = %s", (owner,))
+        db.execute("DELETE FROM users WHERE id = %s", (owner,))

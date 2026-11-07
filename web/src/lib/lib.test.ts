@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { SKIP_REASON, addClientHref, chaseLabel, chaseSummary, chaseTargets, orgFromSearch } from "./group";
 import { badEmails, blankRoom, expiryNote, parseEmails, roomBody, roomForm, roomProblem, viewerNote } from "./rooms";
 import { AUTHORITY_LABEL, blankNotice, canDraft, deskTotals, noticeBody, noticeMoves, noticeProblem, replyState } from "./notices";
 import { MAX_UPLOAD_BYTES, editBody, editProblem, mimeOf, registerBody, sameOriginUrl, sha256Hex, shareable, titleFromFile, toHex, uploadProblem } from "./vault";
@@ -273,7 +274,7 @@ describe("legal helpers", () => {
 import { byTrouble, dscStatus, groupCounts, modulesLabel, prefBody, prefKey, prefState, type Standing } from "./settings";
 
 describe("settings and group helpers", () => {
-  const s = (name: string, cells: Record<string, string>): Standing => ({ entity_id: name, legal_name: name, constitution: "private_limited", owner_staff: null, cells, open_items: [] });
+  const s = (name: string, cells: Record<string, string>): Standing => ({ entity_id: name, legal_name: name, constitution: "private_limited", owner_staff: null, waiting_filings: Object.values(cells).includes("client") ? 1 : 0, cells, open_items: [] });
   it("labels modules and certificates", () => {
     expect(modulesLabel(["*"])).toBe("All modules");
     expect(modulesLabel(["gst", "finance"])).toBe("gst, finance");
@@ -772,5 +773,32 @@ describe("data rooms", () => {
     expect(viewerNote([])).toBe("No viewers yet");
     expect(viewerNote([{ email: "a", last_viewed_at: null }])).toBe("1 viewer, none has opened it");
     expect(viewerNote([{ email: "a", last_viewed_at: "x" }, { email: "b", last_viewed_at: null }])).toBe("2 viewers, 1 has opened it");
+  });
+});
+
+describe("group actions", () => {
+  const row = (id: string, cells: Record<string, string>, waiting = Object.values(cells).includes("client") ? 1 : 0) => ({ entity_id: id, legal_name: id, constitution: "private_limited", owner_staff: null, waiting_filings: waiting, cells, open_items: [] });
+  it("picks the clients to chase", () => {
+    const rows = [row("a", { GST: "client", MCA: "clear" }), row("b", { GST: "overdue" }), row("c", { TDS: "client" }), row("d", { GST: "overdue" }, 2)];   // d: the waiting filing is also late
+    expect(chaseTargets(rows as never)).toEqual(["a", "c", "d"]);
+    expect(chaseTargets([])).toEqual([]);
+    expect(chaseLabel(0)).toBe("No one to chase");
+    expect(chaseLabel(1)).toBe("Chase 1 client");
+    expect(chaseLabel(9)).toBe("Chase 9 clients");
+  });
+  it("sums up a chase", () => {
+    expect(chaseSummary({ reminded: [], skipped: [] })).toBe("No reminders were queued.");
+    expect(chaseSummary({ reminded: [{ entity_id: "a", legal_name: "A", items: 2, recipients: 1 }], skipped: [] })).toBe("Queued reminders for 1 client.");
+    expect(chaseSummary({ reminded: [{ entity_id: "a", legal_name: "A", items: 2, recipients: 1 }, { entity_id: "b", legal_name: "B", items: 1, recipients: 2 }], skipped: [{ entity_id: "c", legal_name: "C", reason: "no_client_contact" }] })).toBe("Queued reminders for 2 clients. 1 skipped.");
+    expect(SKIP_REASON.reminded_recently).toMatch(/24 hours/);
+  });
+  it("hands the firm to the onboarding flow and back", () => {
+    const id = "00000000-0000-0000-0000-000000000600";
+    expect(addClientHref(id)).toBe(`/onboarding?org=${id}`);
+    expect(orgFromSearch(`?org=${id}`)).toBe(id);
+    expect(orgFromSearch("?org=drop table")).toBeNull();
+    expect(orgFromSearch("")).toBeNull();
+    expect(answersBody("L1", "business", [], DEFAULT_ANSWERS, id).organization_id).toBe(id);
+    expect("organization_id" in answersBody("L1", "business", [], DEFAULT_ANSWERS)).toBe(false);
   });
 });

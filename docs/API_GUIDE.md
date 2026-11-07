@@ -129,7 +129,7 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `parties`, `sale
 
 ### CA firm
 
-`GET /organizations/{id}/entities?filter=waiting_on_client` returns the client × authority matrix. `GET /organizations/{id}/workload` returns staff load. `POST /organizations/{id}/client-reminders` chases blocked clients.
+`GET /organizations/{id}/entities?filter=waiting_on_client` returns the client × authority matrix. `GET /organizations/{id}/workload` returns staff load. `POST /organizations/{id}/client-reminders` queues an email reminder to the owners of each blocked client (never to the firm's own staff), skips a client reminded in the last 24 hours, and returns who was reminded and who was skipped and why. A firm adds a client through the same onboarding flow, with `organization_id` set.
 
 ---
 

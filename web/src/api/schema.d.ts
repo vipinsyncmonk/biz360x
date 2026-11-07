@@ -3575,7 +3575,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Send document / approval reminders to clients that are blocking filings */
+        /**
+         * Send document / approval reminders to clients that are blocking filings
+         * @description Queues one email reminder per client owner. Reminders go to the client's own owners, never to the firm's staff. A client reminded in the last 24 hours is skipped.
+         */
         post: operations["chaseClients"];
         delete?: never;
         options?: never;
@@ -6214,6 +6217,8 @@ export interface components {
             legal_name?: string;
             constitution?: string;
             owner_staff?: string | null;
+            /** @description Open filings that wait on the client, whatever the cell colour says */
+            waiting_filings?: number;
             /**
              * @example {
              *       "MCA": "client",
@@ -6247,7 +6252,26 @@ export interface components {
             filings_due?: number;
         };
         ChaseClients: {
+            /** @description Leave out to chase every client that has filings waiting on them. */
             entity_ids?: string[];
+        };
+        ChaseReminded: {
+            /** Format: uuid */
+            entity_id?: string;
+            legal_name?: string;
+            items?: number;
+            recipients?: number;
+        };
+        ChaseSkipped: {
+            /** Format: uuid */
+            entity_id?: string;
+            legal_name?: string;
+            /** @enum {string} */
+            reason?: "nothing_waiting" | "no_client_contact" | "reminded_recently";
+        };
+        ChaseResult: {
+            reminded?: components["schemas"]["ChaseReminded"][];
+            skipped?: components["schemas"]["ChaseSkipped"][];
         };
         Event: {
             id: string;

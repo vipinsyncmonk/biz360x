@@ -9,6 +9,7 @@ import {
   DEFAULT_ANSWERS, HEADCOUNT, LOOKUP_GIVE_UP_MS, LOOKUP_POLL_MS, MSE, TRACK_KEY, TURNOVER, answersBody, hints, identifierKind, isLookupFinished,
   isTrack, normaliseIdentifier, type Answers, type Track,
 } from "@/lib/onboarding";
+import { orgFromSearch } from "@/lib/group";
 import { useSession } from "@/lib/session";
 import { ErrorNote, Logo } from "@/components/ui";
 
@@ -40,17 +41,20 @@ export default function Onboarding() {
   const [error, setError] = useState<unknown>(null);
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
   const keyRef = useRef<{ body: string; key: string } | null>(null);
   const alive = useRef(true);
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => { if (status === "anon") router.replace("/login"); }, [status, router]);
+  // a firm adding a client arrives as /onboarding?org=<its id>; the new company is filed under that firm
+  useEffect(() => { setOrgId(orgFromSearch(window.location.search)); }, []);
   useEffect(() => {
     try { const t = window.sessionStorage.getItem(TRACK_KEY); if (isTrack(t)) setTrack(t); } catch { /* default stays */ }
   }, []);
 
   const gstins = (lookup?.gstins ?? []).filter((g) => picked[g.gstin ?? ""]).map((g) => g.gstin as string);
-  const body = lookup?.id ? answersBody(lookup.id, track, gstins, answers) : null;
+  const body = lookup?.id ? answersBody(lookup.id, track, gstins, answers, orgId) : null;
   const bodyJson = body ? JSON.stringify(body) : null;
 
   // live preview: re-evaluate the rules a moment after the last change on step 3
@@ -113,6 +117,7 @@ export default function Onboarding() {
   }
 
   async function openCommandCenter() {
+    if (orgId) { await reload(); router.push("/group"); return; }   // a firm stays on its group view
     if (created?.entity_id) await reload(created.entity_id);
     router.push("/");
   }
@@ -290,12 +295,12 @@ export default function Onboarding() {
               </section>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button type="button" className="go" style={{ width: "auto", height: 56, padding: "0 28px", fontSize: 17 }} onClick={() => void openCommandCenter()}>Open Command Center</button>
+              <button type="button" className="go" style={{ width: "auto", height: 56, padding: "0 28px", fontSize: 17 }} onClick={() => void openCommandCenter()}>{orgId ? "Back to the group view" : "Open Command Center"}</button>
             </div>
           </>
         )}
 
-        {(me?.entities ?? []).length > 0 && step === 1 && <Link href="/" style={{ fontSize: 14 }}>Back to your workspace</Link>}
+        {(me?.entities ?? []).length > 0 && step === 1 && <Link href={orgId ? "/group" : "/"} style={{ fontSize: 14 }}>{orgId ? "Back to the group view" : "Back to your workspace"}</Link>}
       </main>
     </div>
   );

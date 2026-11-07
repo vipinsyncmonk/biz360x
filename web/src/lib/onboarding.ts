@@ -38,8 +38,8 @@ export const hints = {
 };
 
 /** The request body shared by the preview and the create call. */
-export function answersBody(lookupId: string, track: Track, gstins: string[], a: Answers) {
-  return { lookup_id: lookupId, track, gstins, headcount_band: a.headcount, turnover_band: a.turnover, has_foreign_shareholder: a.foreign, buys_from_mse: a.mse };
+export function answersBody(lookupId: string, track: Track, gstins: string[], a: Answers, organizationId?: string | null) {
+  return { lookup_id: lookupId, ...(organizationId ? { organization_id: organizationId } : {}), track, gstins, headcount_band: a.headcount, turnover_band: a.turnover, has_foreign_shareholder: a.foreign, buys_from_mse: a.mse };
 }
 
 export const LOOKUP_POLL_MS = 1000;

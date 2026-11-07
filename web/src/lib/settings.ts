@@ -7,7 +7,7 @@ export interface Grant { id: string; advisor_name: string; advisor_kind: string;
 export interface Dsc { id: string; person_name: string; dsc_class: string; valid_from: string; valid_until: string; registered_on: string[] }
 export interface PortalConn { id: string; portal: string; via: string; status: string; session_expires_at: string | null; last_sync_at: string | null; last_error: string | null }
 export interface Pref { entity_id: string; event_type: string; channel: string; enabled: boolean }
-export interface Standing { entity_id: string; legal_name: string; constitution: string; owner_staff: string | null; cells: Record<string, string>; open_items: Array<{ title: string; detail: string; due_on: string }> }
+export interface Standing { entity_id: string; legal_name: string; constitution: string; owner_staff: string | null; waiting_filings: number; cells: Record<string, string>; open_items: Array<{ title: string; detail: string; due_on: string }> }
 export interface StaffLoad { user_id: string; name: string; filings_due: number }
 
 export const ROLE_LABEL: Record<string, string> = { owner: "Owner", approver: "Approver", maker: "Preparer", viewer: "Viewer" };
@@ -63,7 +63,7 @@ export const CELL_LABEL: Record<string, { label: string; tone: Tone | "none" }> 
 
 export function groupCounts(rows: Standing[]): { clients: number; waiting: number; overdue: number } {
   const has = (r: Standing, s: string) => Object.values(r.cells).includes(s);
-  return { clients: rows.length, waiting: rows.filter((r) => has(r, "client")).length, overdue: rows.filter((r) => has(r, "overdue")).length };
+  return { clients: rows.length, waiting: rows.filter((r) => r.waiting_filings > 0).length, overdue: rows.filter((r) => has(r, "overdue")).length };
 }
 
 /** Anything overdue first, then waiting on the client, then by name. */

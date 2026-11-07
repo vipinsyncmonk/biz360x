@@ -8,10 +8,10 @@ import re
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, Header, Query, Response
 from pydantic import BaseModel, Field
 
-from .core import ApiError, Auth, Principal, audit, require, tx
+from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, require, tx
 from .routes_orders import js, offset_of, page
 
 router = APIRouter()
@@ -278,13 +278,14 @@ def organization_entities(org_id: uuid.UUID, p: Principal = Auth, filter: Litera
         open_ = sorted((r for r in rows if r["status"] not in ("filed", "not_applicable", "waived")), key=lambda r: r["due"])
         owners = [r["owner_user_id"] for r in open_ if r["owner_user_id"]]
         owner = max(set(owners), key=owners.count) if owners else None
-        if filter == "waiting_on_client" and "client" not in cells.values():
+        waiting = sum(1 for r in open_ if r["status"] == "awaiting_client")
+        if filter == "waiting_on_client" and waiting == 0:
             continue
         if filter == "overdue" and "overdue" not in cells.values():
             continue
         if staff and staff not in owners:
             continue
-        out.append({"entity_id": e["id"], "legal_name": e["legal_name"], "constitution": e["constitution"], "owner_staff": names.get(owner), "cells": cells,
+        out.append({"entity_id": e["id"], "legal_name": e["legal_name"], "constitution": e["constitution"], "owner_staff": names.get(owner), "cells": cells, "waiting_filings": waiting,
                     "open_items": [{"title": r["title"], "detail": f"{r['period_label']} · {r['authority_code']}" + (" · waiting on client" if r["status"] == "awaiting_client" else ""),
                                     "due_on": r["due"]} for r in open_[:3]]})
     return page(js(out[off:off + limit + 1]), limit, off)
@@ -300,3 +301,57 @@ def organization_workload(org_id: uuid.UUID, p: Principal = Auth):
                          LEFT JOIN obligations o ON o.owner_user_id = p.user_id AND o.entity_id IN (SELECT id FROM entities WHERE organization_id = %s)
                         GROUP BY p.user_id, p.full_name ORDER BY filings_due DESC, p.full_name""", (WEEK, org_id, org_id))
         return js(cur.fetchall())
+
+
+# ================================================================== chase clients
+class ChaseClients(BaseModel):
+    entity_ids: list[uuid.UUID] | None = Field(default=None, max_length=200)
+
+
+@router.post("/organizations/{org_id}/client-reminders", status_code=202, tags=["Organizations"])
+def chase_clients(org_id: uuid.UUID, body: ChaseClients, p: Principal = Auth, idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
+    """Queue a reminder to each client whose filings wait on them. The reminder goes to the client's own owners, never to the firm's staff,
+    and a client reminded in the last 24 hours is skipped, so pressing the button twice does not nag anyone. Sending is the notification worker's job."""
+    if p.api_key_id:
+        raise ApiError(403, "permission_denied", "An API key cannot send client reminders")
+    with tx(p.user_id) as cur:
+        _member_org(cur, org_id)
+        replay = idempotency_begin(cur, idempotency_key, "POST", f"/organizations/{org_id}/client-reminders", body.model_dump(mode="json"))
+        if replay:
+            return Response(content=json.dumps(replay["body"]), status_code=replay["status"] or 202, media_type="application/json")
+        cur.execute("SELECT id, legal_name FROM entities WHERE organization_id = %s ORDER BY legal_name", (org_id,))
+        entities = {e["id"]: e["legal_name"] for e in cur.fetchall()}
+        wanted = body.entity_ids if body.entity_ids is not None else list(entities)
+        stray = [e for e in wanted if e not in entities]
+        if stray:
+            raise ApiError(400, "validation_failed", "A client is not in this organization", errors=[{"field": "entity_ids", "message": f"{e} is not one of your clients"} for e in stray])
+        reminded, skipped = [], []
+        for eid in dict.fromkeys(wanted):
+            cur.execute("""SELECT r.title, o.period_label, coalesce(o.extended_due_date, o.due_date) AS due
+                             FROM obligations o JOIN compliance_rules r ON r.id = o.rule_id
+                            WHERE o.entity_id = %s AND o.status = 'awaiting_client' ORDER BY 3, r.title""", (eid,))
+            items = js(cur.fetchall())
+            if not items:
+                skipped.append({"entity_id": str(eid), "legal_name": entities[eid], "reason": "nothing_waiting"})
+                continue
+            cur.execute("""SELECT m.user_id FROM memberships m
+                            WHERE m.entity_id = %s AND m.role = 'owner' AND m.revoked_at IS NULL AND m.accepted_at IS NOT NULL
+                              AND NOT EXISTS (SELECT 1 FROM org_members om WHERE om.organization_id = %s AND om.user_id = m.user_id)""", (eid, org_id))
+            users = [r["user_id"] for r in cur.fetchall()]
+            if not users:
+                skipped.append({"entity_id": str(eid), "legal_name": entities[eid], "reason": "no_client_contact"})
+                continue
+            cur.execute("SELECT 1 FROM notifications WHERE entity_id = %s AND event_type = 'client_reminder' AND created_at > now() - interval '24 hours' LIMIT 1", (eid,))
+            if cur.fetchone():
+                skipped.append({"entity_id": str(eid), "legal_name": entities[eid], "reason": "reminded_recently"})
+                continue
+            for u in users:
+                cur.execute("""INSERT INTO notifications (user_id, entity_id, event_type, channel, subject, payload)
+                               VALUES (%s, %s, 'client_reminder', 'email', %s, %s)""",
+                            (u, eid, f"{len(items)} filing{'s' if len(items) != 1 else ''} waiting on you", json.dumps({"items": items}, default=str)))
+            audit(cur, eid, "client_reminder.queued", "entities", eid, after={"items": len(items), "recipients": len(users)})
+            emit(cur, eid, "client_reminder.queued", "entities", eid, {"items": len(items)})
+            reminded.append({"entity_id": str(eid), "legal_name": entities[eid], "items": len(items), "recipients": len(users)})
+        out = {"reminded": reminded, "skipped": skipped}
+        idempotency_finish(cur, idempotency_key, 202, out)
+    return Response(content=json.dumps(out), status_code=202, media_type="application/json")

@@ -1,6 +1,8 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
-import { api, unwrap } from "@/lib/api";
+import { api, newIdempotencyKey, unwrap } from "@/lib/api";
+import { ChaseResult, SKIP_REASON, addClientHref, chaseLabel, chaseSummary, chaseTargets } from "@/lib/group";
 import { shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { CELL_COLUMNS, CELL_LABEL, StaffLoad, Standing, byTrouble, groupCounts } from "@/lib/settings";
@@ -16,6 +18,9 @@ export default function Group() {
   const orgId = org?.id ?? null;
   const [filter, setFilter] = useState<Filter>("all");
   const [picked, setPicked] = useState<string | null>(null);
+  const [chasing, setChasing] = useState(false);
+  const [chaseError, setChaseError] = useState<unknown>(null);
+  const [result, setResult] = useState<ChaseResult | null>(null);
 
   const all = useLoad(async () => unwrap(await api.GET("/organizations/{id}/entities", { params: { path: { id: orgId! }, query: { limit: 200 } } })).data as unknown as Standing[], orgId);
   const shown = useLoad(async () => unwrap(await api.GET("/organizations/{id}/entities", { params: { path: { id: orgId! }, query: { limit: 200, filter } } })).data as unknown as Standing[], orgId ? `${orgId}|${filter}` : null);
@@ -24,15 +29,40 @@ export default function Group() {
   const rows = byTrouble(shown.data ?? []);
   const current = rows.find((r) => r.entity_id === picked) ?? rows[0];
   const counts = groupCounts(all.data ?? []);
+  const targets = chaseTargets(all.data ?? []);
+
+  async function chase() {
+    setChasing(true); setChaseError(null);
+    try {
+      const out = unwrap(await api.POST("/organizations/{id}/client-reminders", { params: { path: { id: orgId! }, header: { "Idempotency-Key": newIdempotencyKey() } }, body: { entity_ids: targets } })) as unknown as ChaseResult;
+      setResult(out);
+    } catch (e) { setChaseError(e); }
+    setChasing(false);
+  }
 
   if (me && !org) return <main className="page"><div className="card empty">The group view is for firms and groups with more than one workspace. Your account has no organization yet.</div></main>;
 
   return (
     <main className="page">
-      <div>
-        <span className="muted" style={{ fontSize: 14 }}>GROUP VIEW · {org?.name}</span>
-        <h1 className="disp" style={{ margin: "6px 0 0", fontSize: 36 }}>{counts.waiting} {counts.waiting === 1 ? "client has" : "clients have"} filings waiting on their input</h1>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div>
+          <span className="muted" style={{ fontSize: 14 }}>GROUP VIEW · {org?.name}</span>
+          <h1 className="disp" style={{ margin: "6px 0 0", fontSize: 36 }}>{counts.waiting} {counts.waiting === 1 ? "client has" : "clients have"} filings waiting on their input</h1>
+        </div>
+        <span style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {orgId && <Link href={addClientHref(orgId)} className="btn">Add client</Link>}
+          <button type="button" className="btn primary" disabled={chasing || targets.length === 0} onClick={() => void chase()}>{chasing ? "Queuing…" : chaseLabel(targets.length)}</button>
+        </span>
       </div>
+      <ErrorNote error={chaseError} />
+      {result && (
+        <section className="card card-pad" role="status" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <b>{chaseSummary(result)}</b>
+          <span className="t13">Reminders go to each client&apos;s own owners by email. They are queued here and sent by the notification service.</span>
+          {result.reminded.map((r) => <div key={r.entity_id} style={{ fontSize: 14 }}>{r.legal_name}<span className="t13"> · {r.items} {r.items === 1 ? "filing" : "filings"} · {r.recipients} {r.recipients === 1 ? "person" : "people"}</span></div>)}
+          {result.skipped.map((r) => <div key={r.entity_id} style={{ fontSize: 14 }}>{r.legal_name}<span className="t13"> · {SKIP_REASON[r.reason] ?? r.reason}</span></div>)}
+        </section>
+      )}
 
       <ErrorNote error={all.error} />
       <section aria-label="Key numbers" className="kpis">
