@@ -32,6 +32,7 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/billing/[id]` | One document: lines, totals, e-invoice state, issue a draft, start a credit note |
 | `src/app/(app)/billing/[id]/credit-note` | Credit note: reason, quantity per item, live preview from the server, save as draft or issue |
 | `src/app/(app)/billing/quotes` | Quotes list with send, new version, accept, mark lost and create invoice from an accepted quote |
+| `src/app/(app)/more` | The phone's More tab: switch entity, every module, account. On screens up to 820px wide the sidebar gives way to a top bar and a bottom tab bar (Today, Compliance, Copilot, More) |
 | `src/app/(app)/billing/receivables` | Collections: ageing by customer, record a receipt with allocation, allocate what is left of an advance, pause reminders, see the reminder sequence, pause or resume recurring invoices |
 | `src/app/(app)/billing/quotes/new` | New quote; totals come from the invoice preview, so quote and invoice tax agree |
 | `src/lib/billing.ts` | Tab queries, status labels, line validation, request bodies. Unit-tested |
@@ -62,4 +63,4 @@ The access token lives in memory; the refresh token is in `sessionStorage` (it s
 
 ## Not built yet
 
-Advisor invites at the end of onboarding, the incorporation checklist for companies that do not exist yet, editing reminder steps, creating recurring invoices, finance, GST, payroll, legal, documents, group view, settings, mobile layouts for Today/Compliance/Copilot/More, and the customer payment page. The design for each is in `design/screens/`.
+Advisor invites at the end of onboarding, the incorporation checklist for companies that do not exist yet, editing reminder steps, creating recurring invoices, finance, GST, payroll, legal, documents, group view, settings, the mobile Copilot screen and the customer payment page. The design for each is in `design/screens/`.
