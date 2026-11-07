@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { badEmails, blankRoom, expiryNote, parseEmails, roomBody, roomForm, roomProblem, viewerNote } from "./rooms";
 import { AUTHORITY_LABEL, blankNotice, canDraft, deskTotals, noticeBody, noticeMoves, noticeProblem, replyState } from "./notices";
 import { MAX_UPLOAD_BYTES, editBody, editProblem, mimeOf, registerBody, sameOriginUrl, sha256Hex, shareable, titleFromFile, toHex, uploadProblem } from "./vault";
 import { blankContract, blankMeeting, blankResolution, contractBody, contractProblem, gapWarning, heldProblem, istDate, istTime, meetingBody, meetingReady, meetingState, nextResolutionNumber, resolutionActions, resolutionBody, resolutionReady, termKeyFrom, termKeyOk, termReady, CONTRACT_NEXT } from "./board";
@@ -739,5 +740,37 @@ describe("notice desk", () => {
   it("labels a finished job with the caller's words", () => {
     expect(jobStage({ status: "succeeded", error: null }, "Draft ready").label).toBe("Draft ready");
     expect(jobStage({ status: "succeeded", error: null }).label).toBe("Renewed");
+  });
+});
+
+describe("data rooms", () => {
+  const f = { ...blankRoom(), name: "Series A", documentIds: ["d1"] };
+  it("reads a list of people however it was typed", () => {
+    expect(parseEmails("A@x.in, b@x.in;\n a@x.in  c@x.in")).toEqual(["a@x.in", "b@x.in", "c@x.in"]);
+    expect(parseEmails("  ")).toEqual([]);
+    expect(badEmails("a@x.in nope b@")).toEqual(["nope", "b@"]);
+  });
+  it("checks the form", () => {
+    expect(roomProblem(f, "2026-11-08")).toBeNull();
+    expect(roomProblem({ ...f, name: " " }, "2026-11-08")).toMatch(/name/);
+    expect(roomProblem({ ...f, emails: "a@x.in, nope" }, "2026-11-08")).toMatch(/nope/);
+    expect(roomProblem({ ...f, expires: "2026-11-08" }, "2026-11-08")).toMatch(/after today/);
+    expect(roomProblem({ ...f, documentIds: [] }, "2026-11-08")).toMatch(/document/);
+  });
+  it("builds the request and reads a room back", () => {
+    const body = roomBody({ ...f, expires: "2026-12-31", emails: "Inv@Fund.in" });
+    expect(body).toEqual({ name: "Series A", purpose: "fundraise", expires_at: "2026-12-31T23:59:59+05:30", watermark: true, allow_download: false, document_ids: ["d1"], access: [{ email: "inv@fund.in" }] });
+    expect(roomBody(f).expires_at).toBeNull();
+    const room = { id: "r", name: "Series A", purpose: "lender", expires_at: "2026-12-31T18:29:59Z", watermark: false, allow_download: true, document_ids: ["d1", "d2"], access: [{ email: "a@x.in", last_viewed_at: null }] };
+    expect(roomForm(room)).toEqual({ name: "Series A", purpose: "lender", expires: "2026-12-31", watermark: false, allowDownload: true, emails: "a@x.in", documentIds: ["d1", "d2"] });
+  });
+  it("words expiry and viewers", () => {
+    const now = new Date("2026-11-08T00:00:00Z");
+    expect(expiryNote({ expires_at: null }, now)).toEqual({ label: "No expiry", expired: false });
+    expect(expiryNote({ expires_at: "2026-11-30T18:29:59Z" }, now)).toEqual({ label: "Expires 30 Nov", expired: false });
+    expect(expiryNote({ expires_at: "2026-10-30T18:29:59Z" }, now)).toEqual({ label: "Expired 30 Oct", expired: true });
+    expect(viewerNote([])).toBe("No viewers yet");
+    expect(viewerNote([{ email: "a", last_viewed_at: null }])).toBe("1 viewer, none has opened it");
+    expect(viewerNote([{ email: "a", last_viewed_at: "x" }, { email: "b", last_viewed_at: null }])).toBe("2 viewers, 1 has opened it");
   });
 });

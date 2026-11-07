@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { Fragment, useState } from "react";
 import { api, unwrap } from "@/lib/api";
 import { shortDate } from "@/lib/format";
@@ -32,7 +33,10 @@ export default function Documents() {
           <span className="muted" style={{ fontSize: 14 }}>{entity?.legal_name}</span>
           <h1 className="disp" style={{ margin: "6px 0 0", fontSize: 36 }}>Document vault</h1>
         </div>
-        <button type="button" className="btn primary" onClick={() => setAdding(!adding)}>+ Add document</button>
+        <span style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/documents/rooms" className="btn">Data rooms</Link>
+          <button type="button" className="btn primary" onClick={() => setAdding(!adding)}>+ Add document</button>
+        </span>
       </div>
       {adding && id && <UploadDocument entityId={id} defaultFolder={folder} onDone={() => { docs.reload(); expiring.reload(); }} onCancel={() => setAdding(false)} />}
 

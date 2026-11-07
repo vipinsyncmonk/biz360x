@@ -47,6 +47,7 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/payroll` | Payroll & HR: run status and progress, start a run, compute, send for approval, prepare the bank file once approved, salary register with wage-code filter, statutory deposits, labour compliance |
 | `src/lib/payroll.ts` | Run naming, next month, next step, status labels, employee, salary and input form rules. Unit-tested |
 | `src/app/(app)/legal` | Legal & Contracts: register ordered by urgency, key terms and alerts for the selected contract, out for signature, templates |
+| `src/app/(app)/documents/rooms` | Data rooms: create a room from vault documents, name the outside viewers, set expiry, watermark and download rules, change or delete it |
 | `src/app/(app)/documents` | Document vault: folder and full-text search, expiring soon, advisor requests. Upload comes later, add a document (the browser hashes the file and sends the bytes through the app's own origin), edit a document, share documents against an advisor's request |
 | `src/lib/legal.ts` | Contract dates and urgency, file and expiry labels. Unit-tested |
 | `src/app/(app)/settings` | Settings: people (invite, remove), advisors (grant, revoke), signature certificates (record), API keys (create, revoke; the key is shown once), portals (connect, OTP renewal), webhooks, notification choices (saved per person), audit-chain check |
@@ -56,6 +57,7 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/lib/board.ts` | Contract, meeting and resolution form rules, IST display of meeting times. Unit-tested |
 | `src/lib/vault.ts` | File hashing, upload body, same-origin upload address, edit rules. Unit-tested |
 | `src/lib/notices.ts` | Notice wording, reply urgency, desk totals, form rules. Unit-tested |
+| `src/lib/rooms.ts` | Data room form rules, viewer list parsing, expiry and viewer wording. Unit-tested |
 | `src/lib/settings.ts` | Form rules, notification matrix, certificate status, grid ordering. Unit-tested |
 | `src/app/(app)/m/[slug]` | Placeholder for screens that are not built yet |
 
