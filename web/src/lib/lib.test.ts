@@ -258,3 +258,29 @@ describe("legal helpers", () => {
     expect(expiryLabel("2026-11-04", today)).toBe("Expired 3 days ago");
   });
 });
+
+import { byTrouble, dscStatus, groupCounts, modulesLabel, prefBody, prefKey, prefState, type Standing } from "./settings";
+
+describe("settings and group helpers", () => {
+  const s = (name: string, cells: Record<string, string>): Standing => ({ entity_id: name, legal_name: name, constitution: "private_limited", owner_staff: null, cells, open_items: [] });
+  it("labels modules and certificates", () => {
+    expect(modulesLabel(["*"])).toBe("All modules");
+    expect(modulesLabel(["gst", "finance"])).toBe("gst, finance");
+    const today = new Date(2026, 10, 7);
+    expect(dscStatus("2026-11-06", today).label).toBe("Expired");
+    expect(dscStatus("2027-01-05", today)).toEqual({ label: "Expires in 59 days", tone: "due" });
+    expect(dscStatus("2027-06-01", today)).toEqual({ label: "Valid", tone: "ok" });
+  });
+  it("sends the whole notification matrix and treats an unsaved choice as off", () => {
+    const state = prefState([{ entity_id: "e1", event_type: "due_tomorrow", channel: "email", enabled: true }, { entity_id: "e2", event_type: "due_tomorrow", channel: "sms", enabled: true }], "e1");
+    expect(state).toEqual({ [prefKey("due_tomorrow", "email")]: true });
+    const body = prefBody("e1", state);
+    expect(body).toHaveLength(24);                                           // 6 events x 4 channels
+    expect(body.filter((b) => b.enabled)).toEqual([{ entity_id: "e1", event_type: "due_tomorrow", channel: "email", enabled: true }]);
+  });
+  it("counts clients and puts trouble first", () => {
+    const rows = [s("Calm", { GST: "clear" }), s("Waiting", { GST: "client", MCA: "due" }), s("Late", { MCA: "overdue" }), s("Also late", { TDS: "overdue", GST: "client" })];
+    expect(groupCounts(rows)).toEqual({ clients: 4, waiting: 2, overdue: 2 });
+    expect(byTrouble(rows).map((r) => r.legal_name)).toEqual(["Also late", "Late", "Waiting", "Calm"]);
+  });
+});
