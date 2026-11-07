@@ -102,6 +102,11 @@ export async function requestCode(email: string): Promise<void> {
   if (!res.ok) throw await toProblem(res);
 }
 
+export async function signUp(email: string, full_name: string): Promise<void> {
+  const res = await postJson("/auth/signup", { email, full_name });
+  if (!res.ok) throw await toProblem(res);
+}
+
 export async function signInWithCode(email: string, otp: string, mfa_code?: string): Promise<void> {
   const res = await postJson("/auth/token", { grant_type: "otp", email, otp, ...(mfa_code ? { mfa_code } : {}) });
   if (!res.ok) throw await toProblem(res);

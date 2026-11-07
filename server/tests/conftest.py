@@ -4,3 +4,4 @@ import os
 
 os.environ.setdefault("BIZ_RATE_USER", "1000000")
 os.environ.setdefault("BIZ_RATE_HEAVY", "1000000")
+os.environ.setdefault("BIZ_RATE_SIGNUP", "1000000")

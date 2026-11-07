@@ -1,7 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { ApiProblem, requestCode } from "@/lib/api";
+import { ApiProblem, requestCode, signUp } from "@/lib/api";
+import { TRACK_KEY, type Track } from "@/lib/onboarding";
 import { useSession } from "@/lib/session";
 import { ErrorNote, Logo } from "@/components/ui";
 
@@ -17,6 +18,9 @@ export default function Login() {
   const { status, login } = useSession();
   const router = useRouter();
   const [step, setStep] = useState<"email" | "code">("email");
+  const [mode, setMode] = useState<"signin" | "create">("signin");
+  const [name, setName] = useState("");
+  const [track, setTrack] = useState<Track>("startup");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [mfa, setMfa] = useState("");
@@ -30,7 +34,12 @@ export default function Login() {
     e.preventDefault();
     setBusy(true); setError(null);
     try {
-      await requestCode(email.trim());
+      if (mode === "create") {
+        await signUp(email.trim(), name.trim());
+        try { window.sessionStorage.setItem(TRACK_KEY, track); } catch { /* the track is only a default */ }
+      } else {
+        await requestCode(email.trim());
+      }
       setStep("code");
     } catch (err) {
       setError(err);
@@ -79,27 +88,49 @@ export default function Login() {
 
       <main className="formpanel">
         <div className="formbox">
+          {step === "email" && (
+            <div className="seg" role="tablist" aria-label="Account" style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+              <button type="button" role="tab" aria-selected={mode === "signin"} onClick={() => { setMode("signin"); setError(null); }}>Sign in</button>
+              <button type="button" role="tab" aria-selected={mode === "create"} onClick={() => { setMode("create"); setError(null); }}>Create workspace</button>
+            </div>
+          )}
           {step === "email" ? (
             <form onSubmit={sendCode} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div>
-                <h2 className="disp" style={{ margin: 0, fontSize: 32 }}>Welcome back</h2>
-                <p className="muted" style={{ margin: "6px 0 0", fontSize: 15 }}>We will send a one-time code to your work email.</p>
+                <h2 className="disp" style={{ margin: 0, fontSize: 32 }}>{mode === "create" ? "Create your workspace" : "Welcome back"}</h2>
+                <p className="muted" style={{ margin: "6px 0 0", fontSize: 15 }}>{mode === "create" ? "Takes about two minutes. No card needed." : "We will send a one-time code to your work email."}</p>
               </div>
+              {mode === "create" && (
+                <>
+                  <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+                    <legend style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, padding: 0 }}>Which best describes you?</legend>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+                      {([["business", "Business", "Operating company or firm"], ["startup", "Startup", "Founding or funded"], ["msme", "MSME", "Udyam or eligible"]] as const).map(([k, t, b]) => (
+                        <button key={k} type="button" aria-pressed={track === k} onClick={() => setTrack(k)} className="trackbtn">
+                          <span style={{ fontSize: 15, fontWeight: 600 }}>{t}</span><span style={{ fontSize: 12, opacity: 0.75 }}>{b}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <div className="field">
+                    <label htmlFor="nm">Your name</label>
+                    <input id="nm" className="input" autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)} />
+                  </div>
+                </>
+              )}
               <div className="field">
                 <label htmlFor="em">Work email</label>
                 <input id="em" className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.in" />
               </div>
               <ErrorNote error={error} />
-              <button className="go" type="submit" disabled={busy || !email}>{busy ? "Sending…" : "Send code"}</button>
-              <p className="muted" style={{ margin: 0, fontSize: 13, textAlign: "center" }}>
-                New to Biz360X? Creating a workspace from this screen arrives with onboarding.
-              </p>
+              <button className="go" type="submit" disabled={busy || !email || (mode === "create" && !name.trim())}>{busy ? "Sending…" : mode === "create" ? "Send code to continue" : "Send code"}</button>
+              {mode === "create" && <p className="muted" style={{ margin: 0, fontSize: 13, textAlign: "center", lineHeight: 1.5 }}>We confirm your email with a one-time code, then ask for your company’s CIN, LLPIN, GSTIN or PAN.</p>}
             </form>
           ) : (
             <form onSubmit={submitCode} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div>
                 <h2 className="disp" style={{ margin: 0, fontSize: 32 }}>Enter your code</h2>
-                <p className="muted" style={{ margin: "6px 0 0", fontSize: 15 }}>If an account exists for {email}, a six-digit code is on its way. It is valid for five minutes.</p>
+                <p className="muted" style={{ margin: "6px 0 0", fontSize: 15 }}>A six-digit code is on its way to {email}. It is valid for five minutes.</p>
               </div>
               <div className="field">
                 <label htmlFor="otp">One-time code</label>

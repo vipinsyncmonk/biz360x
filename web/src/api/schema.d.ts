@@ -24,6 +24,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an account and send a one-time code
+         * @description Same answer whether or not the address is registered; an existing person's name is not changed. 5 per minute per IP.
+         */
+        post: operations["signUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/token": {
         parameters: {
             query?: never;
@@ -4074,6 +4094,11 @@ export interface components {
             /** Format: email */
             email?: string;
         };
+        SignupRequest: {
+            /** Format: email */
+            email: string;
+            full_name: string;
+        };
         TokenRequest: {
             /** @enum {string} */
             grant_type: "password" | "otp" | "refresh_token" | "authorization_code";
@@ -6423,6 +6448,34 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["OtpRequest"];
+            };
+        };
+        responses: {
+            /** @description Done */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    signUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupRequest"];
             };
         };
         responses: {

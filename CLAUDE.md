@@ -14,7 +14,7 @@ Read `docs/API_GUIDE.md` before changing anything structural.
 | `api/build_openapi.py` | Source of truth for the contract. Edit this, then regenerate. |
 | `server/` | FastAPI reference server + job worker (`app/worker.py`) + end-to-end tests (`tests/test_flows.py`). |
 | `docs/API_GUIDE.md` | Architecture, conventions, permissions, flows, screen → endpoint map. |
-| `web/` | Next.js front end (`web/README.md`): app shell, sign-in, Today, Compliance so far. Types are generated from the contract. |
+| `web/` | Next.js front end (`web/README.md`): shell, sign-in/sign-up, onboarding, Today, Compliance so far. Types are generated from the contract. |
 | `design/screens/*.dc.html` | Exported screen designs (26 artboards). Use them for layout, copy and data shapes; the live canvas is the source of truth. |
 
 ## Commands
@@ -72,7 +72,7 @@ The tests expect the demo data. Rebuild the database before a full test run, bec
 
 ## Backlog (in order)
 
-Done: compliance engine evaluator (`server/app/engine.py`, migrations 12-13); ledger posting for sales documents and receipts, quotes to cash, bank matching and period close (`ledger.py`, `routes_orders.py`, `routes_finance.py`, `receivables.py`). Bill posting, purchases, GST returns, 2B matching, TDS and advance tax are in (`routes_purchases.py`, `routes_gst.py`, `taxcalc.py`; migrations 14-15). Payroll (`routes_payroll.py`, `payroll.py`, `secretbox.py`; migration 16) is in; legal, secretarial, the vault and the notice desk are in (`routes_vault.py`, `routes_legal.py`, `storage.py`; migration 17). The portal adapters are in as interfaces and sandboxes (`adapters.py`, `routes_portals.py`, migration 18); the provider choice is `docs/PROVIDERS.md`. Auth and hardening are in (`auth.py`, `ratelimit.py`, `security.py`, `webhooks.py`, `routes_integrations.py`; migration 19; `docs/SECURITY.md`). The front end has started (M8): shell, sign-in, Today and Compliance are in `web/`; the other screens follow the design files, one milestone issue at a time.
+Done: compliance engine evaluator (`server/app/engine.py`, migrations 12-13); ledger posting for sales documents and receipts, quotes to cash, bank matching and period close (`ledger.py`, `routes_orders.py`, `routes_finance.py`, `receivables.py`). Bill posting, purchases, GST returns, 2B matching, TDS and advance tax are in (`routes_purchases.py`, `routes_gst.py`, `taxcalc.py`; migrations 14-15). Payroll (`routes_payroll.py`, `payroll.py`, `secretbox.py`; migration 16) is in; legal, secretarial, the vault and the notice desk are in (`routes_vault.py`, `routes_legal.py`, `storage.py`; migration 17). The portal adapters are in as interfaces and sandboxes (`adapters.py`, `routes_portals.py`, migration 18); the provider choice is `docs/PROVIDERS.md`. Auth and hardening are in (`auth.py`, `ratelimit.py`, `security.py`, `webhooks.py`, `routes_integrations.py`; migration 19; `docs/SECURITY.md`). The front end has started (M8): shell, sign-in, sign-up, onboarding, Today and Compliance are in `web/`; the other screens follow the design files, one milestone issue at a time.
 
 3. Remaining spec operations (onboarding, quotes, purchases, GST returns, payroll, legal, documents, copilot).
 4. ~~Real auth~~ - done except the vendors: a real OTP provider, Google/Microsoft/SAML identity providers and MFA enrolment still have to be chosen and written (`docs/SECURITY.md`). The development OTP `000000` is refused outside dev by the startup guard.
