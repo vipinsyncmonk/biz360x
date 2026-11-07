@@ -1,5 +1,5 @@
 /** Pure helpers for the billing screens. The server computes every tax figure; nothing here does GST maths. */
-import { isoDate } from "./format";
+import { isoDate, toPaise } from "./format";
 import type { Tone } from "./compliance";
 
 export interface DocRow {
@@ -91,3 +91,84 @@ export const hasBlock = (checks: Array<{ level: string }>) => checks.some((c) =>
 
 /** The issue call's defaults, spelled out because the generated type marks them required. Same as the server's own defaults. */
 export const ISSUE_BODY = { create_payment_link: true, generate_eway_bill: true };
+
+// ---- quotes
+export interface QuoteForm { registrationId: string; partyId: string; partyGstId: string; title: string; validUntil: string; terms: string; advance: string; lines: LineDraft[] }
+
+export function quoteBody(f: QuoteForm) {
+  return {
+    registration_id: f.registrationId, party_id: f.partyId, lines: linesBody(f.lines),
+    ...(f.title.trim() ? { title: f.title.trim() } : {}),
+    ...(f.validUntil ? { valid_until: f.validUntil } : {}),
+    ...(f.terms !== "" ? { payment_terms_days: Number(f.terms) } : {}),
+    ...(f.advance !== "" ? { advance_pct: Number(f.advance) } : {}),
+  };
+}
+
+export const quoteReady = (f: QuoteForm) => !!f.registrationId && !!f.partyId && linesComplete(f.lines)
+  && (f.terms === "" || /^\d{1,3}$/.test(f.terms)) && (f.advance === "" || (/^\d{1,3}(\.\d{1,2})?$/.test(f.advance) && Number(f.advance) <= 100));
+
+/** The tax preview for a quote is the invoice preview for the same lines: one function computes both. */
+export const quotePreviewBody = (f: QuoteForm, today: string) => ({
+  doc_type: "tax_invoice" as const, gst_adjusted: true, doc_date: today, registration_id: f.registrationId, party_id: f.partyId,
+  ...(f.partyGstId ? { party_gst_id: f.partyGstId } : {}), ...(f.terms !== "" ? { payment_terms_days: Number(f.terms) } : {}), lines: linesBody(f.lines),
+});
+
+export type QuoteAction = "send" | "revise" | "accept" | "lost" | "invoice";
+
+/** What can be done to a quote now. Superseded versions and closed quotes have nothing. */
+export function quoteActions(q: { status: string; sales_order_id: string | null; invoiced_pct: number }): QuoteAction[] {
+  switch (q.status) {
+    case "draft": return ["send", "revise", "lost"];
+    case "sent": case "viewed": return ["send", "accept", "revise", "lost"];
+    case "negotiating": return ["accept", "lost"];
+    case "accepted": return q.sales_order_id && q.invoiced_pct < 100 ? ["invoice"] : [];
+    default: return [];
+  }
+}
+
+export const QUOTE_ACTION_LABEL: Record<QuoteAction, string> = { send: "Send", revise: "New version", accept: "Mark accepted", lost: "Mark lost", invoice: "Create invoice" };
+
+// ---- credit notes
+export const CN_REASONS: Array<[string, string, string]> = [
+  ["sales_return", "Goods returned", "The customer sent items back."],
+  ["post_sale_discount", "Discount after the sale", "A discount agreed after the invoice was issued."],
+  ["rate_revision", "Rate revised", "The price was corrected upwards or downwards."],
+  ["deficiency_in_service", "Service fell short", "A reduction for a deficiency in service."],
+  ["correction", "Correction", "The invoice had an error."],
+  ["other", "Other", "Anything else; add the detail in your records."],
+];
+
+export interface DocLine { line_no: number; description: string; hsn_sac: string; qty: string; uqc: string; rate: string; discount: string; gst_rate: string | number }
+
+const QSCALE = 10_000n;
+function scaledQty(q: string): bigint {
+  const m = /^(\d+)(?:\.(\d{1,4}))?\d*$/.exec(q.trim());
+  return m ? BigInt(m[1]!) * QSCALE + BigInt((m[2] ?? "").padEnd(4, "0")) : -1n;
+}
+
+/** Why a credit quantity cannot be used, or null when it is fine. Blank means this line is not credited. */
+export function creditProblem(entered: string, supplied: string): string | null {
+  if (entered.trim() === "") return null;
+  const q = scaledQty(entered);
+  if (q <= 0n) return "Enter a quantity above zero";
+  if (q > scaledQty(supplied)) return `No more than ${supplied} was supplied`;
+  return null;
+}
+
+/** The line to credit: the invoice's own rate and tax rate, the quantity coming back, and the discount in the same proportion. */
+export function creditLine(l: DocLine, entered: string) {
+  const q = scaledQty(entered), full = scaledQty(l.qty);
+  const disc = toPaise(l.discount);
+  const share = full > 0n ? (disc * q * 2n + full) / (full * 2n) : 0n;                  // rounded half up, in paise
+  const sign = share < 0n ? "-" : "";
+  const abs = share < 0n ? -share : share;
+  return { description: l.description, hsn_sac: l.hsn_sac, qty: entered.trim(), rate: l.rate, gst_rate: Number(l.gst_rate), uqc: l.uqc, discount: `${sign}${abs / 100n}.${(abs % 100n).toString().padStart(2, "0")}` };
+}
+
+export function creditLines(lines: DocLine[], entered: Record<number, string>) {
+  return lines.filter((l) => (entered[l.line_no] ?? "").trim() !== "").map((l) => creditLine(l, entered[l.line_no]!));
+}
+
+export const creditReady = (lines: DocLine[], entered: Record<number, string>) =>
+  lines.every((l) => creditProblem(entered[l.line_no] ?? "", l.qty) === null) && creditLines(lines, entered).length > 0;

@@ -3,10 +3,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ApiProblem, api, newIdempotencyKey, unwrap } from "@/lib/api";
-import { GST_RATES, ISSUE_BODY, blankLine, docBody, formReady, hasBlock, lineProblem, type DocForm, type LineDraft } from "@/lib/billing";
+import { ISSUE_BODY, blankLine, docBody, formReady, hasBlock, type DocForm } from "@/lib/billing";
 import { formatInr, isoDate, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { LineEditor } from "@/components/LineEditor";
 import { ErrorNote, Loading } from "@/components/ui";
 
 interface Party { id: string; legal_name: string; payment_terms_days: number; gstins: Array<{ id: string; gstin: string | null; state_code: string; is_default: boolean }> }
@@ -81,8 +82,6 @@ export default function NewInvoice() {
     }
   }
 
-  const setLine = (i: number, patch: Partial<LineDraft>) => set({ lines: form.lines.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
-  const problems = form.lines.map(lineProblem);
   const blocked = !!preview && hasBlock(preview.checks);
 
   if (!entity) return <main className="page"><div className="card card-pad">Select a workspace first.</div></main>;
@@ -118,30 +117,7 @@ export default function NewInvoice() {
             <div className="field"><label htmlFor="po">Customer PO reference</label><input id="po" className="input" value={form.po} onChange={(e) => set({ po: e.target.value })} /></div>
           </section>
 
-          <section className="card" style={{ overflow: "hidden" }}>
-            <div className="cardhead"><h2>Items</h2><button type="button" className="btn" onClick={() => set({ lines: [...form.lines, blankLine()] })}>+ Add item</button></div>
-            <div className="tablewrap">
-              <table style={{ minWidth: 820 }}>
-                <thead><tr><th scope="col">Description</th><th scope="col">HSN / SAC</th><th scope="col">Qty</th><th scope="col">Rate (₹)</th><th scope="col">Discount (₹)</th><th scope="col">GST %</th><th scope="col"><span className="sr">Remove</span></th></tr></thead>
-                <tbody>
-                  {form.lines.map((l, i) => (
-                    <tr key={i}>
-                      <td style={{ minWidth: 220 }}>
-                        <input aria-label={`Description, item ${i + 1}`} className="input" style={{ height: 40, fontSize: 14 }} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} />
-                        {touched && problems[i] && <span className="t13" style={{ color: "var(--amber)" }}>{problems[i]}</span>}
-                      </td>
-                      <td><input aria-label={`HSN or SAC, item ${i + 1}`} className="input mono" style={{ height: 40, fontSize: 14, width: 110 }} inputMode="numeric" value={l.hsn_sac} onChange={(e) => setLine(i, { hsn_sac: e.target.value.replace(/\D/g, "").slice(0, 8) })} /></td>
-                      <td><input aria-label={`Quantity, item ${i + 1}`} className="input mono" style={{ height: 40, fontSize: 14, width: 80 }} inputMode="decimal" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} /></td>
-                      <td><input aria-label={`Rate, item ${i + 1}`} className="input mono" style={{ height: 40, fontSize: 14, width: 120 }} inputMode="decimal" value={l.rate} onChange={(e) => setLine(i, { rate: e.target.value })} /></td>
-                      <td><input aria-label={`Discount, item ${i + 1}`} className="input mono" style={{ height: 40, fontSize: 14, width: 100 }} inputMode="decimal" value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value })} /></td>
-                      <td><select aria-label={`GST rate, item ${i + 1}`} className="input" style={{ height: 40, fontSize: 14, width: 80 }} value={l.gst_rate} onChange={(e) => setLine(i, { gst_rate: e.target.value })}>{GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}</select></td>
-                      <td>{form.lines.length > 1 && <button type="button" className="btn" style={{ height: 36 }} aria-label={`Remove item ${i + 1}`} onClick={() => set({ lines: form.lines.filter((_, j) => j !== i) })}>✕</button>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <LineEditor lines={form.lines} onChange={(lines) => set({ lines })} touched={touched} />
           <ErrorNote error={error instanceof ApiProblem ? new Error(error.fieldErrors.length ? `${error.title}: ${error.fieldErrors.map((f) => f.message).join("; ")}` : error.message) : error} />
         </div>
 
