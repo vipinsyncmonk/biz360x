@@ -15,7 +15,16 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from .core import ApiError, problem_response
 from .routes_compliance import router as compliance
+from .receivables import router as receivables
+from .routes_engine import router as engine_routes
+from .routes_finance import router as finance
+from .routes_gst import router as gst
+from .routes_legal import router as legal
+from .routes_orders import router as orders
+from .routes_payroll import router as payroll
 from .routes_platform import router as platform
+from .routes_purchases import router as purchases
+from .routes_vault import router as vault
 from .routes_sales import router as sales
 
 app = FastAPI(title="Biz360X API (reference)", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None)
@@ -42,5 +51,5 @@ def health():
     return JSONResponse({"ok": True})
 
 
-for r in (platform, compliance, sales):
+for r in (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal):
     app.include_router(r, prefix="/v1")

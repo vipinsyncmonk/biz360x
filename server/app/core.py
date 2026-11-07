@@ -3,6 +3,7 @@ RFC 9457 errors, authentication, permissions, idempotency, audit, events."""
 from __future__ import annotations
 
 import contextlib
+import logging
 import datetime as dt
 import hashlib
 import json
@@ -89,6 +90,8 @@ def map_db_error(e: psycopg.Error) -> ApiError:
         return ApiError(404, "not_found", "Not found")          # RLS WITH CHECK: never reveal existence
     if isinstance(e, psycopg.errors.UniqueViolation):
         return ApiError(409, "conflict", "Already exists", msg)
+    if isinstance(e, psycopg.errors.ExclusionViolation):
+        return ApiError(409, "conflict", "Overlaps an existing record", msg)
     if isinstance(e, psycopg.errors.ForeignKeyViolation):
         return ApiError(400, "validation_failed", "Referenced record does not exist", msg)
     if isinstance(e, psycopg.errors.RaiseException):
@@ -101,6 +104,7 @@ def map_db_error(e: psycopg.Error) -> ApiError:
         return ApiError(409, "conflict", "Conflict", msg)
     if isinstance(e, (psycopg.errors.InvalidTextRepresentation, psycopg.errors.DataException)):
         return ApiError(400, "validation_failed", "Invalid value", msg)
+    logging.getLogger("biz360x").error("unmapped database error: %s: %s", type(e).__name__, msg)
     return ApiError(500, "internal", "Internal error")
 
 
@@ -129,9 +133,9 @@ def current_principal(authorization: str = Header(default="")) -> Principal:
 
 # ------------------------------------------------------------------ permissions
 ROLE_ACTIONS = {
-    "owner": {"read", "write", "approve", "file", "pay"},
-    "approver": {"read", "write", "approve", "file", "pay"},
-    "maker": {"read", "write"},
+    "owner": {"read", "write", "approve", "file", "pay", "use"},
+    "approver": {"read", "write", "approve", "file", "pay", "use"},
+    "maker": {"read", "write", "use"},
     "viewer": {"read"},
 }
 ADVISOR_ACTIONS = {"read": {"read"}, "comment": {"read"}, "prepare": {"read", "write"}, "certify": {"read", "write", "file"}}
