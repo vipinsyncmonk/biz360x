@@ -40,6 +40,9 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/legal` | Legal & Contracts: register ordered by urgency, key terms and alerts for the selected contract, out for signature, templates |
 | `src/app/(app)/documents` | Document vault: folder and full-text search, expiring soon, advisor requests. Upload comes later |
 | `src/lib/legal.ts` | Contract dates and urgency, file and expiry labels. Unit-tested |
+| `src/app/(app)/settings` | Settings: people, advisors, signature certificates, connected portals, notification choices (saved per person), audit-chain check |
+| `src/app/(app)/group` | Group view for firms: clients × authorities grid, filters, open items per client, team load |
+| `src/lib/settings.ts` | Notification matrix, certificate status, grid ordering. Unit-tested |
 | `src/app/(app)/m/[slug]` | Placeholder for screens that are not built yet |
 
 ## Rules for new screens
