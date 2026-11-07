@@ -153,7 +153,7 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `parties`, `sale
 | Settings | `/members`, `/advisor-grants`, `/dsc-certificates`, `/portal-connections` (+ `/portal-connections/{id}/renew`), `/me/notification-preferences`, `/webhooks` (+ `/webhooks/{id}/test`, `/webhooks/{id}/deliveries`), `/api-keys`, `/audit-log`, `/audit-log/verify` |
 | Sales & Billing | `GET /sales/summary`, `GET /sales-documents?payment_status=…`, `GET /dunning-sequences`, `GET /recurring-invoices` |
 | New GST invoice | `POST /sales-documents/preview` (every change), `POST /sales-documents`, `POST /sales-documents/{id}/issue` |
-| Quotes | `GET /quotes`, `POST /quotes/{id}/revise`, `POST /quotes/{id}/accept`, `POST /sales-orders/{id}/invoice` |
+| Quotes | `GET /quotes`, `POST /quotes`, `POST /quotes/{id}/send`, `POST /quotes/{id}/mark-lost`, `POST /quotes/{id}/revise`, `POST /quotes/{id}/accept`, `POST /sales-orders/{id}/invoice` |
 | Credit note | `POST /sales-documents/preview {doc_type: credit_note}`, `POST /sales-documents/{id}/credit-notes`, `POST …/issue` |
 | Customer payment page | `GET /pay/{shortCode}`, `POST /pay/{shortCode}/intents`, `POST /pay/{shortCode}/queries` |
 
