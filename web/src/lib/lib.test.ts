@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { MAX_UPLOAD_BYTES, editBody, editProblem, mimeOf, registerBody, sameOriginUrl, sha256Hex, shareable, titleFromFile, toHex, uploadProblem } from "./vault";
 import { blankContract, blankMeeting, blankResolution, contractBody, contractProblem, gapWarning, heldProblem, istDate, istTime, meetingBody, meetingReady, meetingState, nextResolutionNumber, resolutionActions, resolutionBody, resolutionReady, termKeyFrom, termKeyOk, termReady, CONTRACT_NEXT } from "./board";
 import { blankConn, blankHook, canRenew, connBody, connReady, deliveryState, eventsLabel, hookBody, hookProblem, jobStage, otpReady } from "./integrations";
 import { annualOf, blankEmployee, defaultComponents, draftFromRows, employeeBody, employeeProblem, inputProblem, inputsBody, inputsProblem, monthlyEarnings, structureBody, structureProblem } from "./payroll";
@@ -643,5 +644,50 @@ describe("contracts, meetings and resolutions", () => {
     expect(resolutionReady(r)).toBe(true);
     expect(resolutionBody(r)).toEqual({ number: "2026/001", title: "Approve the budget", kind: "board", meeting_id: "m1" });
     expect(resolutionBody({ ...r, meetingId: "" })).not.toHaveProperty("meeting_id");
+  });
+});
+
+describe("vault upload", () => {
+  it("hashes bytes the way the server does", async () => {
+    const bytes = new TextEncoder().encode("abc");
+    expect(await sha256Hex(bytes.buffer as ArrayBuffer)).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    expect(toHex(new Uint8Array([0, 15, 255]))).toBe("000fff");
+  });
+  it("knows a file type when the browser does not", () => {
+    expect(mimeOf("a.pdf", "")).toBe("application/pdf");
+    expect(mimeOf("A.XLSX", "")).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(mimeOf("a.xyz", "")).toBe("application/octet-stream");
+    expect(mimeOf("noext", "")).toBe("application/octet-stream");
+    expect(mimeOf("a.pdf", "text/plain")).toBe("text/plain");
+  });
+  it("makes a readable title from a file name", () => {
+    expect(titleFromFile("Board_minutes-Oct.pdf")).toBe("Board minutes Oct");
+    expect(titleFromFile("noext")).toBe("noext");
+    expect(titleFromFile("a.b.c.txt")).toBe("a.b.c");
+  });
+  it("refuses what the server would refuse", () => {
+    expect(uploadProblem(null, "x")).toMatch(/Choose/);
+    expect(uploadProblem({ name: "a.pdf", size: 0 }, "x")).toMatch(/empty/);
+    expect(uploadProblem({ name: "a.pdf", size: MAX_UPLOAD_BYTES + 1 }, "x")).toMatch(/50 MB/);
+    expect(uploadProblem({ name: "a.pdf", size: 10 }, "  ")).toMatch(/title/);
+    expect(uploadProblem({ name: "a.pdf", size: 10 }, "Minutes")).toBeNull();
+  });
+  it("registers only what was filled", () => {
+    const f = { name: "a.pdf", size: 10 };
+    expect(registerBody(f, "application/pdf", "ab".repeat(32), { title: " Minutes ", folder: "board", period: "", validUntil: "" })).toEqual({
+      folder: "board", title: "Minutes", file_name: "a.pdf", mime_type: "application/pdf", size_bytes: 10, sha256: "ab".repeat(32),
+    });
+    expect(registerBody(f, "application/pdf", "ab".repeat(32), { title: "T", folder: "tax", period: " FY 2025-26 ", validUntil: "2027-03-31" })).toMatchObject({ period_label: "FY 2025-26", valid_until: "2027-03-31" });
+  });
+  it("sends the bytes through the app's own origin", () => {
+    expect(sameOriginUrl("http://localhost:8000/v1/storage/tok.en-1")).toBe("/api/v1/storage/tok.en-1");
+    expect(sameOriginUrl("https://api.example.in/v1/storage/abc?x=1")).toBe("/api/v1/storage/abc?x=1");
+    expect(sameOriginUrl(null)).toBeNull();
+    expect(sameOriginUrl("https://cdn.example.in/file.pdf")).toBe("https://cdn.example.in/file.pdf");
+  });
+  it("edits a document and shares only uploaded ones", () => {
+    expect(editProblem({ title: " ", folder: "tax", period: "", validUntil: "" })).toMatch(/title/);
+    expect(editBody({ title: " Minutes ", folder: "board", period: " ", validUntil: "" })).toEqual({ title: "Minutes", folder: "board", period_label: null, valid_until: null });
+    expect(shareable([{ download_url: "u" }, { download_url: null }])).toEqual([{ download_url: "u" }]);
   });
 });

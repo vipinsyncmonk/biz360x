@@ -1,10 +1,12 @@
 "use client";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { api, unwrap } from "@/lib/api";
 import { shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { Doc, DocRequest, FOLDERS, SOURCE_LABEL, expiryLabel, fileExt, fileSize } from "@/lib/legal";
 import { useSession } from "@/lib/session";
+import { EditDocument, ShareForRequest, UploadDocument } from "@/components/VaultForms";
+import { sameOriginUrl } from "@/lib/vault";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
 export default function Documents() {
@@ -12,6 +14,9 @@ export default function Documents() {
   const id = entity?.id ?? null;
   const [folder, setFolder] = useState("");
   const [q, setQ] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [sharing, setSharing] = useState<string | null>(null);
 
   const docs = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/documents", { params: { path: { entityId: id! }, query: { limit: 100, ...(folder ? { folder } : {}), ...(q.trim() ? { q: q.trim() } : {}) } } })).data as unknown as Doc[], id ? `${id}|${folder}|${q.trim()}` : null);
   const expiring = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/documents", { params: { path: { entityId: id! }, query: { expiring_within_days: 90, limit: 10 } } })).data as unknown as Doc[], id);
@@ -22,10 +27,14 @@ export default function Documents() {
 
   return (
     <main className="page">
-      <div>
-        <span className="muted" style={{ fontSize: 14 }}>{entity?.legal_name}</span>
-        <h1 className="disp" style={{ margin: "6px 0 0", fontSize: 36 }}>Document vault</h1>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div>
+          <span className="muted" style={{ fontSize: 14 }}>{entity?.legal_name}</span>
+          <h1 className="disp" style={{ margin: "6px 0 0", fontSize: 36 }}>Document vault</h1>
+        </div>
+        <button type="button" className="btn primary" onClick={() => setAdding(!adding)}>+ Add document</button>
       </div>
+      {adding && id && <UploadDocument entityId={id} defaultFolder={folder} onDone={() => { docs.reload(); expiring.reload(); }} onCancel={() => setAdding(false)} />}
 
       <div className="field" style={{ maxWidth: 480 }}>
         <label className="sr" htmlFor="dq">Search documents</label>
@@ -49,16 +58,19 @@ export default function Documents() {
                   <thead><tr><th scope="col">Document</th><th scope="col">Source</th><th scope="col">Linked to</th><th scope="col">Added</th></tr></thead>
                   <tbody>
                     {rows.map((d) => (
-                      <tr key={d.id}>
+                      <Fragment key={d.id}>
+                      <tr>
                         <td>
                           <span className="mono t13" style={{ marginRight: 8 }}>{fileExt(d.file_name)}</span>
-                          {d.download_url ? <a href={d.download_url} style={{ fontWeight: 600 }}>{d.title}</a> : <span style={{ fontWeight: 600 }}>{d.title}</span>}
+                          {d.download_url ? <a href={sameOriginUrl(d.download_url) ?? d.download_url} style={{ fontWeight: 600 }}>{d.title}</a> : <span style={{ fontWeight: 600 }}>{d.title}</span>}
                           <span className="t13" style={{ display: "block" }}>{d.file_name} · {fileSize(d.size_bytes)}{d.period_label ? ` · ${d.period_label}` : ""}{d.download_url ? "" : " · not uploaded yet"}</span>
                         </td>
                         <td>{SOURCE_LABEL[d.source] ?? d.source}</td>
                         <td className="t13">{d.links.length ? d.links.map((l) => l.subject.replace(/_/g, " ")).join(", ") : "–"}</td>
-                        <td className="mono" style={{ fontSize: 13 }}>{shortDate(d.created_at)}</td>
+                        <td className="mono" style={{ fontSize: 13 }}>{shortDate(d.created_at)}<button type="button" className="linkbtn" style={{ color: "var(--cobalt)", display: "block" }} aria-expanded={editing === d.id} onClick={() => setEditing(editing === d.id ? null : d.id)}>Edit</button></td>
                       </tr>
+                      {editing === d.id && id && <tr><td colSpan={4}><EditDocument entityId={id} doc={d} onDone={() => { setEditing(null); docs.reload(); expiring.reload(); }} onCancel={() => setEditing(null)} /></td></tr>}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -82,10 +94,16 @@ export default function Documents() {
             <ErrorNote error={reqs.error} />
             {!reqs.loading && open.length === 0 && <span className="t13">No open requests.</span>}
             {open.map((r) => (
-              <div key={r.id} style={{ borderTop: "1px solid var(--line-2)", paddingTop: 8, fontSize: 14, display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <Fragment key={r.id}>
+              <div style={{ borderTop: "1px solid var(--line-2)", paddingTop: 8, fontSize: 14, display: "flex", justifyContent: "space-between", gap: 8 }}>
                 <span>{r.title}<span className="t13" style={{ display: "block" }}>{r.requested_by_name ?? "Advisor"}{r.due_on ? ` · due ${shortDate(r.due_on)}` : ""}</span></span>
-                <Pill tone={r.status === "open" ? "due" : "wait"}>{r.document_ids.length} shared</Pill>
+                <span style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                  <Pill tone={r.status === "open" ? "due" : "wait"}>{r.document_ids.length} shared</Pill>
+                  <button type="button" className="linkbtn" style={{ color: "var(--cobalt)" }} onClick={() => setSharing(sharing === r.id ? null : r.id)}>Share documents</button>
+                </span>
               </div>
+              {sharing === r.id && id && <ShareForRequest entityId={id} requestId={r.id} docs={rows} onDone={() => { setSharing(null); reqs.reload(); }} onCancel={() => setSharing(null)} />}
+              </Fragment>
             ))}
           </section>
         </aside>
