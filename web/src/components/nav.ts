@@ -29,7 +29,8 @@ export const NAV: NavGroup[] = [
     soon("Documents", "documents", I.folder),
   ] },
   { h: "RUN", items: [
-    soon("Sales & Billing", "billing", I.bill), soon("Finance & Books", "finance", I.book), soon("GST & Tax", "gst", I.gst),
+    { t: "Sales & Billing", href: "/billing", icon: I.bill, built: true },
+    soon("Finance & Books", "finance", I.book), soon("GST & Tax", "gst", I.gst),
     soon("Payroll & HR", "payroll", I.people), soon("Legal & Contracts", "legal", I.legal),
   ] },
   { h: "TRACKS", items: [soon("Startup", "startup", I.rocket), soon("MSME", "msme", I.factory), soon("All modules", "modules", I.grid)] },
