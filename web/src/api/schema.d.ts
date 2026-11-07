@@ -2586,7 +2586,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** What was last set for the month */
+        get: operations["getPayrollInputs"];
         /** Set attendance and one-off inputs */
         put: operations["putPayrollInputs"];
         post?: never;
@@ -12938,6 +12939,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PayrollRun"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getPayrollInputs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayrollInput"][];
                 };
             };
             400: components["responses"]["BadRequest"];

@@ -6913,6 +6913,34 @@ paths:
         '429':
           $ref: '#/components/responses/TooMany'
       x-permission: payroll:write
+    get:
+      tags:
+      - Payroll & HR
+      operationId: getPayrollInputs
+      summary: What was last set for the month
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PayrollInput'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
   /entities/{entityId}/payroll-runs/{id}/compute:
     post:
       tags:
