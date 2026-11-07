@@ -23,6 +23,7 @@ def seed():
     with psycopg.connect(DB, autocommit=True) as c:
         c.execute("""INSERT INTO entity_facts (entity_id, fact_key, value_num, as_of, source)
                      VALUES (%s, 'aato', 134000000, '2026-03-31', 'books')""", (ENTITY,))
+        c.execute("UPDATE jobs SET status = 'cancelled' WHERE kind IN ('compliance.run_engine', 'collections.dunning', 'collections.recurring') AND status = 'queued'")   # tests drive the worker themselves
 
 
 @pytest.fixture(scope="session")

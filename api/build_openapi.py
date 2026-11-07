@@ -410,7 +410,7 @@ action(E + "/approvals/{id}/approve", "Approvals", "approveRequest", "Approve", 
        idem=True, desc="Rejected with `two_person_rule` when the caller requested it. Approving a filing does not file it — call the file action.")
 action(E + "/approvals/{id}/reject", "Approvals", "rejectRequest", "Reject", "approvals:approve", body=ref("Decision"), resp=ref("ApprovalRequest"), idem=True)
 action(E + "/approvals/{id}/withdraw", "Approvals", "withdrawRequest", "Withdraw my request", "approvals:read", resp=ref("ApprovalRequest"))
-schema("Signer", {"person_id": NULLABLE(UUID), "external_name": S(), "external_email": S(format="email"), "sign_order": I(),
+schema("Signer", {"id": I(readOnly=True), "person_name": NULLABLE(S(readOnly=True)), "person_id": NULLABLE(UUID), "external_name": S(), "external_email": S(format="email"), "sign_order": I(),
                   "status": ENUM("queued", "waiting", "signed", "declined", readOnly=True), "signed_at": NULLABLE(RO_TS)})
 schema("SignatureRequest", {"id": RO_UUID, "subject": S(), "subject_id": UUID, "document_id": UUID,
                             "method": ENUM("dsc", "aadhaar_esign", "click_to_sign"), "signers": ARR(ref("Signer")),
@@ -419,6 +419,12 @@ schema("SignatureRequest", {"id": RO_UUID, "subject": S(), "subject_id": UUID, "
 collection(E + "/signature-requests", "Approvals", "SignatureRequest", "approvals", filters=[q("status", S())], idem=True)
 _op("get", E + "/signature-requests/{id}", "Approvals", "getSignatureRequest", "Get a signature request", "approvals:read", resp=ref("SignatureRequest"))
 action(E + "/signature-requests/{id}/remind", "Approvals", "remindSigners", "Remind pending signers", "approvals:read", status="204")
+action(E + "/signature-requests/{id}/signers/{signerId}/sign", "Approvals", "signAsSigner", "Sign (the signer themselves, or an approver recording it)", "approvals:read",
+       body=schema("SignAction", {"evidence": S()}), resp=ref("SignatureRequest"),
+       params=[{"name": "signerId", "in": "path", "required": True, "schema": UUID}],
+       desc="Signers sign in order. When the last one signs the request completes; a contract becomes active with this document as its signed copy.")
+action(E + "/signature-requests/{id}/signers/{signerId}/decline", "Approvals", "declineAsSigner", "Decline to sign", "approvals:read",
+       body=schema("DeclineAction", {"reason": S()}), resp=ref("SignatureRequest"), params=[{"name": "signerId", "in": "path", "required": True, "schema": UUID}])
 schema("Task", {"id": RO_UUID, "title": S(), "subject": NULLABLE(S()), "subject_id": NULLABLE(UUID), "assignee_id": NULLABLE(UUID),
                 "due_on": NULLABLE(DATE), "status": ENUM("open", "done", "cancelled"), "source": ENUM("user", "engine", "dunning", "copilot", "advisor", readOnly=True)},
        required=("title",))
@@ -693,6 +699,9 @@ schema("TdsReceivable", {"id": RO_UUID, "party_id": UUID, "sales_document_id": N
                          "quarter": I(), "seen_in_26as_at": NULLABLE(TS), "form16a_document_id": NULLABLE(UUID)}, extra={"readOnly": True})
 _op("get", E + "/tds-receivables", "GST & tax", "listTdsReceivables", "TDS customers deducted from us (26AS matching)", "tds:read",
     params=[P("Limit"), P("Cursor"), q("fy", FY), q("unmatched", B())], resp=page_of("TdsReceivable"))
+action(E + "/tds-receivables/sync", "GST & tax", "syncForm26as", "Fetch Form 26AS and match it to the TDS customers deducted", "tds:write",
+       body=schema("Sync26as", {"fy": FY}, required=("fy",)), status="202",
+       desc="A job asks TRACES for the entity's Form 26AS and marks each receivable it finds (same section, quarter and amount within Rs 1).")
 
 # =================================================================== FINANCE
 tag("Finance & books", "Chart of accounts, journals, periods, banking, reconciliation, close and reports")
@@ -728,6 +737,11 @@ collection(E + "/bank-accounts", "Finance & books", "BankAccount", "finance")
 item(E + "/bank-accounts", "Finance & books", "BankAccount", "finance")
 action(E + "/bank-accounts/{id}/statements", "Finance & books", "uploadStatement", "Import a statement file (CSV / MT940 / PDF)", "finance:write",
        body=schema("StatementImport", {"document_id": UUID}, required=("document_id",)), status="202")
+schema("BankFeedLine", {"external_id": S(description="Dedupe key from the feed"), "txn_date": DATE, "amount": {**MONEY, "description": "+ credit to us, - debit"}, "description": S(), "utr": NULLABLE(S()), "counterparty_name": NULLABLE(S()), "counterparty_va": NULLABLE(S(description="Virtual account the money was paid into")), "balance_after": NULLABLE(MONEY)}, required=("external_id", "txn_date", "amount", "description"))
+action(E + "/bank-accounts/{id}/transactions", "Finance & books", "importBankTransactions", "Import bank lines from a feed (Account Aggregator, bank API or parsed statement)", "finance:write",
+       body=schema("BankFeedImport", {"transactions": ARR(ref("BankFeedLine"), minItems=1, maxItems=1000)}, required=("transactions",)),
+       resp=schema("BankFeedResult", {"imported": I(), "duplicates": I(), "suggested": I()}), status="201",
+       desc="Duplicates (same `external_id`) are ignored. Credits paid into an invoice virtual account, or naming an invoice number, get a suggested receipt to accept or reject.")
 schema("BankMatchSuggestion", {"id": RO_UUID, "target_kind": S(), "target_id": UUID, "label": S(examples=["Invoice NI/KA/184"]), "amount": MONEY,
                                "confidence": N(), "rule": S(), "status": ENUM("suggested", "accepted", "rejected")})
 schema("BankTransaction", {"id": RO_UUID, "bank_account_id": UUID, "txn_date": DATE, "amount": MONEY, "description": S(), "utr": NULLABLE(S()),
@@ -772,7 +786,7 @@ schema("Payslip", {"id": RO_UUID, "employee_id": UUID, "employee_name": S(), "pa
                    "net_pay": MONEY, "flags": ARR(S(), examples=[["wage_below_50pct"]]), "pdf_url": NULLABLE(S(format="uri"))}, extra={"readOnly": True})
 schema("PayrollRun", {"id": RO_UUID, "period_month": DATE, "status": ENUM("inputs_open", "inputs_locked", "computed", "approved", "bank_file_sent", "paid", "statutory_done", readOnly=True),
                       "headcount": I(readOnly=True), "gross_total": {**MONEY, "readOnly": True}, "net_total": {**MONEY, "readOnly": True},
-                      "employer_cost_total": {**MONEY, "readOnly": True}, "statutory": ARR(schema("StatutoryDue", {"kind": S(), "amount": MONEY, "due_date": DATE, "obligation_id": UUID}), readOnly=True),
+                      "employer_cost_total": {**MONEY, "readOnly": True}, "statutory": ARR(schema("StatutoryDue", {"kind": S(), "amount": MONEY, "due_date": DATE, "obligation_id": NULLABLE(UUID)}), readOnly=True),
                       "approval_request_id": NULLABLE(RO_UUID), "paid_on": NULLABLE(DATE)}, required=("period_month",))
 collection(E + "/payroll-runs", "Payroll & HR", "PayrollRun", "payroll", filters=[q("fy", FY)])
 _op("get", E + "/payroll-runs/{id}", "Payroll & HR", "getPayrollRun", "Get a payroll run", "payroll:read", resp=ref("PayrollRun"))
@@ -787,6 +801,21 @@ action(E + "/payroll-runs/{id}/bank-file", "Payroll & HR", "createPayrollBankFil
 _op("get", E + "/payroll-runs/{id}/payslips", "Payroll & HR", "listPayslips", "Payslips in a run", "payroll:read",
     params=[P("Limit"), P("Cursor"), q("flag", S())], resp=page_of("Payslip"))
 schema("WageCodeCheck", {"employee_id": UUID, "full_name": S(), "gross_monthly": MONEY, "wages_monthly": MONEY, "wage_pct": N(), "statutory_wage": MONEY, "pf_wage_should_be": MONEY})
+schema("LabourCompliance", {"headcount": I(), "wage_code": {"type": "object"}, "gratuity": {"type": "object"}, "statutory_bonus": {"type": "object"},
+                            "posh": {"type": "object"}, "shops_establishment": {"type": "object"}})
+_op("get", E + "/payroll/labour-compliance", "Payroll & HR", "getLabourCompliance", "Wage code, gratuity, bonus, POSH and shops-act status", "payroll:read",
+    params=[q("as_of", DATE)], resp=ref("LabourCompliance"))
+action(E + "/payroll/gratuity-valuations", "Payroll & HR", "recordGratuityValuation", "Record an actuarial gratuity valuation", "payroll:write",
+       body=schema("GratuityValuation", {"as_of": DATE, "liability": MONEY, "funded_amount": MONEY, "actuary": S()}, required=("as_of", "liability")),
+       resp=ref("GratuityValuation"), status="201")
+action(E + "/payroll/statutory-bonus/accrue", "Payroll & HR", "accrueStatutoryBonus", "Accrue the statutory bonus for a financial year", "payroll:write",
+       body=schema("AccrueBonus", {"fy": FY}, required=("fy",)), resp=schema("BonusAccrual", {"fy": FY, "accrued": I(), "total": MONEY, "pay_by": DATE}))
+schema("CommitteeMember", {"name": S(), "role": ENUM("presiding_officer", "member", "external_member"), "employee_id": NULLABLE(UUID)}, required=("name", "role"))
+schema("Committee", {"id": RO_UUID, "kind": ENUM("posh_internal", "audit", "nomination_remuneration", "csr", "grievance"), "constituted_on": DATE,
+                     "dissolved_on": NULLABLE(DATE), "members": ARR(ref("CommitteeMember"), minItems=1)}, required=("kind", "constituted_on", "members"))
+_op("get", E + "/committees", "Payroll & HR", "listCommittees", "Statutory committees", "payroll:read", params=[P("Limit"), P("Cursor"), q("kind", S())], resp=page_of("Committee"))
+action(E + "/committees", "Payroll & HR", "createCommittee", "Constitute a committee (e.g. the POSH Internal Committee)", "payroll:write", body=ref("Committee"),
+       resp=ref("Committee"), status="201")
 _op("get", E + "/payroll/wage-code-check", "Payroll & HR", "getWageCodeCheck", "Employees whose wages are under 50% of pay", "payroll:read", resp=ARR(ref("WageCodeCheck")))
 schema("LeaveRequest", {"id": RO_UUID, "employee_id": UUID, "leave_type": S(), "from": DATE, "to": DATE, "days": N(), "status": ENUM("pending", "approved", "rejected", "cancelled", readOnly=True)},
        required=("employee_id", "leave_type", "from", "to"))
@@ -876,6 +905,12 @@ _op("get", E + "/documents", "Documents", "searchDocuments", "Search and list", 
     params=[P("Limit"), P("Cursor"), P("Q"), q("folder", S()), q("source", S()), q("expiring_within_days", I()), q("subject", S()), q("subject_id", UUID)],
     resp=page_of("Document"))
 item(E + "/documents", "Documents", "Document", "documents")
+_op("put", "/storage/{token}", "Documents", "uploadObject", "Upload the bytes to a signed URL (size and SHA-256 are checked)",
+    params=[{"name": "token", "in": "path", "required": True, "schema": S()}], status="204", security=[],
+    desc="The URL comes from `POST /documents` and expires after 15 minutes. The token is the credential; send no Authorization header.")
+_op("get", "/storage/{token}", "Documents", "downloadObject", "Download from a short-lived signed URL",
+    params=[{"name": "token", "in": "path", "required": True, "schema": S()}], security=[],
+    desc="The URL is the `download_url` of a document and expires after 5 minutes.")
 schema("DocumentRequest", {"id": RO_UUID, "advisor_grant_id": NULLABLE(UUID), "requested_by_name": S(), "title": S(), "due_on": NULLABLE(DATE),
                            "status": ENUM("open", "partially_fulfilled", "fulfilled", "cancelled", readOnly=True), "document_ids": ARR(UUID, readOnly=True)},
        required=("title",))
@@ -901,6 +936,10 @@ action(E + "/portal-connections/{id}/renew", "Portals & jobs", "renewPortalSessi
 schema("AaConsent", {"id": RO_UUID, "bank_account_ids": ARR(UUID), "status": S(readOnly=True), "valid_until": TS, "redirect_url": S(format="uri", readOnly=True)},
        required=("bank_account_ids", "valid_until"))
 collection(E + "/aa-consents", "Portals & jobs", "AaConsent", "settings")
+_op("post", "/integrations/aa/notify", "Portals & jobs", "aaConsentNotification", "Account Aggregator consent callback",
+    body=schema("AaNotification", {"consent_handle": S(), "status": ENUM("ACTIVE", "PAUSED", "REVOKED", "REJECTED", "EXPIRED")}, required=("consent_handle", "status")),
+    status="204", security=[], params=[{"name": "X-AA-Signature", "in": "header", "required": True, "schema": S(), "description": "Hex HMAC-SHA256 of the raw body with the shared secret"}],
+    desc="Called by the aggregator, not by users. An ACTIVE consent queues an immediate pull of the linked accounts.")
 _op("get", "/jobs/{id}", "Portals & jobs", "getJob", "Get a job", resp=ref("Job"))
 _op("post", "/jobs/{id}/otp", "Portals & jobs", "submitJobOtp", "Provide the OTP a paused job is waiting for",
     body=schema("OtpSubmission", {"otp": S(pattern=r"^[0-9]{6}$")}, required=("otp",)), resp=ref("Job"))

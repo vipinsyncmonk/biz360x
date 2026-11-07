@@ -24,12 +24,12 @@ docker compose up -d db                                   # loads db/*.sql on fi
 docker compose exec db psql -U postgres -d biz360x -f /docker-entrypoint-initdb.d/tests/demo_and_checks.sql
 
 # without Docker: a PostgreSQL 16 superuser connection is enough
-for f in db/0*.sql db/10_*.sql db/11_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -f "$f"; done
+for f in db/[0-9][0-9]_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -f "$f"; done
 psql -d biz360x -v ON_ERROR_STOP=1 -f db/tests/demo_and_checks.sql      # prints ALL CHECKS PASSED
 
 # API
 pip install -r server/requirements.txt
-cd server && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/biz360x pytest -q   # 14 end-to-end tests
+cd server && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/biz360x pytest -q   # end-to-end + engine unit tests
 cd server && DATABASE_URL=… uvicorn app.main:app --reload                                    # :8000, spec at /v1/openapi.yaml
 cd server && DATABASE_URL=… python -m app.worker
 
@@ -39,6 +39,8 @@ npx @redocly/cli@1.25.0 build-docs api/openapi.yaml -o api/api-reference.html   
 ```
 
 The tests expect the demo data. Rebuild the database before a full test run, because the tests change it.
+
+**Before every push run the local CI mirror:** `bash scripts/ci-local.sh` (WSL/Linux) or `powershell -ExecutionPolicy Bypass -File scripts/ci-local.ps1`. Setup: `docs/DEV_SETUP.md`. Migrations: `python scripts/migrate.py`.
 
 ## Rules that must hold
 
@@ -64,8 +66,8 @@ The tests expect the demo data. Rebuild the database before a full test run, bec
 
 ## Backlog (in order)
 
-1. Compliance engine evaluator: `compliance_rules.applicability` / `due_rule` × `entity_facts_current` → upsert `obligations` with `reason_snapshot`.
-2. Ledger posting templates for issued sales documents, booked bills, receipts and payroll runs.
+Done: compliance engine evaluator (`server/app/engine.py`, migrations 12-13); ledger posting for sales documents and receipts, quotes to cash, bank matching and period close (`ledger.py`, `routes_orders.py`, `routes_finance.py`, `receivables.py`). Bill posting, purchases, GST returns, 2B matching, TDS and advance tax are in (`routes_purchases.py`, `routes_gst.py`, `taxcalc.py`; migrations 14-15). Payroll (`routes_payroll.py`, `payroll.py`, `secretbox.py`; migration 16) is in; legal, secretarial, the vault and the notice desk are in (`routes_vault.py`, `routes_legal.py`, `storage.py`; migration 17). The portal adapters are in as interfaces and sandboxes (`adapters.py`, `routes_portals.py`, migration 18); the provider choice is `docs/PROVIDERS.md`. Next: auth and hardening (M7).
+
 3. Remaining spec operations (onboarding, quotes, purchases, GST returns, payroll, legal, documents, copilot).
 4. Real auth: OTP provider, OIDC/SAML. Development OTP `000000` must never reach production.
 5. Frontend (Next.js) built from `design/screens`.

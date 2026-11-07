@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - name: Load schema
-        run: for f in db/0*.sql db/10_*.sql db/11_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -q -f "$f"; done
+        run: for f in db/[0-9][0-9]_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -q -f "$f"; done
       - name: Database behaviour checks
         run: psql -d biz360x -v ON_ERROR_STOP=1 -q -f db/tests/demo_and_checks.sql
       - name: Install API dependencies
@@ -38,6 +38,8 @@ jobs:
           diff -u api/openapi.yaml /tmp/openapi.yaml
           python -c "import yaml; from openapi_spec_validator import validate; validate(yaml.safe_load(open('api/openapi.yaml')))"
           npx -y @redocly/cli@1.25.0 lint api/openapi.yaml --config api/redocly.yaml
+      - name: Docs map references real operations
+        run: python scripts/check_docs_map.py
       - name: End-to-end API tests
         working-directory: server
         run: pytest -q
