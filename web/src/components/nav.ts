@@ -40,3 +40,18 @@ export const NAV: NavGroup[] = [
 export const SOON_TITLES: Record<string, string> = Object.fromEntries(
   NAV.flatMap((g) => g.items).filter((i) => !i.built).map((i) => [i.href.slice(3), i.t]),
 );
+
+/** The four tabs of the phone layout, as in the mobile designs. Anything else lives under More. */
+export const TABS: Array<{ key: string; t: string; href: string; icon: string }> = [
+  { key: "today", t: "Today", href: "/", icon: I.today },
+  { key: "compliance", t: "Compliance", href: "/compliance", icon: I.shield },
+  { key: "copilot", t: "Copilot", href: "/m/copilot", icon: I.spark },
+  { key: "more", t: "More", href: "/more", icon: I.grid },
+];
+
+export function activeTab(path: string): string {
+  if (path === "/") return "today";
+  if (path === "/compliance" || path.startsWith("/compliance/")) return "compliance";
+  if (path === "/m/copilot") return "copilot";
+  return "more";
+}

@@ -102,7 +102,7 @@ button { font: inherit; cursor: pointer; }
 .empty { padding: 28px 20px; text-align: center; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line-2); }
 
 /* tables, calendar, bars */
-.tablewrap { overflow-x: auto; }
+.tablewrap { overflow-x: auto; position: relative; }   /* relative: a .sr label inside the table must be clipped by it, not widen the page */
 table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
 th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 10px 20px; }
 td { padding: 12px 20px; border-top: 1px solid var(--line-2); }
@@ -159,3 +159,30 @@ dl.facts dd { margin: 0; }
 .gstbox { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; min-height: 44px; border: 1px solid var(--line); cursor: pointer; }
 .gstbox.on { border-color: var(--ink); }
 @media (max-width: 640px) { .ob { padding: 28px 16px 48px; } .ob h1 { font-size: 34px; } }
+
+/* phone layout: the sidebar becomes a top bar and a bottom tab bar (design/screens/Mobile*.dc.html) */
+.mtop, .tabbar { display: none; }
+@media (max-width: 820px) {
+  .side { display: none; }
+  .shell { display: block; }
+  .main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .mtop { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--side); color: #fff; position: sticky; top: 0; z-index: 20; }
+  .mtop a { color: #fff; text-decoration: none; display: flex; align-items: center; gap: 8px; }
+  .mtop select { flex: 1; min-width: 0; height: 40px; background: var(--side-2); color: #fff; border: 1px solid var(--side-line); border-radius: 10px; padding: 0 10px; font: inherit; font-size: 14px; }
+  .mtop select option { color: #14161A; }
+  .tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 56px; font-size: 12px; color: var(--muted); text-decoration: none; }
+  .tabbar a[aria-current="page"] { color: var(--cobalt); font-weight: 600; }
+  .page { padding: 20px 16px; gap: 20px; }
+  .page h1.disp { font-size: 30px !important; }
+  .cols { gap: 20px; }
+  .col-main, .col-side { flex-basis: 100%; }
+  .cardhead { padding: 14px 16px; }
+}
+.mlist { display: flex; flex-direction: column; }
+.mlist a, .mlist button.row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 16px; border: 0; border-top: 1px solid var(--line-2); background: none; color: var(--ink); text-decoration: none; text-align: left; font-size: 15px; width: 100%; }
+.mlist > :first-child { border-top: 0; }
+@media (max-width: 520px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi { padding: 14px; }
+}
