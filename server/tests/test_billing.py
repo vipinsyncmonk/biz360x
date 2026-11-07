@@ -202,3 +202,55 @@ def test_the_finance_summary(client):
     assert client.get(url("/finance/summary"), headers=h, params={"from": "2026-05-02", "to": "2026-05-01"}).status_code == 400
     assert client.get(url("/finance/summary", EB2), headers=h).status_code == 404
     assert client.get(url("/finance/summary"), headers=login(client, VIEWER)).status_code == 200
+
+
+# ------------------------------------------------------------------ receipts and ageing
+def test_receipts_list_allocate_and_ageing(client, db):
+    h, hv = login(client, OWNER), login(client, VIEWER)
+    first = client.get(url("/receipts"), headers=h).json()["data"]
+    assert len(first) == 1 and first[0]["party_name"] == "Alpha Foods 100% Pvt Ltd" and first[0]["amount"] == "4000.00" and first[0]["unallocated"] == "0.00"
+    assert [(a["invoice_id"], a["amount"]) for a in first[0]["allocations"]] == [(S["a"]["id"], "4000.00")]
+    one = client.get(url(f"/receipts/{first[0]['id']}"), headers=h).json()
+    assert one["receipt_no"] == first[0]["receipt_no"]
+    assert client.get(url(f"/receipts/{first[0]['id']}", EB2), headers=h).status_code == 404
+
+    # an advance: money in, nothing allocated yet
+    r = client.post(url("/receipts"), headers={**h, **key()}, json={"party_id": P_A, "received_on": TODAY.isoformat(), "amount": "3000.00", "method": "neft", "utr": "UTR1"})
+    adv = r.json()
+    assert r.status_code == 201 and adv["unallocated"] == "3000.00"
+    got = client.get(url(f"/receipts/{adv['id']}"), headers=h).json()
+    assert got["is_advance"] is True and got["unallocated"] == "3000.00" and got["allocations"] == []
+    assert {x["id"] for x in client.get(url("/receipts"), headers=h, params={"party_id": P_A}).json()["data"]} == {adv["id"], first[0]["id"]}
+    assert client.get(url("/receipts"), headers=h, params={"party_id": P_B}).json()["data"] == []
+    tomorrow = (TODAY + dt.timedelta(days=1)).isoformat()
+    assert client.get(url("/receipts"), headers=h, params={"from": tomorrow}).json()["data"] == []
+
+    # allocate part of it: the invoice owes 7800, so 2000 is fine and 1500 more than what is left is not
+    k = key()
+    ok = client.post(url(f"/receipts/{adv['id']}/allocate"), headers={**h, **k}, json=[{"invoice_id": S["a"]["id"], "amount": "2000.00"}])
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["unallocated"] == "1000.00" and ok.json()["is_advance"] is True
+    replay = client.post(url(f"/receipts/{adv['id']}/allocate"), headers={**h, **k}, json=[{"invoice_id": S["a"]["id"], "amount": "2000.00"}])
+    assert replay.json() == ok.json()                                                    # same key, same answer, nothing booked twice
+    too_much = client.post(url(f"/receipts/{adv['id']}/allocate"), headers={**h, **key()}, json=[{"invoice_id": S["a"]["id"], "amount": "1500.00"}])
+    assert too_much.status_code == 409 and too_much.json()["code"] == "over_settlement"
+    wrong_party = client.post(url(f"/receipts/{adv['id']}/allocate"), headers={**h, **key()}, json=[{"invoice_id": S["b"]["id"], "amount": "100.00"}])
+    assert wrong_party.status_code == 400
+    assert client.post(url(f"/receipts/{adv['id']}/allocate"), headers={**h, **key()}, json=[]).status_code == 400
+    assert client.post(url(f"/receipts/{adv['id']}/allocate"), headers=h, json=[{"invoice_id": S["a"]["id"], "amount": "1.00"}]).status_code == 400       # key required
+    assert client.post(url(f"/receipts/{adv['id']}/allocate"), headers={**hv, **key()}, json=[{"invoice_id": S["a"]["id"], "amount": "1.00"}]).json()["code"] == "permission_denied"
+    assert client.post(url(f"/receipts/{adv['id']}/allocate", EB2), headers={**h, **key()}, json=[{"invoice_id": S["a"]["id"], "amount": "1.00"}]).status_code == 404
+    inv = client.get(url(f"/sales-documents/{S['a']['id']}"), headers=h).json()
+    assert inv["balance_due"] == "5800.00"                                               # 11800 - 4000 - 2000
+    # the books still balance and the advance on the ledger fell by what was allocated
+    adv_bal = db.execute("""SELECT coalesce(sum(l.credit - l.debit), 0) AS b FROM journal_lines l JOIN journal_entries j ON j.id = l.entry_id
+                            JOIN ledger_accounts a ON a.id = l.account_id WHERE j.entity_id = %s AND a.code = '2150'""", (EB,)).fetchone()["b"]
+    assert adv_bal == D("1000.00")
+
+    # ageing: invoice b is 60 days old, invoice a is new
+    rows = {x["party_id"]: x for x in client.get(url("/receivables/ageing"), headers=h).json()}
+    assert rows[P_A]["b0_30"] == "5800.00" and rows[P_A]["total"] == "5800.00" and rows[P_A]["b46_60"] == "0.00"
+    assert rows[P_B]["b46_60"] == "5900.00" and rows[P_B]["total"] == "5900.00"
+    later = client.get(url("/receivables/ageing"), headers=h, params={"as_of": (TODAY + dt.timedelta(days=40)).isoformat()}).json()
+    assert {x["party_id"]: x["b31_45"] for x in later}[P_A] == "5800.00"                  # forty days on, the new invoice has aged into the next bucket
+    assert client.get(url("/receivables/ageing", EB2), headers=h).status_code == 404
