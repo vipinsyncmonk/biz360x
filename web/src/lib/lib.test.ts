@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { orderMethods, overdueLabel, pageState, queryReady } from "./pay";
 import { NAV, TABS, activeTab } from "../components/nav";
 import { allocatedTotal, allocationBody, allocationProblem, offsetLabel, pauseReady, receiptReady, recurringState, stepSentence, suggestAllocation, unallocated } from "./receivables";
 
@@ -403,5 +404,26 @@ describe("phone tabs", () => {
   it("every tab leads somewhere", () => {
     const known = new Set([...NAV.flatMap((g) => g.items.map((i) => i.href)), "/more"]);
     for (const t of TABS) expect(known.has(t.href)).toBe(true);
+  });
+});
+
+describe("customer payment page", () => {
+  it("lists the allowed methods with bank transfer first and drops unknown ones", () => {
+    expect(orderMethods(["card", "upi", "bank_transfer"])).toEqual(["bank_transfer", "upi", "card"]);
+    expect(orderMethods(["wire"])).toEqual([]);
+    expect(orderMethods(undefined)).toEqual([]);
+  });
+  it("words lateness and picks the view", () => {
+    expect(overdueLabel(0)).toBeNull();
+    expect(overdueLabel(1)).toBe("1 day overdue");
+    expect(overdueLabel(27)).toBe("27 days overdue");
+    expect(pageState({ status: "due" })).toBe("due");
+    expect(pageState({ status: "paid" })).toBe("paid");
+    expect(pageState({ status: "cancelled" })).toBe("closed");
+  });
+  it("needs a real email and a message for a query", () => {
+    expect(queryReady({ email: "a@b.in", message: "Wrong GSTIN" })).toBe(true);
+    expect(queryReady({ email: "a@b", message: "x" })).toBe(false);
+    expect(queryReady({ email: "a@b.in", message: "   " })).toBe(false);
   });
 });
