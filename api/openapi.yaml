@@ -6149,6 +6149,46 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: finance:write
+  /entities/{entityId}/bank-accounts/{id}/transactions:
+    post:
+      tags:
+      - Finance & books
+      operationId: importBankTransactions
+      summary: Import bank lines from a feed (Account Aggregator, bank API or parsed statement)
+      description: Duplicates (same `external_id`) are ignored. Credits paid into an invoice virtual account, or naming an
+        invoice number, get a suggested receipt to accept or reject.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankFeedImport'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankFeedResult'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
   /entities/{entityId}/bank-transactions:
     get:
       tags:
@@ -6841,6 +6881,182 @@ paths:
         '429':
           $ref: '#/components/responses/TooMany'
       x-permission: payroll:read
+  /entities/{entityId}/payroll/labour-compliance:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: getLabourCompliance
+      summary: Wage code, gratuity, bonus, POSH and shops-act status
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: as_of
+        in: query
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabourCompliance'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+  /entities/{entityId}/payroll/gratuity-valuations:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: recordGratuityValuation
+      summary: Record an actuarial gratuity valuation
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GratuityValuation'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GratuityValuation'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:write
+  /entities/{entityId}/payroll/statutory-bonus/accrue:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: accrueStatutoryBonus
+      summary: Accrue the statutory bonus for a financial year
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccrueBonus'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BonusAccrual'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:write
+  /entities/{entityId}/committees:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: listCommittees
+      summary: Statutory committees
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      - name: kind
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitteePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+    post:
+      tags:
+      - Payroll & HR
+      operationId: createCommittee
+      summary: Constitute a committee (e.g. the POSH Internal Committee)
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Committee'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Committee'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:write
   /entities/{entityId}/payroll/wage-code-check:
     get:
       tags:
@@ -14047,6 +14263,62 @@ components:
           format: uuid
       required:
       - document_id
+    BankFeedLine:
+      type: object
+      properties:
+        external_id:
+          type: string
+          description: Dedupe key from the feed
+        txn_date:
+          type: string
+          format: date
+        amount:
+          $ref: '#/components/schemas/Money'
+          description: + credit to us, - debit
+        description:
+          type: string
+        utr:
+          oneOf:
+          - type: string
+          - type: 'null'
+        counterparty_name:
+          oneOf:
+          - type: string
+          - type: 'null'
+        counterparty_va:
+          oneOf:
+          - type: string
+            description: Virtual account the money was paid into
+          - type: 'null'
+        balance_after:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+      required:
+      - external_id
+      - txn_date
+      - amount
+      - description
+    BankFeedImport:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/BankFeedLine'
+          minItems: 1
+          maxItems: 1000
+      required:
+      - transactions
+    BankFeedResult:
+      type: object
+      properties:
+        imported:
+          type: integer
+        duplicates:
+          type: integer
+        suggested:
+          type: integer
     BankMatchSuggestion:
       type: object
       properties:
@@ -14400,8 +14672,10 @@ components:
           type: string
           format: date
         obligation_id:
-          type: string
-          format: uuid
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
     PayrollRun:
       type: object
       properties:
@@ -14531,6 +14805,120 @@ components:
           $ref: '#/components/schemas/Money'
         pf_wage_should_be:
           $ref: '#/components/schemas/Money'
+    LabourCompliance:
+      type: object
+      properties:
+        headcount:
+          type: integer
+        wage_code:
+          type: object
+        gratuity:
+          type: object
+        statutory_bonus:
+          type: object
+        posh:
+          type: object
+        shops_establishment:
+          type: object
+    GratuityValuation:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date
+        liability:
+          $ref: '#/components/schemas/Money'
+        funded_amount:
+          $ref: '#/components/schemas/Money'
+        actuary:
+          type: string
+      required:
+      - as_of
+      - liability
+    AccrueBonus:
+      type: object
+      properties:
+        fy:
+          $ref: '#/components/schemas/FyLabel'
+      required:
+      - fy
+    BonusAccrual:
+      type: object
+      properties:
+        fy:
+          $ref: '#/components/schemas/FyLabel'
+        accrued:
+          type: integer
+        total:
+          $ref: '#/components/schemas/Money'
+        pay_by:
+          type: string
+          format: date
+    CommitteeMember:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+          enum:
+          - presiding_officer
+          - member
+          - external_member
+        employee_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+      required:
+      - name
+      - role
+    Committee:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        kind:
+          type: string
+          enum:
+          - posh_internal
+          - audit
+          - nomination_remuneration
+          - csr
+          - grievance
+        constituted_on:
+          type: string
+          format: date
+        dissolved_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommitteeMember'
+          minItems: 1
+      required:
+      - kind
+      - constituted_on
+      - members
+    CommitteePage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Committee'
+        next_cursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - data
+      - next_cursor
     LeaveRequest:
       type: object
       properties:

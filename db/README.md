@@ -6,7 +6,7 @@
 
 ```bash
 createdb biz360x
-for f in 0*.sql 10_seed_reference.sql 11_api_support.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -f "$f"; done
+for f in [0-9][0-9]_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -f "$f"; done
 psql -d biz360x -f tests/demo_and_checks.sql      # optional: demo data + 23 behaviour checks
 ```
 
@@ -46,7 +46,7 @@ Run the migration as a superuser, because it creates two roles. The API then con
 
 ## Before production
 
-- Write the rule evaluator that turns `compliance_rules` and `entity_facts` into obligations. The JSON languages it reads are documented at the top of `10_seed_reference.sql`.
+- The rule evaluator is `server/app/engine.py` (see CLAUDE.md). Have a CA/CS review the rule library before relying on its output.
 - Have a CA/CS review the rule library (fees, caps, dates). Ship every change as a new rule version, never as an edit.
 - Move these files into your migration tool (Flyway, sqitch or Prisma migrate).
 - At scale, partition `audit_log`, `bank_transactions` and `entity_facts` by month.
