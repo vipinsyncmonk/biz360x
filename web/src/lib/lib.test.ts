@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { blankContract, blankMeeting, blankResolution, contractBody, contractProblem, gapWarning, heldProblem, istDate, istTime, meetingBody, meetingReady, meetingState, nextResolutionNumber, resolutionActions, resolutionBody, resolutionReady, termKeyFrom, termKeyOk, termReady, CONTRACT_NEXT } from "./board";
 import { blankConn, blankHook, canRenew, connBody, connReady, deliveryState, eventsLabel, hookBody, hookProblem, jobStage, otpReady } from "./integrations";
 import { annualOf, blankEmployee, defaultComponents, draftFromRows, employeeBody, employeeProblem, inputProblem, inputsBody, inputsProblem, monthlyEarnings, structureBody, structureProblem } from "./payroll";
 import { orderMethods, overdueLabel, pageState, queryReady } from "./pay";
@@ -565,5 +566,82 @@ describe("portals and webhooks", () => {
     expect(deliveryState({ delivered_at: null, status_code: 500, next_retry_at: "2026-11-07T11:00:00Z", error: null }).label).toBe("Will retry after 500");
     expect(deliveryState({ delivered_at: null, status_code: 404, next_retry_at: null, error: null }).tone).toBe("due");
     expect(deliveryState({ delivered_at: null, status_code: null, next_retry_at: null, error: null }).label).toBe("Pending");
+  });
+});
+
+describe("contracts, meetings and resolutions", () => {
+  const c = { ...blankContract(), title: "AMC with Coastal Grid" };
+  it("checks a contract form the way the server does", () => {
+    expect(contractProblem(c)).toBeNull();
+    expect(contractProblem({ ...c, title: " " })).toMatch(/title/);
+    expect(contractProblem({ ...c, start: "2026-05-01", end: "2026-04-01" })).toMatch(/before/);
+    expect(contractProblem({ ...c, autoRenews: true })).toMatch(/end date/);
+    expect(contractProblem({ ...c, autoRenews: true, end: "2027-03-31", noticeDays: "400" })).toMatch(/notice/);
+    expect(contractProblem({ ...c, autoRenews: true, end: "2027-03-31", renewalMonths: "0" })).toMatch(/Renewal/);
+    expect(contractProblem({ ...c, value: "12,000" })).toMatch(/amount/);
+    expect(contractProblem({ ...c, terms: "abc" })).toMatch(/days/);
+  });
+  it("sends notice and renewal only for auto-renewing contracts", () => {
+    expect(contractBody(c)).toEqual({ title: "AMC with Coastal Grid", kind: "customer", status: "draft", auto_renews: false, governing_law: "India" });
+    expect(contractBody({ ...c, autoRenews: true, end: "2027-03-31", value: "250000.5", terms: "30", counterparty: " Coastal " })).toMatchObject({
+      auto_renews: true, notice_days: 60, renewal_months: 12, value_amount: "250000.50", value_period: "annual", payment_terms_days: 30, counterparty_name: "Coastal", end_date: "2027-03-31",
+    });
+  });
+  it("offers the next steps for each status", () => {
+    expect(CONTRACT_NEXT.draft!.map(([k]) => k)).toContain("out_for_signature");
+    expect(CONTRACT_NEXT.terminated).toEqual([]);
+    expect(CONTRACT_NEXT.active!.map(([k]) => k)).toEqual(["renewed", "expired", "terminated"]);
+  });
+  it("turns a label into a term key", () => {
+    expect(termKeyFrom("Late payment interest")).toBe("late_payment_interest");
+    expect(termKeyFrom("  Liability cap (INR)! ")).toBe("liability_cap_inr");
+    expect(termKeyFrom("12 months")).toBe("months");
+    expect(termKeyOk("late_payment_interest")).toBe(true);
+    expect(termKeyOk("x")).toBe(false);
+    expect(termReady("Late payment interest", "18% a year")).toBe(true);
+    expect(termReady("Late payment interest", " ")).toBe(false);
+    expect(termReady("!!", "x")).toBe(false);
+  });
+  it("sends a meeting in IST and describes where it stands", () => {
+    expect(meetingReady(blankMeeting())).toBe(false);
+    const f = { ...blankMeeting(), date: "2026-12-05" };
+    expect(meetingReady(f)).toBe(true);
+    expect(meetingBody(f)).toEqual({ kind: "board", scheduled_for: "2026-12-05T11:00:00+05:30" });
+    expect(meetingState({ held_on: null, quorum_met: null, scheduled_for: "2026-12-05T11:00:00+05:30" }, "2026-11-07").label).toBe("Scheduled");
+    expect(meetingState({ held_on: null, quorum_met: null, scheduled_for: "2026-10-05T11:00:00+05:30" }, "2026-11-07").label).toBe("Date passed, not marked held");
+    expect(meetingState({ held_on: "2026-10-05", quorum_met: true, scheduled_for: "2026-10-05T11:00:00+05:30" }, "2026-11-07").label).toBe("Held, quorum met");
+    expect(meetingState({ held_on: "2026-10-05", quorum_met: false, scheduled_for: "2026-10-05T11:00:00+05:30" }, "2026-11-07").tone).toBe("due");
+    expect(meetingState({ held_on: "2026-10-05", quorum_met: null, scheduled_for: "2026-10-05T11:00:00+05:30" }, "2026-11-07").label).toBe("Held, quorum not recorded");
+    expect(heldProblem("", "2026-11-07")).toMatch(/date/);
+    expect(heldProblem("2026-11-08", "2026-11-07")).toMatch(/future/);
+    expect(heldProblem("2026-11-07", "2026-11-07")).toBeNull();
+  });
+  it("shows a meeting time in India even though the server sends UTC", () => {
+    expect(istTime("2026-12-05T05:30:00+00:00")).toBe("11:00");
+    expect(istDate("2026-12-05T05:30:00+00:00")).toBe("2026-12-05");
+    expect(istDate("2026-12-05T20:00:00Z")).toBe("2026-12-06");         // 01:30 next morning in India
+    expect(istTime("2026-12-05T20:00:00Z")).toBe("01:30");
+    expect(meetingState({ held_on: null, quorum_met: null, scheduled_for: "2026-11-06T20:00:00Z" }, "2026-11-07").label).toBe("Scheduled");   // still today in India
+  });
+  it("flags a long gap between board meetings only for board meetings", () => {
+    expect(gapWarning({ kind: "board", days_since_last_board: 121 })).toBe(true);
+    expect(gapWarning({ kind: "board", days_since_last_board: 120 })).toBe(false);
+    expect(gapWarning({ kind: "board", days_since_last_board: null })).toBe(false);
+    expect(gapWarning({ kind: "agm", days_since_last_board: 400 })).toBe(false);
+  });
+  it("moves resolutions only the way the server allows", () => {
+    expect(resolutionActions("draft").map(([k]) => k)).toEqual(["circulated", "passed", "withdrawn"]);
+    expect(resolutionActions("circulated").map(([k]) => k)).toEqual(["passed", "failed", "withdrawn"]);
+    expect(resolutionActions("passed")).toEqual([]);
+    expect(resolutionActions("withdrawn")).toEqual([]);
+  });
+  it("suggests the next resolution number and builds the body", () => {
+    expect(nextResolutionNumber([], 2026)).toBe("2026/001");
+    expect(nextResolutionNumber(["2026/001", "2026/007", "2025/030", "ABC"], 2026)).toBe("2026/008");
+    expect(resolutionReady(blankResolution())).toBe(false);
+    const r = { ...blankResolution("m1"), number: " 2026/001 ", title: " Approve the budget " };
+    expect(resolutionReady(r)).toBe(true);
+    expect(resolutionBody(r)).toEqual({ number: "2026/001", title: "Approve the budget", kind: "board", meeting_id: "m1" });
+    expect(resolutionBody({ ...r, meetingId: "" })).not.toHaveProperty("meeting_id");
   });
 });

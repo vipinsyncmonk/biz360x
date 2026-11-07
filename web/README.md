@@ -34,6 +34,7 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/billing/quotes` | Quotes list with send, new version, accept, mark lost and create invoice from an accepted quote |
 | `src/app/pay/[code]` | The customer payment page: no sign-in, no app shell. Invoice summary, bank-transfer details, payment methods, raise a query. Talks to the public `/pay` endpoints without a token (`src/lib/pay.ts`) |
 | `src/app/(app)/more` | The phone's More tab: switch entity, every module, account. On screens up to 820px wide the sidebar gives way to a top bar and a bottom tab bar (Today, Compliance, Copilot, More) |
+| `src/app/(app)/board` | Board and resolutions: schedule meetings, mark them held with quorum, draft resolutions and move them to circulated, passed, failed or withdrawn (a passed special resolution raises MGT-14) |
 | `src/app/(app)/billing/receivables` | Collections: ageing by customer, record a receipt with allocation, allocate what is left of an advance, pause reminders, see the reminder sequence, pause or resume recurring invoices |
 | `src/app/(app)/billing/quotes/new` | New quote; totals come from the invoice preview, so quote and invoice tax agree |
 | `src/lib/billing.ts` | Tab queries, status labels, line validation, request bodies. Unit-tested |
@@ -51,6 +52,7 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/group` | Group view for firms: clients × authorities grid, filters, open items per client, team load |
 | `src/components/IntegrationsPanels.tsx` | Portal connections (connect, renew with the OTP flow, disconnect) and webhooks (add, pause, test, deliveries, delete) |
 | `src/components/SettingsForms.tsx` | The invite, advisor, certificate and API key forms |
+| `src/lib/board.ts` | Contract, meeting and resolution form rules, IST display of meeting times. Unit-tested |
 | `src/lib/settings.ts` | Form rules, notification matrix, certificate status, grid ordering. Unit-tested |
 | `src/app/(app)/m/[slug]` | Placeholder for screens that are not built yet |
 

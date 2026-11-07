@@ -1,10 +1,12 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { api, unwrap } from "@/lib/api";
 import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { CONTRACT_STATUS, Contract, KIND_LABEL, SIGNER_STATUS, SIGN_STATUS, SignatureRequest, Template, alertTone, byUrgency, nextDate, versionLabel } from "@/lib/legal";
 import { useSession } from "@/lib/session";
+import { ContractActions, NewContract } from "@/components/LegalForms";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
 const PERIOD: Record<string, string> = { one_time: "one time", monthly: "a month", annual: "a year", rate_card: "rate card" };
@@ -14,6 +16,7 @@ export default function Legal() {
   const id = entity?.id ?? null;
   const [onlyNotice, setOnlyNotice] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const contracts = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/contracts", { params: { path: { entityId: id! }, query: { limit: 200, ...(onlyNotice ? { notice_within_days: 30 } : {}) } } })).data as unknown as Contract[], id ? `${id}|${onlyNotice}` : null);
   const sigs = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/signature-requests", { params: { path: { entityId: id! }, query: { limit: 20 } } })).data as unknown as SignatureRequest[], id);
@@ -27,10 +30,17 @@ export default function Legal() {
 
   return (
     <main className="page">
-      <div>
-        <span className="muted" style={{ fontSize: 14 }}>{entity?.legal_name}</span>
-        <h1 className="disp" style={{ margin: "6px 0 0", fontSize: 36 }}>Legal &amp; Contracts</h1>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div>
+          <span className="muted" style={{ fontSize: 14 }}>{entity?.legal_name}</span>
+          <h1 className="disp" style={{ margin: "6px 0 0", fontSize: 36 }}>Legal &amp; Contracts</h1>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/board" className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Board &amp; resolutions</Link>
+          <button type="button" className="btn primary" onClick={() => setAdding(!adding)}>+ New contract</button>
+        </div>
       </div>
+      {adding && id && <NewContract entityId={id} onDone={(cid) => { setAdding(false); setOpenId(cid); contracts.reload(); }} onCancel={() => setAdding(false)} />}
 
       <ErrorNote error={contracts.error} />
       <section aria-label="Key numbers" className="kpis">
@@ -84,6 +94,7 @@ export default function Legal() {
                   <span style={{ textAlign: "right" }}>{t.value_text}<span className="t13" style={{ display: "block" }}>{t.verified ? "Verified" : t.extracted_by === "copilot" ? "Suggested by the copilot, to be verified" : "Entered by hand"}{t.source_page ? ` · page ${t.source_page}` : ""}</span></span>
                 </div>
               ))}
+              {id && <ContractActions key={current.id} entityId={id} contract={current} onChange={contracts.reload} />}
               {current.alerts.map((a) => (
                 <div key={a.code} role="note" style={{ borderTop: "1px solid var(--line-2)", paddingTop: 8, fontSize: 14 }}>
                   <Pill tone={alertTone(a.level)}>{a.title}</Pill><span className="t13" style={{ display: "block", marginTop: 4 }}>{a.detail}</span>
