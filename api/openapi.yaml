@@ -109,6 +109,36 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       security: []
+  /auth/signup:
+    post:
+      tags:
+      - Auth
+      operationId: signUp
+      summary: Create an account and send a one-time code
+      description: Same answer whether or not the address is registered; an existing person's name is not changed. 5 per minute
+        per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '204':
+          description: Done
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      security: []
   /auth/token:
     post:
       tags:
@@ -10776,6 +10806,17 @@ components:
         email:
           type: string
           format: email
+    SignupRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+      required:
+      - email
+      - full_name
     TokenRequest:
       type: object
       properties:

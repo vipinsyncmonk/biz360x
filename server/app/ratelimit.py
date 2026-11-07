@@ -19,7 +19,7 @@ WINDOW = 60
 
 
 def limits() -> dict[str, int]:
-    return {"user": int(os.environ.get("BIZ_RATE_USER", "600")), "heavy": int(os.environ.get("BIZ_RATE_HEAVY", "60"))}
+    return {"user": int(os.environ.get("BIZ_RATE_USER", "600")), "heavy": int(os.environ.get("BIZ_RATE_HEAVY", "60")), "signup": int(os.environ.get("BIZ_RATE_SIGNUP", "5"))}
 
 
 class MemoryLimiter:
@@ -86,6 +86,10 @@ def check(method: str, path: str, authorization: str, client_ip: str) -> tuple[b
             headers["RateLimit"] = f"limit={lim['heavy']}, remaining={rem2}, reset={reset2}"
         if not ok2:
             ok, reset = False, reset2
+    if ok and method == "POST" and path == "/v1/auth/signup":          # creates rows for people we have never seen: much tighter
+        ok3, _, reset3 = LIMITER.hit(client_ip + ":signup", lim["signup"])
+        if not ok3:
+            ok, reset = False, reset3
     if not ok:
         headers["Retry-After"] = str(reset)
     return ok, headers, 429

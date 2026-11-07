@@ -59,7 +59,7 @@ Development needs only `DATABASE_URL`. Everything else has a development default
 | `BIZ_OTP_PROVIDER`, `BIZ_IDP_PROVIDER` | Sign-in providers; `sandbox` by default (dev code `000000`, identity code `sandbox:<email>`) |
 | `BIZ_ADAPTERS` | Portal adapters, e.g. `gsp=acme,irp=acme` |
 | `BIZ_ALERT_WEBHOOK` | Where the audit-chain check posts a failure |
-| `BIZ_RATE_USER`, `BIZ_RATE_HEAVY` | Requests a minute per caller (600) and for portal-calling actions (60). The tests raise both in `server/tests/conftest.py` |
+| `BIZ_RATE_USER`, `BIZ_RATE_HEAVY`, `BIZ_RATE_SIGNUP` | Requests a minute per caller (600), for portal-calling actions (60) and sign-ups per IP (5). The tests raise all three in `server/tests/conftest.py` |
 
 ## Line endings
 

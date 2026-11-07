@@ -5,7 +5,7 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import auth
 from .core import ApiError, Auth, Principal, tx
@@ -29,6 +29,11 @@ class TokenRequest(BaseModel):
     mfa_code: str | None = None
 
 
+class SignupRequest(BaseModel):
+    email: str = Field(max_length=254)
+    full_name: str = Field(min_length=1, max_length=120)
+
+
 class LogoutRequest(BaseModel):
     refresh_token: str
 
@@ -36,6 +41,12 @@ class LogoutRequest(BaseModel):
 @router.post("/auth/otp", status_code=204, tags=["Auth"])
 def request_otp(body: OtpRequest):
     auth.request_code(body.email, body.mobile_e164)
+    return Response(status_code=204)
+
+
+@router.post("/auth/signup", status_code=204, tags=["Auth"])
+def signup(body: SignupRequest):
+    auth.signup(body.email, body.full_name)
     return Response(status_code=204)
 
 
