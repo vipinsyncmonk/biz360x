@@ -33,6 +33,13 @@ SYSTEM_ACCOUNTS = {
     "payable": ("2100", "Trade payables", "liability", "payable"),
     "tds_payable": ("2200", "TDS payable", "liability", "tds_payable"),
     "purchases": ("5000", "Purchases and expenses", "expense", "purchases"),
+    "salary_expense": ("5200", "Salaries and wages", "expense", "salary_expense"),
+    "employer_contrib_expense": ("5210", "Employer PF and ESI", "expense", "employer_contrib_expense"),
+    "salary_payable": ("2400", "Salary payable", "liability", "salary_payable"),
+    "pf_payable": ("2410", "PF payable", "liability", "pf_payable"),
+    "esi_payable": ("2420", "ESI payable", "liability", "esi_payable"),
+    "pt_payable": ("2430", "Professional tax payable", "liability", "pt_payable"),
+    "payroll_recoveries": ("2440", "Employee recoveries", "liability", "payroll_recoveries"),
     "interest_penalty": ("5900", "Interest and penalties", "expense", "interest_penalty"),
     "advance_tax": ("1360", "Advance tax paid", "asset", "advance_tax"),
     "advances_received": ("2150", "Customer advances", "liability", "customer_advance"),
@@ -127,6 +134,22 @@ def purchase_bill_lines(bill: dict, expense: list[tuple[str, Decimal]] | None = 
         raise PostingError(f"bill {bill.get('bill_no')} does not add up: taxable + tax != grand total")
     if not balanced(out):
         raise PostingError(f"bill {bill.get('bill_no')} does not balance")
+    return out
+
+
+def payroll_run_lines(t: dict) -> list[Line]:
+    """Approved payroll. Dr salary expense (gross) and employer contributions; Cr salary payable (net) and each statutory
+    liability. `t` holds the run totals: gross, net, pf_employee, pf_employer, esi_employee, esi_employer, pt, tds, other."""
+    out = [Line("salary_expense", debit=t["gross"])]
+    if t["pf_employer"] + t["esi_employer"]:
+        out.append(Line("employer_contrib_expense", debit=t["pf_employer"] + t["esi_employer"]))
+    out.append(Line("salary_payable", credit=t["net"]))
+    for key, amount in (("pf_payable", t["pf_employee"] + t["pf_employer"]), ("esi_payable", t["esi_employee"] + t["esi_employer"]),
+                        ("pt_payable", t["pt"]), ("tds_payable", t["tds"]), ("payroll_recoveries", t["other"])):
+        if amount:
+            out.append(Line(key, credit=amount))
+    if not balanced(out):
+        raise PostingError("payroll run does not balance: net != gross - deductions")
     return out
 
 

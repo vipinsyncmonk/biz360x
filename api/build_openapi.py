@@ -777,7 +777,7 @@ schema("Payslip", {"id": RO_UUID, "employee_id": UUID, "employee_name": S(), "pa
                    "net_pay": MONEY, "flags": ARR(S(), examples=[["wage_below_50pct"]]), "pdf_url": NULLABLE(S(format="uri"))}, extra={"readOnly": True})
 schema("PayrollRun", {"id": RO_UUID, "period_month": DATE, "status": ENUM("inputs_open", "inputs_locked", "computed", "approved", "bank_file_sent", "paid", "statutory_done", readOnly=True),
                       "headcount": I(readOnly=True), "gross_total": {**MONEY, "readOnly": True}, "net_total": {**MONEY, "readOnly": True},
-                      "employer_cost_total": {**MONEY, "readOnly": True}, "statutory": ARR(schema("StatutoryDue", {"kind": S(), "amount": MONEY, "due_date": DATE, "obligation_id": UUID}), readOnly=True),
+                      "employer_cost_total": {**MONEY, "readOnly": True}, "statutory": ARR(schema("StatutoryDue", {"kind": S(), "amount": MONEY, "due_date": DATE, "obligation_id": NULLABLE(UUID)}), readOnly=True),
                       "approval_request_id": NULLABLE(RO_UUID), "paid_on": NULLABLE(DATE)}, required=("period_month",))
 collection(E + "/payroll-runs", "Payroll & HR", "PayrollRun", "payroll", filters=[q("fy", FY)])
 _op("get", E + "/payroll-runs/{id}", "Payroll & HR", "getPayrollRun", "Get a payroll run", "payroll:read", resp=ref("PayrollRun"))
@@ -792,6 +792,21 @@ action(E + "/payroll-runs/{id}/bank-file", "Payroll & HR", "createPayrollBankFil
 _op("get", E + "/payroll-runs/{id}/payslips", "Payroll & HR", "listPayslips", "Payslips in a run", "payroll:read",
     params=[P("Limit"), P("Cursor"), q("flag", S())], resp=page_of("Payslip"))
 schema("WageCodeCheck", {"employee_id": UUID, "full_name": S(), "gross_monthly": MONEY, "wages_monthly": MONEY, "wage_pct": N(), "statutory_wage": MONEY, "pf_wage_should_be": MONEY})
+schema("LabourCompliance", {"headcount": I(), "wage_code": {"type": "object"}, "gratuity": {"type": "object"}, "statutory_bonus": {"type": "object"},
+                            "posh": {"type": "object"}, "shops_establishment": {"type": "object"}})
+_op("get", E + "/payroll/labour-compliance", "Payroll & HR", "getLabourCompliance", "Wage code, gratuity, bonus, POSH and shops-act status", "payroll:read",
+    params=[q("as_of", DATE)], resp=ref("LabourCompliance"))
+action(E + "/payroll/gratuity-valuations", "Payroll & HR", "recordGratuityValuation", "Record an actuarial gratuity valuation", "payroll:write",
+       body=schema("GratuityValuation", {"as_of": DATE, "liability": MONEY, "funded_amount": MONEY, "actuary": S()}, required=("as_of", "liability")),
+       resp=ref("GratuityValuation"), status="201")
+action(E + "/payroll/statutory-bonus/accrue", "Payroll & HR", "accrueStatutoryBonus", "Accrue the statutory bonus for a financial year", "payroll:write",
+       body=schema("AccrueBonus", {"fy": FY}, required=("fy",)), resp=schema("BonusAccrual", {"fy": FY, "accrued": I(), "total": MONEY, "pay_by": DATE}))
+schema("CommitteeMember", {"name": S(), "role": ENUM("presiding_officer", "member", "external_member"), "employee_id": NULLABLE(UUID)}, required=("name", "role"))
+schema("Committee", {"id": RO_UUID, "kind": ENUM("posh_internal", "audit", "nomination_remuneration", "csr", "grievance"), "constituted_on": DATE,
+                     "dissolved_on": NULLABLE(DATE), "members": ARR(ref("CommitteeMember"), minItems=1)}, required=("kind", "constituted_on", "members"))
+_op("get", E + "/committees", "Payroll & HR", "listCommittees", "Statutory committees", "payroll:read", params=[P("Limit"), P("Cursor"), q("kind", S())], resp=page_of("Committee"))
+action(E + "/committees", "Payroll & HR", "createCommittee", "Constitute a committee (e.g. the POSH Internal Committee)", "payroll:write", body=ref("Committee"),
+       resp=ref("Committee"), status="201")
 _op("get", E + "/payroll/wage-code-check", "Payroll & HR", "getWageCodeCheck", "Employees whose wages are under 50% of pay", "payroll:read", resp=ARR(ref("WageCodeCheck")))
 schema("LeaveRequest", {"id": RO_UUID, "employee_id": UUID, "leave_type": S(), "from": DATE, "to": DATE, "days": N(), "status": ENUM("pending", "approved", "rejected", "cancelled", readOnly=True)},
        required=("employee_id", "leave_type", "from", "to"))

@@ -90,6 +90,8 @@ def map_db_error(e: psycopg.Error) -> ApiError:
         return ApiError(404, "not_found", "Not found")          # RLS WITH CHECK: never reveal existence
     if isinstance(e, psycopg.errors.UniqueViolation):
         return ApiError(409, "conflict", "Already exists", msg)
+    if isinstance(e, psycopg.errors.ExclusionViolation):
+        return ApiError(409, "conflict", "Overlaps an existing record", msg)
     if isinstance(e, psycopg.errors.ForeignKeyViolation):
         return ApiError(400, "validation_failed", "Referenced record does not exist", msg)
     if isinstance(e, psycopg.errors.RaiseException):

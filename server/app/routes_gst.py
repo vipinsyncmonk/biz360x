@@ -561,7 +561,9 @@ def handle_pay_challan(cur, job: dict) -> dict:
     paid_on = dt.date.today()
     cur.execute("UPDATE tax_challans SET status = 'paid', paid_on = %s, challan_ref = %s, bsr_code = %s WHERE id = %s", (paid_on, res["challan_ref"], res["bsr_code"], c["id"]))
     total = c["amount"] + c["interest"] + c["penalty"]
-    lines = [ledger.Line("tds_payable" if c["kind"] == "itns281_tds" else "advance_tax" if c["kind"] == "itns280_income_tax" else "purchases", debit=c["amount"])]
+    debit_key = {"itns281_tds": "tds_payable", "itns280_income_tax": "advance_tax", "epf_ecr": "pf_payable", "esic": "esi_payable",
+                 "professional_tax": "pt_payable"}.get(c["kind"], "purchases")
+    lines = [ledger.Line(debit_key, debit=c["amount"])]
     if c["interest"] + c["penalty"]:
         lines.append(ledger.Line("interest_penalty", debit=c["interest"] + c["penalty"]))
     lines.append(ledger.Line(_first_bank_ledger(cur, entity_id), credit=total))
@@ -733,8 +735,31 @@ def _prep_advance_tax(cur, o) -> dict:
     return {"challan_id": str(cid), "amount": money(amount), "instalment_no": inst}
 
 
+def _prep_payroll_statutory(kind: str, expr: str):
+    """PF, ESI and professional tax challans come from the approved payroll run for the obligation's month."""
+    def prep(cur, o) -> dict:
+        cur.execute(f"""SELECT r.id, coalesce(sum({expr}), 0) AS amt FROM payroll_runs r JOIN payslips s ON s.run_id = r.id
+                         WHERE r.entity_id = %s AND r.period_month = %s AND r.status IN ('approved', 'bank_file_sent', 'paid', 'statutory_done') GROUP BY r.id""",
+                    (o["entity_id"], o["period_start"]))
+        run = cur.fetchone()
+        if not run or run["amt"] <= 0:
+            return {"challan_id": None, "note": "No approved payroll with this contribution for the period"}
+        cur.execute("SELECT id FROM tax_challans WHERE obligation_id = %s AND status IN ('draft', 'scheduled') FOR UPDATE", (o["id"],))
+        ex = cur.fetchone()
+        if ex:
+            cur.execute("UPDATE tax_challans SET amount = %s WHERE id = %s", (run["amt"], ex["id"]))
+            return {"challan_id": str(ex["id"]), "amount": money(run["amt"])}
+        cur.execute("""INSERT INTO tax_challans (entity_id, kind, registration_id, period_label, amount, obligation_id, status) VALUES (%s, %s, %s, %s, %s, %s, 'scheduled')
+                       RETURNING id""", (o["entity_id"], kind, o["registration_id"], o["period_label"], run["amt"], o["id"]))
+        return {"challan_id": str(cur.fetchone()["id"]), "amount": money(run["amt"])}
+    return prep
+
+
 PREPARERS = {"GST.GSTR1.MONTHLY": _prep_gst, "GST.GSTR3B.MONTHLY": _prep_gst, "TDS.DEPOSIT.MONTHLY": _prep_tds_deposit,
-             "TDS.RETURN.QUARTERLY": _prep_tds_return, "IT.ADVANCE_TAX": _prep_advance_tax}
+             "TDS.RETURN.QUARTERLY": _prep_tds_return, "IT.ADVANCE_TAX": _prep_advance_tax,
+             "EPF.ECR.MONTHLY": _prep_payroll_statutory("epf_ecr", "s.pf_employee + s.pf_employer_epf + s.pf_employer_eps"),
+             "ESI.MONTHLY": _prep_payroll_statutory("esic", "s.esi_employee + s.esi_employer"),
+             "PT.KA.MONTHLY": _prep_payroll_statutory("professional_tax", "s.professional_tax")}
 
 
 def handle_prepare(cur, job: dict) -> dict:
