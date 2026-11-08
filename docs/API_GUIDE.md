@@ -172,6 +172,7 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `parties`, `sale
 - receipts with allocations
 - `/jobs/{id}`
 - a worker with a sandbox IRP adapter
+- the compliance engine: engine runs, calendar, thresholds and the onboarding preview (dry run)
 
 Its 14 end-to-end tests run against PostgreSQL 16 and cover the IGST and CGST+SGST split, the 194Q and e-way bill checks, mapping database constraints to error codes, advisor scope limits, idempotency replay and conflict, invisible-entity 404s, over-settlement, the two-person rule, and the audit chain staying intact.
 
@@ -188,7 +189,7 @@ In production the API connects as a login role that is a member of `biz_app`, an
 
 ## 7. What comes next
 
-1. **Compliance engine evaluator.** It reads `compliance_rules.applicability` and `due_rule` against `entity_facts`, upserts obligations and writes `reason_snapshot`.
+1. ~~Compliance engine evaluator~~ - done: `server/app/engine.py` evaluates `applicability` and `due_rule` against facts, upserts obligations with `reason_snapshot`, accrues late fees, and raises threshold alerts. Triggers: schedule (worker, daily), fact change, rule change (migration 12), manual (`POST /compliance/engine-runs`).
 2. **Portal adapters through a licensed GSP/ASP.** GSTN returns, IRP, e-way bill, plus MCA, TRACES and EPFO/ESIC where APIs exist; browser automation with human OTP where they don't.
 3. **Ledger posting rules.** One journal template per source document, posted in the same transaction as issue and book actions.
 4. **The remaining operations in the spec,** following the same patterns. `build_openapi.py` keeps the contract consistent; regenerate it and lint with `npx @redocly/cli lint openapi.yaml`.
