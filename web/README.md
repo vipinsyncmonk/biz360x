@@ -37,6 +37,9 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/lib/finance.ts` | Period choice, lakh display, GST ledger totals. Unit-tested |
 | `src/app/(app)/payroll` | Payroll & HR: run status and progress, start a run, compute, send for approval, salary register with wage-code filter, statutory deposits, labour compliance |
 | `src/lib/payroll.ts` | Run naming, next month, next step, status labels. Unit-tested |
+| `src/app/(app)/legal` | Legal & Contracts: register ordered by urgency, key terms and alerts for the selected contract, out for signature, templates |
+| `src/app/(app)/documents` | Document vault: folder and full-text search, expiring soon, advisor requests. Upload comes later |
+| `src/lib/legal.ts` | Contract dates and urgency, file and expiry labels. Unit-tested |
 | `src/app/(app)/m/[slug]` | Placeholder for screens that are not built yet |
 
 ## Rules for new screens
