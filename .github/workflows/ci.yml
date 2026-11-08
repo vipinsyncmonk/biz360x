@@ -31,7 +31,9 @@ jobs:
       - name: Database behaviour checks
         run: psql -d biz360x -v ON_ERROR_STOP=1 -q -f db/tests/demo_and_checks.sql
       - name: Install API dependencies
-        run: pip install -r server/requirements.txt pyyaml openapi-spec-validator
+        run: pip install -r server/requirements.txt pyyaml openapi-spec-validator pip-audit
+      - name: Dependency vulnerability scan
+        run: pip-audit -r server/requirements.txt
       - name: Contract is generated, valid and linted
         run: |
           python api/build_openapi.py /tmp/openapi.yaml

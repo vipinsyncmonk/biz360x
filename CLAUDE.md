@@ -55,6 +55,7 @@ The tests expect the demo data. Rebuild the database before a full test run, bec
 - **Two-person rule.** The requester of an approval can never decide it. The copilot only proposes; actions execute after an approval.
 - **Compliance rules are versioned data.** Change a rule by inserting a new version with a new `effective` range. Never edit a published version.
 - **Schema changes go in a new numbered migration** (`db/12_*.sql`, …). Once a migration has run anywhere, don't edit it.
+- **Production start-up is guarded.** `security.check_environment()` refuses a default `JWT_SECRET`, a missing `BIZ_FIELD_KEY`, and any sandbox provider. Don't add a code path that works around it. API keys are service users, so they follow the same RLS; a key never gets approve/file/pay.
 - **Indian law figures** (fees, thresholds, due dates, HSN/SAC) are a starter library and must be reviewed by a CA/CS. Don't present them as verified.
 
 ## When you add an endpoint
@@ -66,9 +67,9 @@ The tests expect the demo data. Rebuild the database before a full test run, bec
 
 ## Backlog (in order)
 
-Done: compliance engine evaluator (`server/app/engine.py`, migrations 12-13); ledger posting for sales documents and receipts, quotes to cash, bank matching and period close (`ledger.py`, `routes_orders.py`, `routes_finance.py`, `receivables.py`). Bill posting, purchases, GST returns, 2B matching, TDS and advance tax are in (`routes_purchases.py`, `routes_gst.py`, `taxcalc.py`; migrations 14-15). Payroll (`routes_payroll.py`, `payroll.py`, `secretbox.py`; migration 16) is in; legal, secretarial, the vault and the notice desk are in (`routes_vault.py`, `routes_legal.py`, `storage.py`; migration 17). The portal adapters are in as interfaces and sandboxes (`adapters.py`, `routes_portals.py`, migration 18); the provider choice is `docs/PROVIDERS.md`. Next: auth and hardening (M7).
+Done: compliance engine evaluator (`server/app/engine.py`, migrations 12-13); ledger posting for sales documents and receipts, quotes to cash, bank matching and period close (`ledger.py`, `routes_orders.py`, `routes_finance.py`, `receivables.py`). Bill posting, purchases, GST returns, 2B matching, TDS and advance tax are in (`routes_purchases.py`, `routes_gst.py`, `taxcalc.py`; migrations 14-15). Payroll (`routes_payroll.py`, `payroll.py`, `secretbox.py`; migration 16) is in; legal, secretarial, the vault and the notice desk are in (`routes_vault.py`, `routes_legal.py`, `storage.py`; migration 17). The portal adapters are in as interfaces and sandboxes (`adapters.py`, `routes_portals.py`, migration 18); the provider choice is `docs/PROVIDERS.md`. Auth and hardening are in (`auth.py`, `ratelimit.py`, `security.py`, `webhooks.py`, `routes_integrations.py`; migration 19; `docs/SECURITY.md`). Next: the Next.js frontend (M8).
 
 3. Remaining spec operations (onboarding, quotes, purchases, GST returns, payroll, legal, documents, copilot).
-4. Real auth: OTP provider, OIDC/SAML. Development OTP `000000` must never reach production.
+4. ~~Real auth~~ - done except the vendors: a real OTP provider, Google/Microsoft/SAML identity providers and MFA enrolment still have to be chosen and written (`docs/SECURITY.md`). The development OTP `000000` is refused outside dev by the startup guard.
 5. Frontend (Next.js) built from `design/screens`.
 6. Export–import module: shipping bills, bills of entry, e-BRC, LUT, RoDTEP/drawback.
