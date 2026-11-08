@@ -11,7 +11,7 @@ import { ErrorNote, Loading, Pill } from "@/components/ui";
 interface Line { line_no: number; description: string; hsn_sac: string; qty: string; uqc: string; rate: string; discount: string; taxable_value: string; gst_rate: string | number; cgst_amount: string; sgst_amount: string; igst_amount: string }
 interface Doc extends Omit<DocRow, "days_overdue" | "irn_status"> {
   lines: Line[]; cgst_total: string; sgst_total: string; igst_total: string; round_off: string; place_of_supply: string; payment_terms_days: number | null;
-  einvoice: { status: string; irn: string | null; ack_no: string | null }; cn_reason: string | null; tds_expected: string;
+  einvoice: { status: string; irn: string | null; ack_no: string | null }; cn_reason: string | null; tds_expected: string; original_document_id: string | null;
 }
 
 export default function InvoiceDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -36,7 +36,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
 
   const d = doc.data;
   const inter = d ? Number(d.igst_total) > 0 : false;       // only chooses which tax columns to show
-  const st = d ? docStatus({ status: d.status, payment_status: d.payment_status, days_overdue: 0, irn_status: d.einvoice.status }) : null;
+  const st = d && d.doc_type === "credit_note" && d.status === "issued" ? { label: "Issued", tone: "ok" as const } : d ? docStatus({ status: d.status, payment_status: d.payment_status, days_overdue: 0, irn_status: d.einvoice.status }) : null;
 
   return (
     <main className="page">
@@ -47,11 +47,12 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
         <>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "flex-end" }}>
             <div>
-              <span className="muted" style={{ fontSize: 14 }}>{DOC_TYPE_LABEL[d.doc_type] ?? d.doc_type} · {shortDate(d.doc_date)}</span>
+              <span className="muted" style={{ fontSize: 14 }}>{DOC_TYPE_LABEL[d.doc_type] ?? d.doc_type} · {shortDate(d.doc_date)}{d.original_document_id && <> · against <Link href={`/billing/${d.original_document_id}`}>the original invoice</Link></>}{d.cn_reason ? ` · ${d.cn_reason.replace(/_/g, " ")}` : ""}</span>
               <h1 className="disp mono" style={{ margin: "6px 0 0", fontSize: 34 }}>{d.number ?? "Draft"}</h1>
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <Pill tone={st.tone}>{st.label}</Pill>
+              {d.status === "issued" && ["tax_invoice", "export_invoice", "bill_of_supply"].includes(d.doc_type) && <Link href={`/billing/${docId}/credit-note`} className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Issue credit note</Link>}
               {d.status === "draft" && <button type="button" className="btn primary" disabled={busy} onClick={() => void issue()}>{busy ? "Issuing…" : "Issue invoice"}</button>}
             </div>
           </div>
