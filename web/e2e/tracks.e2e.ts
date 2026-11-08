@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { OWNER, apiGet, apiPost, apiToken, signIn, watch } from "./helpers";
+import { OWNER, apiGet, apiPatch, apiPost, apiToken, signIn, watch } from "./helpers";
 
 const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 
-/** Build a cap table from nothing through the forms, model a round on it, grant options, and draft an investor update. */
-test.describe.serial("startup track", () => {
+/** The startup and MSME tracks. One file, one signed-in tab: a person can ask for only 5 sign-in codes an hour. */
+test.describe.serial("startup and MSME tracks", () => {
   let page: Page;
   let problems: () => string[];
 
@@ -126,16 +126,85 @@ test.describe.serial("startup track", () => {
     expect(problems()).toEqual([]);
   });
 
+  test("MSME: a company with no Udyam registration is asked for it, and registering turns the track on", async () => {
+    const token = await apiToken(page, OWNER);
+    const eid = (await apiGet<{ entities: Array<{ id: string }> }>(page, token, "/me")).entities[0]!.id;
+    await apiPatch(page, token, `/entities/${eid}`, { track: "msme" });
+    await page.goto("/msme");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("No buyer is past the day payment was due.");
+    await expect(page.getByText("Not registered")).toBeVisible();
+    await page.getByLabel("Udyam registration number").fill("udyam-ka-03-0054321");
+    await page.getByLabel("Class on the certificate").selectOption("small");
+    await page.getByRole("button", { name: "Save registration" }).click();
+    await expect(page.getByText("Small enterprise").first()).toBeVisible();
+    await expect(page.locator("section", { hasText: "Schemes & credit" }).getByText("Eligible", { exact: true }).first()).toBeVisible();   // the MSME schemes now apply and are checked against the new class
+    await expect(page.locator("div.error[role=alert]")).toHaveCount(0);
+  });
+
+  test("MSME: late buyers show the interest owed, and a claim is drafted and filed", async () => {
+    // two unpaid invoices to one customer, issued 100 and 60 days ago on 30-day terms
+    const token = await apiToken(page, OWNER);
+    const eid = (await apiGet<{ entities: Array<{ id: string }> }>(page, token, "/me")).entities[0]!.id;
+    const regs = (await apiGet<{ data: Array<{ id: string }> }>(page, token, `/entities/${eid}/registrations?kind=gstin`)).data;
+    const parties = (await apiGet<{ data: Array<{ id: string; gstins: Array<{ id: string }> }> }>(page, token, `/entities/${eid}/parties?limit=50`)).data;
+    const party = parties.find((p) => p.gstins.length > 0)!;
+    const day = (ago: number) => new Date(Date.now() - ago * 86_400_000).toISOString().slice(0, 10);
+    for (const ago of [100, 60]) {
+      const doc = await apiPost<{ id: string }>(page, token, `/entities/${eid}/sales-documents`, {
+        doc_type: "tax_invoice", doc_date: day(ago), registration_id: regs[0]!.id, party_id: party.id, party_gst_id: party.gstins[0]!.id,
+        lines: [{ description: "Pressure transmitter", hsn_sac: "902620", qty: "10", rate: "1000.00", gst_rate: 18 }],
+      });
+      await apiPost(page, token, `/entities/${eid}/sales-documents/${doc.id}/issue`, {});
+    }
+    await expect.poll(async () => (await apiGet<{ totals: { invoices: number } }>(page, token, `/entities/${eid}/msme/late-buyers`)).totals.invoices, { timeout: 30_000 }).toBe(2);
+
+    await page.goto("/msme");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("is with 1 buyer past the due day. Here is how to get it back.");
+    await expect(page.getByText(/Interest is three times the RBI bank rate/)).toBeVisible();
+    const row = page.getByRole("row", { name: new RegExp(`2 invoices`) });
+    await expect(row).toContainText(/\d+ days/);
+    await row.getByRole("button", { name: "Start claim" }).click();
+    const claims = page.locator("section", { hasText: "Claims for delayed payment" });
+    await expect(claims.getByText("Draft", { exact: true })).toBeVisible();
+    await claims.getByRole("button", { name: "File on MSME Samadhaan" }).click();
+    await claims.getByRole("button", { name: "Yes, file it" }).click();
+    await expect(claims.getByText(/Case SAM\//)).toBeVisible();                                 // a background job filed it and recorded the case number
+    await expect(claims.getByText("Filed", { exact: true })).toBeVisible();
+  });
+
+  test("MSME: a TReDS upload moves forward, and the Udyam figures show how close the limits are", async () => {
+    const treds = page.locator("section", { hasText: "TReDS invoices" });
+    await treds.getByRole("button", { name: "+ Record an upload" }).click();
+    await page.getByLabel("Invoice").selectOption({ index: 0 });
+    await page.getByLabel("Platform").selectOption("RXIL");
+    await page.getByRole("button", { name: "Record upload" }).click();
+    await expect(treds.getByText("Uploaded", { exact: true })).toBeVisible();
+    await treds.getByRole("button", { name: "Record progress" }).click();
+    await treds.getByLabel("Now").selectOption({ label: "Buyer accepted" });
+    await treds.getByRole("button", { name: "Save" }).click();
+    await expect(treds.getByText("Buyer accepted", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Update figures" }).click();
+    await page.getByLabel("Investment in plant and machinery (₹)").fill("50000000");
+    await page.getByLabel("Annual turnover (₹)").fill("500000000");
+    await page.getByRole("button", { name: "Save figures" }).click();
+    await expect(page.getByText("₹50.0 Cr of ₹100.0 Cr")).toBeVisible();                           // 50 crore turnover against the small-enterprise limit
+    await expect(page.getByText("₹5.0 Cr of ₹25.0 Cr")).toBeVisible();
+    expect(problems()).toEqual([]);
+  });
+
   // Reuses this tab's sign-in: a person can ask for only 5 sign-in codes an hour, and the suite already signs in as the demo owner several times.
-  test("the screen fits a phone and a desktop", async () => {
+  test("the screens fit a phone and a desktop", async () => {
     for (const [name, size] of [["desktop", { width: 1440, height: 1000 }], ["phone", { width: 375, height: 812 }]] as const) {
-      await page.setViewportSize(size);
-      await page.goto("/startup");
-      await page.waitForLoadState("networkidle");
-      await expect(page.getByRole("table").first()).toBeVisible();
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-      expect(overflow, `${name} has no sideways scroll`).toBeLessThanOrEqual(0);
-      await page.screenshot({ path: `test-results/startup-${name}.png`, fullPage: true });
+      for (const path of ["/startup", "/msme"]) {
+        await page.setViewportSize(size);
+        await page.goto(path);
+        await page.waitForLoadState("networkidle");
+        await expect(page.getByRole("table").first()).toBeVisible();
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        expect(overflow, `${path} on a ${name} has no sideways scroll`).toBeLessThanOrEqual(0);
+        await page.screenshot({ path: `test-results${path.replace("/", "-")}-${name}.png`, fullPage: true });
+      }
     }
     await page.setViewportSize({ width: 1280, height: 720 });
   });

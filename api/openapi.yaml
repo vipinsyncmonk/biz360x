@@ -8637,6 +8637,44 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: schemes:write
+  /entities/{entityId}/treds-invoices/{id}:
+    patch:
+      tags:
+      - Schemes & credit
+      operationId: updateTredsInvoice
+      summary: Record progress at the TReDS platform
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TredsProgress'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TredsInvoice'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: schemes:write
   /entities/{entityId}/delayed-payment-claims:
     get:
       tags:
@@ -8678,7 +8716,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DelayedPaymentClaim'
+              $ref: '#/components/schemas/ClaimCreate'
       responses:
         '201':
           description: Created
@@ -8702,12 +8740,43 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: schemes:write
+  /entities/{entityId}/delayed-payment-claims/{id}:
+    get:
+      tags:
+      - Schemes & credit
+      operationId: getDelayedPaymentClaim
+      summary: Get delayed payment claim
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelayedPaymentClaim'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: schemes:read
   /entities/{entityId}/delayed-payment-claims/{id}/file:
     post:
       tags:
       - Schemes & credit
       operationId: fileDelayedPaymentClaim
       summary: File on MSME Samadhaan
+      description: A background job files the claim and records the case number; follow it at `/jobs/{id}`.
       parameters:
       - $ref: '#/components/parameters/EntityId'
       - $ref: '#/components/parameters/Id'
@@ -8737,6 +8806,74 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: schemes:file
+  /entities/{entityId}/msme/late-buyers:
+    get:
+      tags:
+      - Schemes & credit
+      operationId: listLateBuyers
+      summary: Buyers who have not paid by the day the MSMED Act requires, with the interest owed
+      description: The appointed day is the invoice date plus the agreed terms, at most 45 days (15 with no agreement). Interest
+        is compound with monthly rests at three times the RBI bank rate, and is worked out only for micro and small suppliers.
+        A starter library for a CA or CS to review.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: as_of
+        in: query
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LateBuyers'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: sales:read
+  /entities/{entityId}/msme/classification:
+    get:
+      tags:
+      - Schemes & credit
+      operationId: getUdyamClassification
+      summary: How close the company is to the limits of its Udyam class
+      description: Reads the facts `investment_plant_machinery` and `aato` (or `turnover_max_any_year`). Both limits must
+        stay within the class.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UdyamClassification'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: schemes:read
   /entities/{entityId}/documents:
     post:
       tags:
@@ -16487,25 +16624,63 @@ components:
         sales_document_id:
           type: string
           format: uuid
+        invoice_number:
+          type: string
+          readOnly: true
+        buyer_name:
+          type: string
+          readOnly: true
+        invoice_total:
+          $ref: '#/components/schemas/Money'
+          readOnly: true
         platform:
           type: string
+          enum:
+          - RXIL
+          - M1xchange
+          - Invoicemart
+          - C2FO
         uploaded_on:
           type: string
           format: date
+          readOnly: true
+        buyer_accepted_on:
+          oneOf:
+          - type: string
+            format: date
+            readOnly: true
+          - type: 'null'
+        financed_on:
+          oneOf:
+          - type: string
+            format: date
+            readOnly: true
+          - type: 'null'
         status:
           type: string
+          enum:
+          - uploaded
+          - accepted
+          - auctioned
+          - financed
+          - settled
+          - rejected
           readOnly: true
         discount_rate_pct:
           oneOf:
-          - type: number
+          - type: string
+            readOnly: true
           - type: 'null'
         amount_received:
           oneOf:
           - $ref: '#/components/schemas/Money'
+            readOnly: true
           - type: 'null'
       required:
       - sales_document_id
       - platform
+      description: A person records an upload and then how it is getting on at the platform. Only registered MSMEs can use
+        TReDS (409), and only issued invoices with an amount still due.
     TredsInvoicePage:
       type: object
       properties:
@@ -16520,6 +16695,39 @@ components:
       required:
       - data
       - next_cursor
+    TredsProgress:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - accepted
+          - auctioned
+          - financed
+          - settled
+          - rejected
+        discount_rate_pct:
+          oneOf:
+          - type: number
+          - type: 'null'
+        amount_received:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+      required:
+      - status
+      description: 'Moves forward only: uploaded, accepted, auctioned, financed, settled. `financed` needs the discount rate
+        and the amount received.'
+    ClaimInvoice:
+      type: object
+      properties:
+        number:
+          type: string
+        doc_date:
+          type: string
+          format: date
+        balance_due:
+          $ref: '#/components/schemas/Money'
     DelayedPaymentClaim:
       type: object
       properties:
@@ -16530,11 +16738,19 @@ components:
         buyer_party_id:
           type: string
           format: uuid
+        buyer_name:
+          type: string
+          readOnly: true
         invoice_ids:
           type: array
           items:
             type: string
             format: uuid
+        invoices:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimInvoice'
+          readOnly: true
         principal:
           $ref: '#/components/schemas/Money'
           readOnly: true
@@ -16547,13 +16763,46 @@ components:
           - msme_samadhaan
           - msefc
           - court
+          readOnly: true
         status:
           type: string
+          enum:
+          - draft
+          - filed
+          - conciliation
+          - arbitration
+          - settled
+          - closed
           readOnly: true
         case_no:
           oneOf:
           - type: string
+            readOnly: true
           - type: 'null'
+        filed_on:
+          oneOf:
+          - type: string
+            format: date
+            readOnly: true
+          - type: 'null'
+      required:
+      - buyer_party_id
+      - invoice_ids
+      description: Principal and interest are worked out by the server from the invoices (MSMED Act Sec 16). Only micro and
+        small suppliers can claim (409).
+    ClaimCreate:
+      type: object
+      properties:
+        buyer_party_id:
+          type: string
+          format: uuid
+        invoice_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          maxItems: 100
       required:
       - buyer_party_id
       - invoice_ids
@@ -16571,6 +16820,158 @@ components:
       required:
       - data
       - next_cursor
+    LateInvoice:
+      type: object
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        balance_due:
+          $ref: '#/components/schemas/Money'
+        appointed_on:
+          type: string
+          format: date
+        days_late:
+          type: integer
+        interest:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        on_treds:
+          type: boolean
+    BuyerClaim:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+    LateBuyer:
+      type: object
+      properties:
+        party_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        invoices:
+          type: array
+          items:
+            $ref: '#/components/schemas/LateInvoice'
+        principal:
+          $ref: '#/components/schemas/Money'
+        interest:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        days_late:
+          type: integer
+        on_treds:
+          type: boolean
+        claim:
+          oneOf:
+          - $ref: '#/components/schemas/BuyerClaim'
+          - type: 'null'
+    InterestRate:
+      type: object
+      properties:
+        bank_rate_pct:
+          type: string
+        effective_from:
+          type: string
+          format: date
+        annual_pct:
+          type: string
+    LateTotals:
+      type: object
+      properties:
+        buyers:
+          type: integer
+        invoices:
+          type: integer
+        principal:
+          $ref: '#/components/schemas/Money'
+        interest:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+    LateBuyers:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date
+        supplier_class:
+          oneOf:
+          - type: string
+            enum:
+            - micro
+            - small
+            - medium
+          - type: 'null'
+        interest_applies:
+          type: boolean
+        rate:
+          oneOf:
+          - $ref: '#/components/schemas/InterestRate'
+          - type: 'null'
+        buyers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LateBuyer'
+        totals:
+          $ref: '#/components/schemas/LateTotals'
+    UdyamTest:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        value:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        limit:
+          $ref: '#/components/schemas/Money'
+        pct:
+          oneOf:
+          - type: number
+          - type: 'null'
+    UdyamClassification:
+      type: object
+      properties:
+        declared:
+          oneOf:
+          - type: string
+            enum:
+            - micro
+            - small
+            - medium
+          - type: 'null'
+        udyam_number:
+          oneOf:
+          - type: string
+          - type: 'null'
+        computed:
+          oneOf:
+          - type: string
+          - type: 'null'
+        investment:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        turnover:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        tests:
+          type: array
+          items:
+            $ref: '#/components/schemas/UdyamTest'
     DocumentLink:
       type: object
       properties:

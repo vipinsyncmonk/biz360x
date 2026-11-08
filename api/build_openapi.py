@@ -911,14 +911,41 @@ _op("put", E + "/benefits/{scheme_code}", "Schemes & credit", "recordBenefit", "
     params=[{"name": "scheme_code", "in": "path", "required": True, "schema": S()}],
     body=schema("BenefitStatus", {"status": ENUM("applied", "in_progress", "granted", "rejected", "expired"), "reference_no": NULLABLE(S()), "applied_on": NULLABLE(DATE),
                                   "granted_on": NULLABLE(DATE), "valid_until": NULLABLE(DATE)}, required=("status",)), resp=ref("Benefit"))
-schema("TredsInvoice", {"id": RO_UUID, "sales_document_id": UUID, "platform": S(), "uploaded_on": DATE, "status": S(readOnly=True),
-                        "discount_rate_pct": NULLABLE(N()), "amount_received": NULLABLE(MONEY)}, required=("sales_document_id", "platform"))
+schema("TredsInvoice", {"id": RO_UUID, "sales_document_id": UUID, "invoice_number": S(readOnly=True), "buyer_name": S(readOnly=True), "invoice_total": {**MONEY, "readOnly": True},
+                        "platform": ENUM("RXIL", "M1xchange", "Invoicemart", "C2FO"), "uploaded_on": DATE_RO, "buyer_accepted_on": NULLABLE(DATE_RO), "financed_on": NULLABLE(DATE_RO),
+                        "status": ENUM("uploaded", "accepted", "auctioned", "financed", "settled", "rejected", readOnly=True),
+                        "discount_rate_pct": NULLABLE(S(readOnly=True)), "amount_received": NULLABLE({**MONEY, "readOnly": True})},
+       required=("sales_document_id", "platform"),
+       desc="A person records an upload and then how it is getting on at the platform. Only registered MSMEs can use TReDS (409), and only issued invoices with an amount still due.")
 collection(E + "/treds-invoices", "Schemes & credit", "TredsInvoice", "schemes", idem=True)
-schema("DelayedPaymentClaim", {"id": RO_UUID, "buyer_party_id": UUID, "invoice_ids": ARR(UUID), "principal": {**MONEY, "readOnly": True},
-                               "interest_claimed": {**MONEY, "readOnly": True}, "forum": ENUM("msme_samadhaan", "msefc", "court"),
-                               "status": S(readOnly=True), "case_no": NULLABLE(S())}, required=("buyer_party_id", "invoice_ids"))
-collection(E + "/delayed-payment-claims", "Schemes & credit", "DelayedPaymentClaim", "schemes")
-action(E + "/delayed-payment-claims/{id}/file", "Schemes & credit", "fileDelayedPaymentClaim", "File on MSME Samadhaan", "schemes:file", status="202", idem=True)
+_op("patch", E + "/treds-invoices/{id}", "Schemes & credit", "updateTredsInvoice", "Record progress at the TReDS platform", "schemes:write",
+    body=schema("TredsProgress", {"status": ENUM("accepted", "auctioned", "financed", "settled", "rejected"), "discount_rate_pct": NULLABLE(N()), "amount_received": NULLABLE(MONEY)}, required=("status",),
+                desc="Moves forward only: uploaded, accepted, auctioned, financed, settled. `financed` needs the discount rate and the amount received."), resp=ref("TredsInvoice"))
+schema("ClaimInvoice", {"number": S(), "doc_date": DATE, "balance_due": MONEY})
+schema("DelayedPaymentClaim", {"id": RO_UUID, "buyer_party_id": UUID, "buyer_name": S(readOnly=True), "invoice_ids": ARR(UUID), "invoices": ARR(ref("ClaimInvoice"), readOnly=True),
+                               "principal": {**MONEY, "readOnly": True}, "interest_claimed": {**MONEY, "readOnly": True}, "forum": ENUM("msme_samadhaan", "msefc", "court", readOnly=True),
+                               "status": ENUM("draft", "filed", "conciliation", "arbitration", "settled", "closed", readOnly=True), "case_no": NULLABLE(S(readOnly=True)), "filed_on": NULLABLE(DATE_RO)},
+       required=("buyer_party_id", "invoice_ids"),
+       desc="Principal and interest are worked out by the server from the invoices (MSMED Act Sec 16). Only micro and small suppliers can claim (409).")
+collection(E + "/delayed-payment-claims", "Schemes & credit", "DelayedPaymentClaim", "schemes",
+           create_schema=schema("ClaimCreate", {"buyer_party_id": UUID, "invoice_ids": ARR(UUID, minItems=1, maxItems=100)}, required=("buyer_party_id", "invoice_ids")))
+item(E + "/delayed-payment-claims", "Schemes & credit", "DelayedPaymentClaim", "schemes", patch=False)
+action(E + "/delayed-payment-claims/{id}/file", "Schemes & credit", "fileDelayedPaymentClaim", "File on MSME Samadhaan", "schemes:file", resp=ref("Job"), status="202", idem=True,
+       desc="A background job files the claim and records the case number; follow it at `/jobs/{id}`.")
+schema("LateInvoice", {"document_id": UUID, "number": S(), "balance_due": MONEY, "appointed_on": DATE, "days_late": I(), "interest": NULLABLE(MONEY), "on_treds": B()})
+schema("LateBuyer", {"party_id": UUID, "name": S(), "invoices": ARR(ref("LateInvoice")), "principal": MONEY, "interest": NULLABLE(MONEY), "days_late": I(), "on_treds": B(),
+                     "claim": NULLABLE(schema("BuyerClaim", {"id": UUID, "status": S()}))})
+schema("LateBuyers", {"as_of": DATE, "supplier_class": NULLABLE(ENUM("micro", "small", "medium")), "interest_applies": B(),
+                      "rate": NULLABLE(schema("InterestRate", {"bank_rate_pct": S(), "effective_from": DATE, "annual_pct": S()})), "buyers": ARR(ref("LateBuyer")),
+                      "totals": schema("LateTotals", {"buyers": I(), "invoices": I(), "principal": MONEY, "interest": NULLABLE(MONEY)})})
+_op("get", E + "/msme/late-buyers", "Schemes & credit", "listLateBuyers", "Buyers who have not paid by the day the MSMED Act requires, with the interest owed", "sales:read",
+    params=[q("as_of", DATE)], resp=ref("LateBuyers"),
+    desc="The appointed day is the invoice date plus the agreed terms, at most 45 days (15 with no agreement). Interest is compound with monthly rests at three times the RBI bank rate, and is worked out only for micro and small suppliers. A starter library for a CA or CS to review.")
+schema("UdyamTest", {"key": S(), "label": S(), "value": NULLABLE(MONEY), "limit": MONEY, "pct": NULLABLE(N())})
+schema("UdyamClassification", {"declared": NULLABLE(ENUM("micro", "small", "medium")), "udyam_number": NULLABLE(S()), "computed": NULLABLE(S()),
+                               "investment": NULLABLE(MONEY), "turnover": NULLABLE(MONEY), "tests": ARR(ref("UdyamTest"))})
+_op("get", E + "/msme/classification", "Schemes & credit", "getUdyamClassification", "How close the company is to the limits of its Udyam class", "schemes:read", resp=ref("UdyamClassification"),
+    desc="Reads the facts `investment_plant_machinery` and `aato` (or `turnover_max_any_year`). Both limits must stay within the class.")
 
 # =================================================================== DOCUMENTS
 tag("Documents", "Vault uploads, search, links, advisor requests and data rooms")
