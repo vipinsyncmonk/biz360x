@@ -60,8 +60,21 @@ Development needs only `DATABASE_URL`. Everything else has a development default
 | `JWT_SECRET`, `BIZ_FIELD_KEY` | Token signing, and the Fernet key for encrypted columns. Required in production |
 | `BIZ_OTP_PROVIDER`, `BIZ_IDP_PROVIDER` | Sign-in providers; `sandbox` by default (dev code `000000`, identity code `sandbox:<email>`) |
 | `BIZ_ADAPTERS` | Portal adapters, e.g. `gsp=acme,irp=acme` |
+| `BIZ_COMPANY_PROFILES` | Path to a JSON file describing your own company, so onboarding can find it (development only; see below) |
 | `BIZ_ALERT_WEBHOOK` | Where the audit-chain check posts a failure |
 | `BIZ_RATE_USER`, `BIZ_RATE_HEAVY`, `BIZ_RATE_SIGNUP` | Requests a minute per caller (600), for portal-calling actions (60) and sign-ups per IP (5). The tests raise all three in `server/tests/conftest.py` |
+
+## Trying your own company
+
+The sandbox registry only knows two made-up companies. To onboard your real one, copy `docs/company-profile.example.json` to `var/my-company.json` (`var/` is git-ignored, so real identifiers never reach the repository), fill in your CIN or LLPIN, GSTINs, directors and Udyam number, then check it offline:
+
+```bash
+python scripts/check_profile.py var/my-company.json
+```
+
+The check lists every problem in one pass: wrong shapes, a GSTIN whose PAN differs from the company's, a date in the future, a GSTIN listed under two companies. When it passes, start the API and the worker with `BIZ_COMPANY_PROFILES=var/my-company.json` and onboard with the CIN. A lookup is cached for a day, so after you change the file, look up again from a different identifier kind (a GSTIN rather than the CIN) or clear `registry_lookups` for it.
+
+This is not a registry client: nothing is fetched from MCA or GSTN, and the file is only as true as what you type. It works only while the sandbox adapters are allowed (development and test); production refuses them. Onboarding records the GSTIN registrations. TAN, PF and ESI registrations are not created by onboarding, so TDS and labour items for the company appear only after those are added.
 
 ## Line endings
 
