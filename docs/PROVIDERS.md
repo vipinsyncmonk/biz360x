@@ -17,6 +17,7 @@ decision from the business; this page is the brief for it.
 | `Sessions` | `start`, `complete` | The OTP login that keeps a portal session alive | Per portal |
 | `AccountAggregator` | `create_consent`, `fetch` | RBI-regulated consent flow and statement pull | An AA (Finvu, OneMoney, CAMS Finserv and others are the usual shortlist; check current RBI registrations) |
 | `Bank` | `send_payment`, `send_salaries` | Payout and salary-file upload | Your bank's API, or a payments aggregator |
+| `Copilot` | `reply(question, tools)` | Answer only from what the tools return, put a `[n]` marker after each fact with its citation, and propose actions from a fixed list; never act | A language-model API. Decide first: which vendor, where the data is processed, what the contract says about retention and training, and who holds the key |
 
 ## Questions to put to each vendor
 

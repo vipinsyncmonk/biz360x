@@ -44,6 +44,8 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/billing/[id]/credit-note` | Credit note: reason, quantity per item, live preview from the server, save as draft or issue |
 | `src/app/(app)/billing/quotes` | Quotes list with send, new version, accept, mark lost and create invoice from an accepted quote |
 | `src/app/pay/[code]` | The customer payment page: no sign-in, no app shell. Invoice summary, bank-transfer details, payment methods, raise a query. Talks to the public `/pay` endpoints without a token (`src/lib/pay.ts`) |
+| `src/app/(app)/copilot` | Copilot: your conversations, the answer with `[n]` buttons that select the record behind each fact, a Sources panel that links to it, and proposed actions that you send for approval (a different person approves them on Today) |
+| `src/lib/copilot.ts` | Answer parsing into lines and citation markers, source links, action wording and state, conversation grouping. Unit-tested |
 | `src/app/(app)/more` | The phone's More tab: switch entity, every module, account. On screens up to 820px wide the sidebar gives way to a top bar and a bottom tab bar (Today, Compliance, Copilot, More) |
 | `src/app/(app)/board` | Board and resolutions: schedule meetings, mark them held with quorum, draft resolutions and move them to circulated, passed, failed or withdrawn (a passed special resolution raises MGT-14) |
 | `src/app/(app)/notices` | Notice desk: record a notice from an authority, see reply dates and demand, draft a reply from your own records (background job, saved to the vault), move it through replied, hearing, appealed and closed |

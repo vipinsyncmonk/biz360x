@@ -968,7 +968,7 @@ _op("post", E + "/copilot/threads/{id}/messages", "Copilot", "askCopilot", "Ask 
     desc="With `Accept: text/event-stream` the answer streams as `token`, `citation`, `action` and `done` events. "
          "The model only reads through the caller's own permissions (same RLS), and can only *propose* actions.",
     extra_responses={"200": {"description": "Event stream", "content": {"text/event-stream": {"schema": S()}}}})
-action(E + "/copilot/actions/{id}/request-approval", "Copilot", "requestCopilotActionApproval", "Turn a proposed action into an approval request", "copilot:use",
+action(E + "/copilot/actions/{id}/request-approval", "Copilot", "requestCopilotActionApproval", "Turn a proposed action into an approval request", "copilot:use", idem=True,
        body=schema("ActionApproval", {"assigned_to": NULLABLE(UUID), "payload_overrides": {"type": "object"}}), resp=ref("ApprovalRequest"), status="201")
 
 # =================================================================== GROUP / ORGANIZATIONS
