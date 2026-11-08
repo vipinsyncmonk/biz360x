@@ -2978,10 +2978,49 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Fully diluted cap table */
+        /**
+         * Fully diluted cap table
+         * @description `post_round` needs `round_id` and a round with a share class, a target amount and a pre-money valuation.
+         */
         get: operations["getCapTable"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/share-classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List share classes */
+        get: operations["listShareClasses"];
+        put?: never;
+        /** Create share class */
+        post: operations["createShareClass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/shareholders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List shareholders */
+        get: operations["listShareholders"];
+        put?: never;
+        /** Create shareholder */
+        post: operations["createShareholder"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3045,6 +3084,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/esop-pools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List esop pools */
+        get: operations["listEsopPools"];
+        put?: never;
+        /** Create esop pool */
+        post: operations["createEsopPool"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/esop-grants": {
         parameters: {
             query?: never;
@@ -3070,7 +3127,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Schemes and their status for this entity */
+        /** Schemes that fit this company's track, with where each stands */
         get: operations["listBenefits"];
         put?: never;
         post?: never;
@@ -3089,8 +3146,28 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Re-check eligibility against current facts */
+        /**
+         * Re-check eligibility against current facts
+         * @description Updates `eligible` and `not_eligible` with the reason. Anything a person recorded (applied, in progress, granted, rejected, expired) is kept.
+         */
         post: operations["checkBenefits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/benefits/{scheme_code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Record where an application stands */
+        put: operations["recordBenefit"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5922,6 +5999,13 @@ export interface components {
             fd_shares?: number;
             fd_pct?: number;
         };
+        /** @description Only for `post_round`: what the modelled round does. Price per share is the pre-money valuation over today's fully diluted shares. */
+        CapTableRound: {
+            name?: string;
+            new_shares?: number;
+            price_per_share?: string;
+            post_money?: components["schemas"]["Money"];
+        };
         CapTable: {
             /** Format: date */
             as_of?: string;
@@ -5929,6 +6013,35 @@ export interface components {
             scenario?: "current" | "post_round";
             rows?: components["schemas"]["CapTableRow"][];
             total_fd_shares?: number;
+            round?: components["schemas"]["CapTableRound"];
+        };
+        ShareClass: {
+            /** Format: uuid */
+            readonly id?: string;
+            name: string;
+            /** @enum {string} */
+            instrument?: "equity" | "ccps" | "ocps" | "ccd" | "safe" | "warrant";
+            face_value: string;
+            conversion_ratio?: string;
+            liquidation_pref?: number | null;
+        };
+        ShareClassPage: {
+            data: components["schemas"]["ShareClass"][];
+            next_cursor: string | null;
+        };
+        Shareholder: {
+            /** Format: uuid */
+            readonly id?: string;
+            name: string;
+            /** @enum {string} */
+            kind?: "founder" | "investor" | "angel" | "employee_trust" | "company" | "other";
+            pan?: components["schemas"]["Pan"] | null;
+            is_non_resident?: boolean;
+            country?: string;
+        };
+        ShareholderPage: {
+            data: components["schemas"]["Shareholder"][];
+            next_cursor: string | null;
         };
         RoundStep: {
             key?: string;
@@ -5943,17 +6056,22 @@ export interface components {
             readonly id?: string;
             name: string;
             share_class_id?: string | null;
-            route?: string;
+            /** @enum {string} */
+            route?: "private_placement" | "rights" | "preferential" | "bonus";
             target_amount?: components["schemas"]["Money"] | null;
             pre_money_valuation?: components["schemas"]["Money"] | null;
             term_sheet_signed_on?: string | null;
-            status?: string;
+            shareholder_approval_on?: string | null;
+            closed_on?: string | null;
+            /** @enum {string} */
+            status?: "planning" | "term_sheet" | "diligence" | "documentation" | "allotment" | "closed" | "abandoned";
             readonly steps?: components["schemas"]["RoundStep"][];
         };
         FundingRoundPage: {
             data: components["schemas"]["FundingRound"][];
             next_cursor: string | null;
         };
+        /** @description Shares must be allotted within 60 days of receiving the money (`allotment_late`). Recording an allotment adds a PAS-3 task due in 15 days and, for a non-resident holder, an FC-GPR task due in 30. */
         Allotment: {
             /** Format: uuid */
             readonly id?: string;
@@ -5973,11 +6091,26 @@ export interface components {
             data: components["schemas"]["Allotment"][];
             next_cursor: string | null;
         };
+        EsopPool: {
+            /** Format: uuid */
+            readonly id?: string;
+            name: string;
+            /** Format: date */
+            approved_on: string;
+            size_options: number;
+            readonly granted?: number;
+            readonly free?: number;
+        };
+        EsopPoolPage: {
+            data: components["schemas"]["EsopPool"][];
+            next_cursor: string | null;
+        };
         NextVest: {
             /** Format: date */
             date?: string;
             options?: number;
         };
+        /** @description A grant cannot take the pool past its size (409). */
         EsopGrant: {
             /** Format: uuid */
             readonly id?: string;
@@ -5985,12 +6118,17 @@ export interface components {
             pool_id: string;
             /** Format: uuid */
             employee_id: string;
+            readonly employee_name?: string;
             /** Format: date */
             granted_on: string;
             options: number;
             strike_price: string;
             cliff_months?: number;
             vesting_months?: number;
+            /** @enum {string} */
+            vesting_frequency?: "monthly" | "quarterly" | "annual";
+            /** @enum {string} */
+            readonly status?: "active" | "lapsed" | "fully_vested" | "cancelled";
             readonly vested_to_date?: number;
             next_vest?: components["schemas"]["NextVest"] | null;
         };
@@ -6003,11 +6141,20 @@ export interface components {
             name?: string;
             kind?: string;
             /** @enum {string} */
-            status?: "not_eligible" | "eligible" | "applied" | "in_progress" | "granted" | "rejected" | "expired";
+            status?: "not_checked" | "not_eligible" | "eligible" | "applied" | "in_progress" | "granted" | "rejected" | "expired";
             reason?: string;
             reference_no?: string | null;
             valid_until?: string | null;
             next_action?: string | null;
+            info_url?: string | null;
+        };
+        BenefitStatus: {
+            /** @enum {string} */
+            status: "applied" | "in_progress" | "granted" | "rejected" | "expired";
+            reference_no?: string | null;
+            applied_on?: string | null;
+            granted_on?: string | null;
+            valid_until?: string | null;
         };
         TredsInvoice: {
             /** Format: uuid */
@@ -14048,6 +14195,142 @@ export interface operations {
             429: components["responses"]["TooMany"];
         };
     };
+    listShareClasses: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor from `next_cursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Field name; prefix `-` for descending */
+                sort?: components["parameters"]["Sort"];
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareClassPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    createShareClass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareClass"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareClass"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listShareholders: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor from `next_cursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Field name; prefix `-` for descending */
+                sort?: components["parameters"]["Sort"];
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareholderPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    createShareholder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Shareholder"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shareholder"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
     listFundingRounds: {
         parameters: {
             query?: {
@@ -14193,6 +14476,7 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
                 /** @description Field name; prefix `-` for descending */
                 sort?: components["parameters"]["Sort"];
+                round_id?: string;
             };
             header?: never;
             path: {
@@ -14246,6 +14530,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Allotment"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listEsopPools: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor from `next_cursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Field name; prefix `-` for descending */
+                sort?: components["parameters"]["Sort"];
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EsopPoolPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    createEsopPool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EsopPool"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EsopPool"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -14378,6 +14730,39 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    recordBenefit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                scheme_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenefitStatus"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Benefit"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };

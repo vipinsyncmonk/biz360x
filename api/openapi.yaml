@@ -61,7 +61,7 @@ tags:
 - name: Legal & board
   description: Contracts, extracted terms, templates, meetings and resolutions
 - name: Capital
-  description: Cap table, funding rounds, allotments and ESOPs
+  description: Cap table, share classes and holders, funding rounds, allotments and ESOPs
 - name: Schemes & credit
   description: Government schemes and benefits, TReDS, delayed-payment claims
 - name: Documents
@@ -7971,6 +7971,7 @@ paths:
       - Capital
       operationId: getCapTable
       summary: Fully diluted cap table
+      description: '`post_round` needs `round_id` and a round with a share class, a target amount and a pre-money valuation.'
       parameters:
       - $ref: '#/components/parameters/EntityId'
       - name: scenario
@@ -8006,6 +8007,136 @@ paths:
         '429':
           $ref: '#/components/responses/TooMany'
       x-permission: capital:read
+  /entities/{entityId}/share-classes:
+    get:
+      tags:
+      - Capital
+      operationId: listShareClasses
+      summary: List share classes
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareClassPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: capital:read
+    post:
+      tags:
+      - Capital
+      operationId: createShareClass
+      summary: Create share class
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShareClass'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareClass'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: capital:write
+  /entities/{entityId}/shareholders:
+    get:
+      tags:
+      - Capital
+      operationId: listShareholders
+      summary: List shareholders
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareholderPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: capital:read
+    post:
+      tags:
+      - Capital
+      operationId: createShareholder
+      summary: Create shareholder
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Shareholder'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shareholder'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: capital:write
   /entities/{entityId}/funding-rounds:
     get:
       tags:
@@ -8153,6 +8284,11 @@ paths:
       - $ref: '#/components/parameters/Limit'
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/Sort'
+      - name: round_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       responses:
         '200':
           description: OK
@@ -8192,6 +8328,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Allotment'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: capital:write
+  /entities/{entityId}/esop-pools:
+    get:
+      tags:
+      - Capital
+      operationId: listEsopPools
+      summary: List esop pools
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EsopPoolPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: capital:read
+    post:
+      tags:
+      - Capital
+      operationId: createEsopPool
+      summary: Create esop pool
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EsopPool'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EsopPool'
           headers:
             ETag:
               $ref: '#/components/headers/ETag'
@@ -8278,7 +8479,7 @@ paths:
       tags:
       - Schemes & credit
       operationId: listBenefits
-      summary: Schemes and their status for this entity
+      summary: Schemes that fit this company's track, with where each stands
       parameters:
       - $ref: '#/components/parameters/EntityId'
       responses:
@@ -8307,6 +8508,8 @@ paths:
       - Schemes & credit
       operationId: checkBenefits
       summary: Re-check eligibility against current facts
+      description: Updates `eligible` and `not_eligible` with the reason. Anything a person recorded (applied, in progress,
+        granted, rejected, expired) is kept.
       parameters:
       - $ref: '#/components/parameters/EntityId'
       responses:
@@ -8331,6 +8534,43 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: schemes:read
+  /entities/{entityId}/benefits/{scheme_code}:
+    put:
+      tags:
+      - Schemes & credit
+      operationId: recordBenefit
+      summary: Record where an application stands
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: scheme_code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BenefitStatus'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Benefit'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: schemes:write
   /entities/{entityId}/treds-invoices:
     get:
       tags:
@@ -15770,6 +16010,19 @@ components:
           type: number
         fd_pct:
           type: number
+    CapTableRound:
+      type: object
+      properties:
+        name:
+          type: string
+        new_shares:
+          type: integer
+        price_per_share:
+          type: string
+        post_money:
+          $ref: '#/components/schemas/Money'
+      description: 'Only for `post_round`: what the modelled round does. Price per share is the pre-money valuation over today''s
+        fully diluted shares.'
     CapTable:
       type: object
       properties:
@@ -15787,6 +16040,94 @@ components:
             $ref: '#/components/schemas/CapTableRow'
         total_fd_shares:
           type: number
+        round:
+          $ref: '#/components/schemas/CapTableRound'
+    ShareClass:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        instrument:
+          type: string
+          enum:
+          - equity
+          - ccps
+          - ocps
+          - ccd
+          - safe
+          - warrant
+        face_value:
+          type: string
+        conversion_ratio:
+          type: string
+        liquidation_pref:
+          oneOf:
+          - type: number
+          - type: 'null'
+      required:
+      - name
+      - face_value
+    ShareClassPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShareClass'
+        next_cursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - data
+      - next_cursor
+    Shareholder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        kind:
+          type: string
+          enum:
+          - founder
+          - investor
+          - angel
+          - employee_trust
+          - company
+          - other
+        pan:
+          oneOf:
+          - $ref: '#/components/schemas/Pan'
+          - type: 'null'
+        is_non_resident:
+          type: boolean
+        country:
+          type: string
+          pattern: ^[A-Z]{2}$
+      required:
+      - name
+    ShareholderPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shareholder'
+        next_cursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - data
+      - next_cursor
     RoundStep:
       type: object
       properties:
@@ -15823,6 +16164,11 @@ components:
           - type: 'null'
         route:
           type: string
+          enum:
+          - private_placement
+          - rights
+          - preferential
+          - bonus
         target_amount:
           oneOf:
           - $ref: '#/components/schemas/Money'
@@ -15836,8 +16182,26 @@ components:
           - type: string
             format: date
           - type: 'null'
+        shareholder_approval_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        closed_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
         status:
           type: string
+          enum:
+          - planning
+          - term_sheet
+          - diligence
+          - documentation
+          - allotment
+          - closed
+          - abandoned
         steps:
           type: array
           items:
@@ -15908,6 +16272,8 @@ components:
       - shareholder_id
       - quantity
       - issue_price
+      description: Shares must be allotted within 60 days of receiving the money (`allotment_late`). Recording an allotment
+        adds a PAS-3 task due in 15 days and, for a non-resident holder, an FC-GPR task due in 30.
     AllotmentPage:
       type: object
       properties:
@@ -15915,6 +16281,44 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Allotment'
+        next_cursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - data
+      - next_cursor
+    EsopPool:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        approved_on:
+          type: string
+          format: date
+        size_options:
+          type: integer
+        granted:
+          type: integer
+          readOnly: true
+        free:
+          type: integer
+          readOnly: true
+      required:
+      - name
+      - approved_on
+      - size_options
+    EsopPoolPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EsopPool'
         next_cursor:
           oneOf:
           - type: string
@@ -15944,6 +16348,9 @@ components:
         employee_id:
           type: string
           format: uuid
+        employee_name:
+          type: string
+          readOnly: true
         granted_on:
           type: string
           format: date
@@ -15955,6 +16362,20 @@ components:
           type: integer
         vesting_months:
           type: integer
+        vesting_frequency:
+          type: string
+          enum:
+          - monthly
+          - quarterly
+          - annual
+        status:
+          type: string
+          enum:
+          - active
+          - lapsed
+          - fully_vested
+          - cancelled
+          readOnly: true
         vested_to_date:
           type: integer
           readOnly: true
@@ -15968,6 +16389,7 @@ components:
       - granted_on
       - options
       - strike_price
+      description: A grant cannot take the pool past its size (409).
     EsopGrantPage:
       type: object
       properties:
@@ -15994,6 +16416,7 @@ components:
         status:
           type: string
           enum:
+          - not_checked
           - not_eligible
           - eligible
           - applied
@@ -16016,7 +16439,43 @@ components:
           oneOf:
           - type: string
           - type: 'null'
+        info_url:
+          oneOf:
+          - type: string
+          - type: 'null'
       readOnly: true
+    BenefitStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - applied
+          - in_progress
+          - granted
+          - rejected
+          - expired
+        reference_no:
+          oneOf:
+          - type: string
+          - type: 'null'
+        applied_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        granted_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        valid_until:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+      required:
+      - status
     TredsInvoice:
       type: object
       properties:

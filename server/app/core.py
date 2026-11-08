@@ -76,6 +76,7 @@ CONSTRAINT_CODES = {
     "cn_has_reason": (400, "validation_failed", "A credit note needs a reason"),
     "number_len": (400, "number_too_long", "Document numbers are limited to 16 characters"),
     "two_person_rule": (403, "two_person_rule", "You cannot decide a request you raised"),
+    "share_allotments_check": (400, "allotment_late", "Shares must be allotted within 60 days of receiving the money"),
 }
 
 

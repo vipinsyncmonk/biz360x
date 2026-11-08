@@ -864,31 +864,53 @@ item(E + "/meetings", "Legal & board", "Meeting", "legal")
 collection(E + "/resolutions", "Legal & board", "Resolution", "legal", filters=[q("status", S())])
 item(E + "/resolutions", "Legal & board", "Resolution", "legal")
 
-tag("Capital", "Cap table, funding rounds, allotments and ESOPs")
+tag("Capital", "Cap table, share classes and holders, funding rounds, allotments and ESOPs")
 schema("CapTableRow", {"holder": S(), "class_name": S(), "fd_shares": N(), "fd_pct": N()})
-schema("CapTable", {"as_of": DATE, "scenario": ENUM("current", "post_round"), "rows": ARR(ref("CapTableRow")), "total_fd_shares": N()})
+schema("CapTable", {"as_of": DATE, "scenario": ENUM("current", "post_round"), "rows": ARR(ref("CapTableRow")), "total_fd_shares": N(),
+                    "round": schema("CapTableRound", {"name": S(), "new_shares": I(), "price_per_share": S(), "post_money": MONEY},
+                                    desc="Only for `post_round`: what the modelled round does. Price per share is the pre-money valuation over today's fully diluted shares.")})
 _op("get", E + "/cap-table", "Capital", "getCapTable", "Fully diluted cap table", "capital:read",
-    params=[q("scenario", ENUM("current", "post_round")), q("round_id", UUID)], resp=ref("CapTable"))
-schema("FundingRound", {"id": RO_UUID, "name": S(), "share_class_id": NULLABLE(UUID), "route": S(), "target_amount": NULLABLE(MONEY),
-                        "pre_money_valuation": NULLABLE(MONEY), "term_sheet_signed_on": NULLABLE(DATE), "status": S(),
+    params=[q("scenario", ENUM("current", "post_round")), q("round_id", UUID)], resp=ref("CapTable"),
+    desc="`post_round` needs `round_id` and a round with a share class, a target amount and a pre-money valuation.")
+schema("ShareClass", {"id": RO_UUID, "name": S(), "instrument": ENUM("equity", "ccps", "ocps", "ccd", "safe", "warrant"), "face_value": S(), "conversion_ratio": S(),
+                      "liquidation_pref": NULLABLE(N())}, required=("name", "face_value"))
+collection(E + "/share-classes", "Capital", "ShareClass", "capital", summary_plural="ShareClasses")
+schema("Shareholder", {"id": RO_UUID, "name": S(), "kind": ENUM("founder", "investor", "angel", "employee_trust", "company", "other"), "pan": NULLABLE(PAN),
+                       "is_non_resident": B(), "country": S(pattern="^[A-Z]{2}$")}, required=("name",))
+collection(E + "/shareholders", "Capital", "Shareholder", "capital")
+schema("FundingRound", {"id": RO_UUID, "name": S(), "share_class_id": NULLABLE(UUID), "route": ENUM("private_placement", "rights", "preferential", "bonus"),
+                        "target_amount": NULLABLE(MONEY), "pre_money_valuation": NULLABLE(MONEY), "term_sheet_signed_on": NULLABLE(DATE),
+                        "shareholder_approval_on": NULLABLE(DATE), "closed_on": NULLABLE(DATE),
+                        "status": ENUM("planning", "term_sheet", "diligence", "documentation", "allotment", "closed", "abandoned"),
                         "steps": ARR(schema("RoundStep", {"key": S(), "title": S(), "status": ENUM("done", "in_progress", "next"), "detail": S(), "obligation_id": NULLABLE(UUID)}), readOnly=True)},
        required=("name",))
 collection(E + "/funding-rounds", "Capital", "FundingRound", "capital")
 item(E + "/funding-rounds", "Capital", "FundingRound", "capital")
 schema("Allotment", {"id": RO_UUID, "round_id": NULLABLE(UUID), "share_class_id": UUID, "shareholder_id": UUID, "quantity": I(), "issue_price": S(),
                      "money_received_on": NULLABLE(DATE), "allotted_on": NULLABLE(DATE), "pas3_obligation_id": NULLABLE(RO_UUID), "fcgpr_obligation_id": NULLABLE(RO_UUID)},
-       required=("share_class_id", "shareholder_id", "quantity", "issue_price"))
-collection(E + "/allotments", "Capital", "Allotment", "capital", idem=True)
-schema("EsopGrant", {"id": RO_UUID, "pool_id": UUID, "employee_id": UUID, "granted_on": DATE, "options": I(), "strike_price": S(), "cliff_months": I(),
-                     "vesting_months": I(), "vested_to_date": I(readOnly=True), "next_vest": NULLABLE(schema("NextVest", {"date": DATE, "options": I()}, extra={"readOnly": True}))},
-       required=("pool_id", "employee_id", "granted_on", "options", "strike_price"))
+       required=("share_class_id", "shareholder_id", "quantity", "issue_price"),
+       desc="Shares must be allotted within 60 days of receiving the money (`allotment_late`). Recording an allotment adds a PAS-3 task due in 15 days and, for a non-resident holder, an FC-GPR task due in 30.")
+collection(E + "/allotments", "Capital", "Allotment", "capital", idem=True, filters=[q("round_id", UUID)])
+schema("EsopPool", {"id": RO_UUID, "name": S(), "approved_on": DATE, "size_options": I(), "granted": I(readOnly=True), "free": I(readOnly=True)}, required=("name", "approved_on", "size_options"))
+collection(E + "/esop-pools", "Capital", "EsopPool", "capital")
+schema("EsopGrant", {"id": RO_UUID, "pool_id": UUID, "employee_id": UUID, "employee_name": S(readOnly=True), "granted_on": DATE, "options": I(), "strike_price": S(),
+                     "cliff_months": I(), "vesting_months": I(), "vesting_frequency": ENUM("monthly", "quarterly", "annual"),
+                     "status": ENUM("active", "lapsed", "fully_vested", "cancelled", readOnly=True), "vested_to_date": I(readOnly=True),
+                     "next_vest": NULLABLE(schema("NextVest", {"date": DATE, "options": I()}, extra={"readOnly": True}))},
+       required=("pool_id", "employee_id", "granted_on", "options", "strike_price"),
+       desc="A grant cannot take the pool past its size (409).")
 collection(E + "/esop-grants", "Capital", "EsopGrant", "capital")
 
 tag("Schemes & credit", "Government schemes and benefits, TReDS, delayed-payment claims")
-schema("Benefit", {"scheme_code": S(), "name": S(), "kind": S(), "status": ENUM("not_eligible", "eligible", "applied", "in_progress", "granted", "rejected", "expired"),
-                   "reason": S(), "reference_no": NULLABLE(S()), "valid_until": NULLABLE(DATE), "next_action": NULLABLE(S())}, extra={"readOnly": True})
-_op("get", E + "/benefits", "Schemes & credit", "listBenefits", "Schemes and their status for this entity", "schemes:read", resp=ARR(ref("Benefit")))
-action(E + "/benefits/check", "Schemes & credit", "checkBenefits", "Re-check eligibility against current facts", "schemes:read", resp=ARR(ref("Benefit")))
+schema("Benefit", {"scheme_code": S(), "name": S(), "kind": S(), "status": ENUM("not_checked", "not_eligible", "eligible", "applied", "in_progress", "granted", "rejected", "expired"),
+                   "reason": S(), "reference_no": NULLABLE(S()), "valid_until": NULLABLE(DATE), "next_action": NULLABLE(S()), "info_url": NULLABLE(S())}, extra={"readOnly": True})
+_op("get", E + "/benefits", "Schemes & credit", "listBenefits", "Schemes that fit this company's track, with where each stands", "schemes:read", resp=ARR(ref("Benefit")))
+action(E + "/benefits/check", "Schemes & credit", "checkBenefits", "Re-check eligibility against current facts", "schemes:read", resp=ARR(ref("Benefit")),
+       desc="Updates `eligible` and `not_eligible` with the reason. Anything a person recorded (applied, in progress, granted, rejected, expired) is kept.")
+_op("put", E + "/benefits/{scheme_code}", "Schemes & credit", "recordBenefit", "Record where an application stands", "schemes:write",
+    params=[{"name": "scheme_code", "in": "path", "required": True, "schema": S()}],
+    body=schema("BenefitStatus", {"status": ENUM("applied", "in_progress", "granted", "rejected", "expired"), "reference_no": NULLABLE(S()), "applied_on": NULLABLE(DATE),
+                                  "granted_on": NULLABLE(DATE), "valid_until": NULLABLE(DATE)}, required=("status",)), resp=ref("Benefit"))
 schema("TredsInvoice", {"id": RO_UUID, "sales_document_id": UUID, "platform": S(), "uploaded_on": DATE, "status": S(readOnly=True),
                         "discount_rate_pct": NULLABLE(N()), "amount_received": NULLABLE(MONEY)}, required=("sales_document_id", "platform"))
 collection(E + "/treds-invoices", "Schemes & credit", "TredsInvoice", "schemes", idem=True)
