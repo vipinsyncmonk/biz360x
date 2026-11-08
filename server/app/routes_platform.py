@@ -5,9 +5,10 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from .core import ENV, ApiError, Auth, Principal, issue_access_token, tx
+from . import auth
+from .core import ApiError, Auth, Principal, tx
 
 router = APIRouter()
 
@@ -20,28 +21,50 @@ class OtpRequest(BaseModel):
 class TokenRequest(BaseModel):
     grant_type: Literal["otp", "refresh_token", "password", "authorization_code"]
     email: str | None = None
+    mobile_e164: str | None = None
     otp: str | None = None
+    refresh_token: str | None = None
+    code: str | None = None
+    redirect_uri: str | None = None
+    mfa_code: str | None = None
+
+
+class SignupRequest(BaseModel):
+    email: str = Field(max_length=254)
+    full_name: str = Field(min_length=1, max_length=120)
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
 
 
 @router.post("/auth/otp", status_code=204, tags=["Auth"])
 def request_otp(body: OtpRequest):
-    # Production: send via SMS / email provider and store a hashed code with a 5-minute expiry.
+    auth.request_code(body.email, body.mobile_e164)
+    return Response(status_code=204)
+
+
+@router.post("/auth/signup", status_code=204, tags=["Auth"])
+def signup(body: SignupRequest):
+    auth.signup(body.email, body.full_name)
     return Response(status_code=204)
 
 
 @router.post("/auth/token", tags=["Auth"])
 def issue_token(body: TokenRequest):
-    if body.grant_type != "otp":
-        raise ApiError(400, "validation_failed", "Only the otp grant is enabled in this reference server")
-    if ENV != "dev" or body.otp != "000000":
-        raise ApiError(401, "unauthorized", "Invalid code")       # dev accepts 000000; prod verifies the stored hash
-    with tx(None, role="biz_worker") as cur:                      # auth service reads users without RLS
-        cur.execute("SELECT id, email FROM users WHERE email = %s", (body.email,))
-        u = cur.fetchone()
-        if not u:
-            raise ApiError(401, "unauthorized", "Invalid code")
-        cur.execute("UPDATE users SET last_login_at = now() WHERE id = %s", (u["id"],))
-    return {"access_token": issue_access_token(u["id"], u["email"]), "token_type": "Bearer", "expires_in": 900}
+    if body.grant_type == "otp":
+        return auth.login_with_code(body.email, body.mobile_e164, body.otp, body.mfa_code)
+    if body.grant_type == "refresh_token":
+        return auth.refresh(body.refresh_token)
+    if body.grant_type == "authorization_code":
+        return auth.login_with_idp(body.code, body.redirect_uri)
+    raise ApiError(400, "validation_failed", "This grant type is not enabled", "Use otp, refresh_token or authorization_code.")
+
+
+@router.post("/auth/logout", status_code=204, tags=["Auth"])
+def logout(body: LogoutRequest, p: Principal = Auth):
+    auth.logout(body.refresh_token)
+    return Response(status_code=204)
 
 
 @router.get("/me", tags=["Me"])

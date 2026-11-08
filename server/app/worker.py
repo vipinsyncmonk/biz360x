@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import time
 from typing import Protocol
 
-from . import adapters, secretbox
+from . import adapters, auth, secretbox, security, webhooks
 from .core import ApiError, audit, emit, tx
 
 WORKER_ID = os.environ.get("WORKER_ID", f"worker-{os.getpid()}")
@@ -81,6 +82,47 @@ def schedule_daily_jobs(cur) -> int:
     return n
 
 
+def handle_audit_verify(cur, job: dict) -> dict:
+    """Walk the whole hash chain. A break raises an alert row, a critical log line and, when BIZ_ALERT_WEBHOOK is set, a POST."""
+    cur.execute("SELECT app.audit_verify() AS broken")
+    broken = cur.fetchone()["broken"]
+    cur.execute("SELECT count(*) AS n FROM audit_log")
+    n = cur.fetchone()["n"]
+    if broken is None:
+        cur.execute("UPDATE system_alerts SET resolved_at = now() WHERE kind = 'audit_chain_broken' AND resolved_at IS NULL")
+        return {"intact": True, "checked": n}
+    cur.execute("INSERT INTO system_alerts (kind, detail) SELECT 'audit_chain_broken', jsonb_build_object('first_broken_id', %s::bigint, 'checked', %s::bigint) "
+                "WHERE NOT EXISTS (SELECT 1 FROM system_alerts WHERE kind = 'audit_chain_broken' AND resolved_at IS NULL AND (detail->>'first_broken_id')::bigint = %s)",
+                (broken, n, broken))
+    logging.getLogger("biz360x").critical("audit chain is broken at row %s", broken)
+    send_alert({"kind": "audit_chain_broken", "first_broken_id": broken, "checked": n})
+    return {"intact": False, "first_broken_id": broken, "checked": n}
+
+
+def send_alert(payload: dict) -> None:
+    """POST an alert to BIZ_ALERT_WEBHOOK (a pager or chat webhook). Failure to alert is logged, never raised: the alert row is the record."""
+    url = os.environ.get("BIZ_ALERT_WEBHOOK")
+    if not url:
+        return
+    try:
+        webhooks.SENDER(url, {"Content-Type": "application/json"}, json.dumps({"text": "Biz360X: " + payload["kind"], **payload}).encode())
+    except Exception as e:
+        logging.getLogger("biz360x").error("could not send alert: %s", e)
+
+
+def handle_housekeeping(cur, job: dict) -> dict:
+    return {"purged": auth.purge_expired(cur)}
+
+
+def schedule_system_jobs(cur) -> int:
+    """Jobs that belong to no entity: the daily audit chain check and the purge of expired codes and tokens."""
+    n = 0
+    for kind in ("audit.verify", "system.housekeeping"):
+        cur.execute("""INSERT INTO jobs (kind) SELECT %s::text WHERE NOT EXISTS (SELECT 1 FROM jobs j WHERE j.kind = %s AND j.created_at > now() - interval '20 hours')""", (kind, kind))
+        n += cur.rowcount
+    return n
+
+
 def _m6_handlers() -> dict:
     from . import routes_portals as po
     return {"portal.renew_session": po.handle_renew_session, "portal.check_sessions": po.handle_check_sessions, "eway.generate": po.handle_eway_generate,
@@ -96,7 +138,8 @@ def _m3_handlers() -> dict:
 
 
 HANDLERS = {"einvoice.generate_irn": handle_generate_irn, "compliance.run_engine": handle_run_engine,
-            "collections.dunning": handle_dunning, "collections.recurring": handle_recurring, **_m3_handlers(), **_m6_handlers()}
+            "collections.dunning": handle_dunning, "collections.recurring": handle_recurring, "audit.verify": handle_audit_verify,
+            "system.housekeeping": handle_housekeeping, **_m3_handlers(), **_m6_handlers()}
 
 
 FAILURE_HOOKS: dict = {}          # job kind -> fn(cur, job, exc): put the world back when a job ends without succeeding
@@ -170,13 +213,17 @@ def run_once() -> bool:
 
 
 def main():
+    security.check_environment()
     last_schedule = 0.0
     while True:
         if time.monotonic() - last_schedule > 3600:
             with tx(None, role="biz_worker") as cur:
                 schedule_engine_runs(cur)
                 schedule_daily_jobs(cur)
+                schedule_system_jobs(cur)
             last_schedule = time.monotonic()
+        with tx(None, role="biz_worker") as cur:
+            webhooks.relay(cur)
         if not run_once():
             time.sleep(1)
 

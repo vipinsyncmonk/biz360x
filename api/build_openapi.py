@@ -66,6 +66,7 @@ N = lambda **kw: dict(type="number", **kw)
 UUID = S(format="uuid")
 RO_UUID = S(format="uuid", readOnly=True)
 DATE = S(format="date")
+DATE_RO = S(format="date", readOnly=True)
 TS = S(format="date-time")
 RO_TS = S(format="date-time", readOnly=True)
 def ENUM(*v, **kw): return S(enum=list(v), **kw)
@@ -115,7 +116,7 @@ schema("Problem", {
                  "two_person_rule", "permission_denied", "period_locked", "journal_unbalanced",
                  "tax_split_mismatch", "b2b_needs_gstin", "note_needs_original", "number_too_long",
                  "over_settlement", "msme_terms_exceeded", "rule_version_overlap", "portal_session_expired",
-                 "portal_rejected", "approval_required", "rate_limited", "internal"),
+                 "portal_rejected", "approval_required", "rate_limited", "unauthorized", "mfa_required", "internal"),
     "errors": ARR(schema("FieldError", {"field": S(examples=["lines[2].hsn_sac"]), "message": S()})),
     "request_id": S(),
 }, required=("type", "title", "status", "code"), desc="RFC 9457 problem details. `code` is stable; `title`/`detail` are for humans.")
@@ -237,14 +238,18 @@ tag("Auth", "Sign-in. Email + password, mobile OTP, Google/Microsoft OIDC, or SA
 schema("TokenResponse", {"access_token": S(), "refresh_token": S(), "token_type": ENUM("Bearer"), "expires_in": I(examples=[900])},
        required=("access_token", "token_type", "expires_in"))
 _op("post", "/auth/otp", "Auth", "requestOtp", "Send a one-time code", body=schema("OtpRequest", {"mobile_e164": S(), "email": S(format="email")}),
-    status="204", security=[], desc="Rate-limited to 5 per hour per identifier.")
+    status="204", security=[], desc="Rate-limited to 5 per hour per identifier. The answer is the same whether or not the person exists.")
+_op("post", "/auth/signup", "Auth", "signUp", "Create an account and send a one-time code",
+    body=schema("SignupRequest", {"email": S(format="email"), "full_name": S()}, required=("email", "full_name")),
+    status="204", security=[], desc="Same answer whether or not the address is registered; an existing person's name is not changed. 5 per minute per IP.")
 _op("post", "/auth/token", "Auth", "issueToken", "Exchange credentials, an OTP or a refresh token for tokens",
     body=schema("TokenRequest", {
         "grant_type": ENUM("password", "otp", "refresh_token", "authorization_code"),
         "email": S(format="email"), "password": S(format="password"), "mobile_e164": S(), "otp": S(pattern=r"^[0-9]{6}$"),
         "refresh_token": S(), "code": S(), "redirect_uri": S(format="uri"), "mfa_code": S()}, required=("grant_type",)),
     resp=ref("TokenResponse"), security=[])
-_op("post", "/auth/logout", "Auth", "logout", "Revoke the refresh token", status="204")
+_op("post", "/auth/logout", "Auth", "logout", "Revoke the refresh token and its whole session family",
+    body=schema("LogoutRequest", {"refresh_token": S()}, required=("refresh_token",)), status="204")
 
 tag("Me", "The signed-in user, their entities and preferences")
 schema("EntitySummary", {"id": UUID, "legal_name": S(), "constitution": S(), "track": ENUM("business", "startup", "msme"),
@@ -330,7 +335,9 @@ action(E + "/facts", "Entities", "recordFacts", "Record facts (each is a new, da
        body=ARR(ref("Fact")), resp=ARR(ref("Fact")), status="201",
        desc="A changed fact triggers an engine run when it can switch an obligation on or off.")
 schema("DscCertificate", {"id": RO_UUID, "person_name": S(), "dsc_class": S(), "valid_from": DATE, "valid_until": DATE,
-                          "registered_on": ARR(ENUM("MCA", "GSTN", "ITD"))}, required=("person_name", "valid_from", "valid_until"))
+                          "registered_on": ARR(ENUM("MCA", "GSTN", "ITD")),
+                          "serial": S(writeOnly=True, description="The certificate serial as printed by the token software; only its hash is stored. Required when adding.")},
+                   required=("person_name", "valid_from", "valid_until"))
 collection(E + "/dsc-certificates", "Entities", "DscCertificate", "settings")
 
 # =================================================================== COMPLIANCE ENGINE
@@ -345,7 +352,7 @@ schema("Obligation", {
     "id": RO_UUID, "rule": ref("ObligationRule"),
     "registration": NULLABLE(schema("RegistrationRef", {"id": UUID, "kind": S(), "number": S(), "label": S()})),
     "fy": FY, "period_label": S(examples=["Oct 2026"]), "period_start": DATE, "period_end": DATE,
-    "due_date": DATE, "extended_due_date": NULLABLE(DATE), "days_left": I(readOnly=True),
+    "due_date": DATE, "extended_due_date": NULLABLE(DATE), "due_on": DATE_RO, "days_left": I(readOnly=True),
     "status": ENUM("upcoming", "in_preparation", "awaiting_client", "awaiting_approval", "ready_to_file", "filed", "overdue", "not_applicable", "waived"),
     "owner_user_id": NULLABLE(UUID), "approver_user_id": NULLABLE(UUID),
     "late_fee_accrued": MONEY, "interest_accrued": MONEY,
@@ -793,6 +800,7 @@ _op("get", E + "/payroll-runs/{id}", "Payroll & HR", "getPayrollRun", "Get a pay
 schema("PayrollInput", {"employee_id": UUID, "lop_days": N(), "overtime": MONEY, "bonus": MONEY, "reimbursements": MONEY, "other_deductions": MONEY}, required=("employee_id",))
 _op("put", E + "/payroll-runs/{id}/inputs", "Payroll & HR", "putPayrollInputs", "Set attendance and one-off inputs", "payroll:write",
     body=ARR(ref("PayrollInput")), resp=ref("PayrollRun"))
+_op("get", E + "/payroll-runs/{id}/inputs", "Payroll & HR", "getPayrollInputs", "What was last set for the month", "payroll:read", resp=ARR(ref("PayrollInput")))
 action(E + "/payroll-runs/{id}/compute", "Payroll & HR", "computePayrollRun", "Compute payslips, PF, ESI, PT and TDS", "payroll:write", resp=ref("PayrollRun"))
 action(E + "/payroll-runs/{id}/submit", "Payroll & HR", "submitPayrollRun", "Send for approval", "payroll:write", resp=ref("ApprovalRequest"), status="201")
 action(E + "/payroll-runs/{id}/bank-file", "Payroll & HR", "createPayrollBankFile", "Generate the bank upload file (after approval)", "payroll:pay",
@@ -966,6 +974,7 @@ action(E + "/copilot/actions/{id}/request-approval", "Copilot", "requestCopilotA
 # =================================================================== GROUP / ORGANIZATIONS
 tag("Organizations", "Organisation-level views for business groups and CA / CS firms")
 schema("EntityStanding", {"entity_id": UUID, "legal_name": S(), "constitution": S(), "owner_staff": NULLABLE(S()),
+                          "waiting_filings": I(description="Open filings that wait on the client, whatever the cell colour says"),
                           "cells": {"type": "object", "additionalProperties": ENUM("clear", "due", "client", "overdue", "na"),
                                     "examples": [{"MCA": "client", "GST": "due", "TDS": "client", "EPFO_ESIC": "due", "INCOME_TAX": "clear"}]},
                           "open_items": ARR(schema("OpenItem", {"title": S(), "detail": S(), "due_on": DATE}))})
@@ -975,7 +984,12 @@ _op("get", "/organizations/{id}/entities", "Organizations", "listOrganizationEnt
 schema("StaffLoad", {"user_id": UUID, "name": S(), "filings_due": I()})
 _op("get", "/organizations/{id}/workload", "Organizations", "getStaffWorkload", "Filings assigned per staff member this week", resp=ARR(ref("StaffLoad")))
 action("/organizations/{id}/client-reminders", "Organizations", "chaseClients", "Send document / approval reminders to clients that are blocking filings",
-       None, body=schema("ChaseClients", {"entity_ids": ARR(UUID)}), status="202", idem=True)
+       None, body=schema("ChaseClients", {"entity_ids": ARR(UUID, maxItems=200, description="Leave out to chase every client that has filings waiting on them.")}),
+       resp=schema("ChaseResult", {
+           "reminded": ARR(schema("ChaseReminded", {"entity_id": UUID, "legal_name": S(), "items": I(), "recipients": I()})),
+           "skipped": ARR(schema("ChaseSkipped", {"entity_id": UUID, "legal_name": S(), "reason": ENUM("nothing_waiting", "no_client_contact", "reminded_recently")}))}),
+       status="202", idem=True,
+       desc="Queues one email reminder per client owner. Reminders go to the client's own owners, never to the firm's staff. A client reminded in the last 24 hours is skipped.")
 
 # =================================================================== EVENTS, WEBHOOKS, AUDIT
 tag("Events & webhooks", "Server-sent events for the UI and signed webhooks for integrations")
@@ -989,6 +1003,19 @@ schema("WebhookEndpoint", {"id": RO_UUID, "url": S(format="uri"), "events": ARR(
 collection(E + "/webhooks", "Events & webhooks", "WebhookEndpoint", "settings")
 item(E + "/webhooks", "Events & webhooks", "WebhookEndpoint", "settings", delete=True)
 action(E + "/webhooks/{id}/test", "Events & webhooks", "testWebhook", "Send a test event", "settings:write", status="204")
+schema("WebhookDelivery", {"id": I(), "event_id": I(), "type": S(), "attempt": I(), "status_code": NULLABLE(I()), "error": NULLABLE(S()),
+                           "attempted_at": NULLABLE(TS), "delivered_at": NULLABLE(TS), "next_retry_at": NULLABLE(TS)}, extra={"readOnly": True})
+_op("get", E + "/webhooks/{id}/deliveries", "Events & webhooks", "listWebhookDeliveries", "Delivery attempts for an endpoint", "settings:read",
+    params=[P("Limit"), P("Cursor")], resp=page_of("WebhookDelivery"))
+
+tag("API keys", "Server-to-server keys. A key acts as a named service user, limited to the permissions listed on it. It can never approve, file or pay.")
+schema("ApiKey", {"id": RO_UUID, "name": S(), "prefix": S(readOnly=True, examples=["bzx_live_ab12cd34"]),
+                  "permissions": ARR(S(pattern=r"^[a-z_]+:(read|write|use)$"), examples=[["sales:read", "sales:write"]]),
+                  "expires_at": NULLABLE(TS), "last_used_at": NULLABLE(TS), "revoked_at": NULLABLE(TS), "created_at": TS,
+                  "key": S(readOnly=True, description="The full key, returned once when the key is created. Only its hash is stored.")}, required=("name", "permissions"))
+collection(E + "/api-keys", "API keys", "ApiKey", "settings")
+_op("delete", E + "/api-keys/{id}", "API keys", "revokeApiKey", "Revoke an API key", "settings:write", status="204",
+    desc="Revoked at once; the key's service user loses its membership.")
 
 EVENTS = {
     "obligation.created": "Engine switched on a new obligation",
@@ -1030,7 +1057,7 @@ _op("get", E + "/audit-log/verify", "Audit", "verifyAuditChain", "Verify the has
 # ---------------------------------------------------------------- finish
 SPEC["tags"] = [{"name": k, "description": v} for k, v in TAGS.items()]
 SPEC["x-tagGroups"] = [
-    {"name": "Platform", "tags": ["Auth", "Me", "Onboarding", "Entities", "Organizations", "Portals & jobs", "Events & webhooks", "Audit"]},
+    {"name": "Platform", "tags": ["Auth", "Me", "Onboarding", "Entities", "Organizations", "Portals & jobs", "Events & webhooks", "API keys", "Audit"]},
     {"name": "Govern", "tags": ["Compliance", "Approvals", "Legal & board", "Documents"]},
     {"name": "Run", "tags": ["Parties & items", "Sales & billing", "Public pay", "Purchases", "GST & tax", "Finance & books", "Payroll & HR"]},
     {"name": "Grow", "tags": ["Capital", "Schemes & credit", "Copilot"]},

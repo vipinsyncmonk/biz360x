@@ -14,6 +14,7 @@ Read `docs/API_GUIDE.md` before changing anything structural.
 | `api/build_openapi.py` | Source of truth for the contract. Edit this, then regenerate. |
 | `server/` | FastAPI reference server + job worker (`app/worker.py`) + end-to-end tests (`tests/test_flows.py`). |
 | `docs/API_GUIDE.md` | Architecture, conventions, permissions, flows, screen → endpoint map. |
+| `web/` | Next.js front end (`web/README.md`): shell, sign-in/sign-up, onboarding, Today, Compliance so far. Types are generated from the contract. |
 | `design/screens/*.dc.html` | Exported screen designs (26 artboards). Use them for layout, copy and data shapes; the live canvas is the source of truth. |
 
 ## Commands
@@ -32,6 +33,10 @@ pip install -r server/requirements.txt
 cd server && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/biz360x pytest -q   # end-to-end + engine unit tests
 cd server && DATABASE_URL=… uvicorn app.main:app --reload                                    # :8000, spec at /v1/openapi.yaml
 cd server && DATABASE_URL=… python -m app.worker
+
+# web (needs the API running on :8000)
+cd web && npm ci && npm run dev                           # :3000, forwards /api/v1 to the API
+cd web && npm run typecheck && npm test && npm run gen:api # gen:api must leave no diff
 
 # contract
 python api/build_openapi.py api/openapi.yaml && npx @redocly/cli@1.25.0 lint api/openapi.yaml
@@ -55,6 +60,7 @@ The tests expect the demo data. Rebuild the database before a full test run, bec
 - **Two-person rule.** The requester of an approval can never decide it. The copilot only proposes; actions execute after an approval.
 - **Compliance rules are versioned data.** Change a rule by inserting a new version with a new `effective` range. Never edit a published version.
 - **Schema changes go in a new numbered migration** (`db/12_*.sql`, …). Once a migration has run anywhere, don't edit it.
+- **Production start-up is guarded.** `security.check_environment()` refuses a default `JWT_SECRET`, a missing `BIZ_FIELD_KEY`, and any sandbox provider. Don't add a code path that works around it. API keys are service users, so they follow the same RLS; a key never gets approve/file/pay.
 - **Indian law figures** (fees, thresholds, due dates, HSN/SAC) are a starter library and must be reviewed by a CA/CS. Don't present them as verified.
 
 ## When you add an endpoint
@@ -66,9 +72,9 @@ The tests expect the demo data. Rebuild the database before a full test run, bec
 
 ## Backlog (in order)
 
-Done: compliance engine evaluator (`server/app/engine.py`, migrations 12-13); ledger posting for sales documents and receipts, quotes to cash, bank matching and period close (`ledger.py`, `routes_orders.py`, `routes_finance.py`, `receivables.py`). Bill posting, purchases, GST returns, 2B matching, TDS and advance tax are in (`routes_purchases.py`, `routes_gst.py`, `taxcalc.py`; migrations 14-15). Payroll (`routes_payroll.py`, `payroll.py`, `secretbox.py`; migration 16) is in; legal, secretarial, the vault and the notice desk are in (`routes_vault.py`, `routes_legal.py`, `storage.py`; migration 17). The portal adapters are in as interfaces and sandboxes (`adapters.py`, `routes_portals.py`, migration 18); the provider choice is `docs/PROVIDERS.md`. Next: auth and hardening (M7).
+Done: compliance engine evaluator (`server/app/engine.py`, migrations 12-13); ledger posting for sales documents and receipts, quotes to cash, bank matching and period close (`ledger.py`, `routes_orders.py`, `routes_finance.py`, `receivables.py`). Bill posting, purchases, GST returns, 2B matching, TDS and advance tax are in (`routes_purchases.py`, `routes_gst.py`, `taxcalc.py`; migrations 14-15). Payroll (`routes_payroll.py`, `payroll.py`, `secretbox.py`; migration 16) is in; legal, secretarial, the vault and the notice desk are in (`routes_vault.py`, `routes_legal.py`, `storage.py`; migration 17). The portal adapters are in as interfaces and sandboxes (`adapters.py`, `routes_portals.py`, migration 18); the provider choice is `docs/PROVIDERS.md`. Settings and group reads are in (`routes_settings.py`, migration 21), and so are inviting and removing people, granting and revoking advisors and recording certificates (migration 22). Auth and hardening are in (`auth.py`, `ratelimit.py`, `security.py`, `webhooks.py`, `routes_integrations.py`; migration 19; `docs/SECURITY.md`). The front end has started (M8): shell, sign-in, sign-up, onboarding, Today, Compliance and the billing list, invoice editor, quotes list, quote and credit note screens, Collections (ageing, receipts, reminders, recurring), the phone layout, the customer payment page, Finance & Books, GST & Tax, Payroll & HR (with employees, salary structures, monthly inputs and the bank file), Legal & Contracts (new contract, status, key terms), Board & resolutions and the Notice desk, the Document vault (with upload, edit and sharing, and Data rooms), Add client and Chase clients on the Group view, GST & Tax actions (compute and file returns, settle 2B differences) and the TDS & Advance tax screen, Settings (with invite, advisor, certificate, API key, portal and webhook actions) and the Group view are in `web/`; the other screens follow the design files, one milestone issue at a time.
 
 3. Remaining spec operations (onboarding, quotes, purchases, GST returns, payroll, legal, documents, copilot).
-4. Real auth: OTP provider, OIDC/SAML. Development OTP `000000` must never reach production.
-5. Frontend (Next.js) built from `design/screens`.
+4. ~~Real auth~~ - done except the vendors: a real OTP provider, Google/Microsoft/SAML identity providers and MFA enrolment still have to be chosen and written (`docs/SECURITY.md`). The development OTP `000000` is refused outside dev by the startup guard.
+5. Frontend (Next.js) built from `design/screens`: in progress, see `web/README.md` for what exists.
 6. Export–import module: shipping bills, bills of entry, e-BRC, LUT, RoDTEP/drawback.

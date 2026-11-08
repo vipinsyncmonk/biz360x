@@ -39,6 +39,28 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/biz360x python script
 
 The runner applies `db/NN_*.sql` in order, records a checksum for each file in `schema_migrations`, and refuses to run if an applied file was edited. Add schema changes as a new numbered file (`db/12_*.sql`, …).
 
+## Web
+
+```bash
+cd web && npm ci && npm run dev    # http://localhost:3000; start the API on :8000 first
+```
+
+`API_URL` (web server side) says where the API is; the browser only ever calls `/api/v1` on its own origin. The WSL local CI copies `web/` to a temp folder, so Windows and Linux `node_modules` never mix.
+
+## Environment variables
+
+Development needs only `DATABASE_URL`. Everything else has a development default that the server **refuses outside development** (see `docs/SECURITY.md`).
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection |
+| `BIZ_ENV` | `dev` (default), `test`, `staging`, `production`; anything else counts as production |
+| `JWT_SECRET`, `BIZ_FIELD_KEY` | Token signing, and the Fernet key for encrypted columns. Required in production |
+| `BIZ_OTP_PROVIDER`, `BIZ_IDP_PROVIDER` | Sign-in providers; `sandbox` by default (dev code `000000`, identity code `sandbox:<email>`) |
+| `BIZ_ADAPTERS` | Portal adapters, e.g. `gsp=acme,irp=acme` |
+| `BIZ_ALERT_WEBHOOK` | Where the audit-chain check posts a failure |
+| `BIZ_RATE_USER`, `BIZ_RATE_HEAVY`, `BIZ_RATE_SIGNUP` | Requests a minute per caller (600), for portal-calling actions (60) and sign-ups per IP (5). The tests raise all three in `server/tests/conftest.py` |
+
 ## Line endings
 
 `.gitattributes` forces LF for scripts, SQL, Python and YAML so they work in WSL.

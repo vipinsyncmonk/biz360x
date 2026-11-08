@@ -13,12 +13,16 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 
+from . import ratelimit, security
 from .core import ApiError, problem_response
+from .routes_billing import router as billing
+from .routes_settings import router as settings
 from .routes_compliance import router as compliance
 from .receivables import router as receivables
 from .routes_engine import router as engine_routes
 from .routes_finance import router as finance
 from .routes_gst import router as gst
+from .routes_integrations import router as integrations
 from .routes_legal import router as legal
 from .routes_orders import router as orders
 from .routes_payroll import router as payroll
@@ -27,6 +31,8 @@ from .routes_portals import router as portals
 from .routes_purchases import router as purchases
 from .routes_vault import router as vault
 from .routes_sales import router as sales
+
+security.check_environment()            # refuses to start in production with a default secret or any sandbox provider
 
 app = FastAPI(title="Biz360X API (reference)", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -52,5 +58,24 @@ def health():
     return JSONResponse({"ok": True})
 
 
-for r in (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal, portals):
+_ROUTERS = (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal, portals, integrations, billing, settings)
+for r in _ROUTERS:
     app.include_router(r, prefix="/v1")
+ratelimit.register_heavy_routes(_ROUTERS, "/v1")
+
+
+@app.middleware("http")
+async def limits_and_headers(request: Request, call_next):
+    if request.url.path.startswith("/v1/"):
+        ip = request.client.host if request.client else "unknown"
+        ok, headers, status = ratelimit.check(request.method, request.url.path, request.headers.get("authorization", ""), ip)
+        if not ok:
+            resp = problem_response(request, ApiError(status, "rate_limited", "Too many requests", "Wait for Retry-After seconds."))
+            resp.headers.update(headers)
+        else:
+            resp = await call_next(request)
+            resp.headers.update(headers)
+    else:
+        resp = await call_next(request)
+    resp.headers.update(security.SECURITY_HEADERS)
+    return resp

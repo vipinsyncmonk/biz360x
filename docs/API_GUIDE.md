@@ -63,7 +63,7 @@ This guide covers four things: how the system is put together, the rules every e
 
 ### Error codes
 
-`validation_failed` · `not_found` · `conflict` · `precondition_failed` · `idempotency_conflict` · `permission_denied` · `two_person_rule` · `approval_required` · `period_locked` · `journal_unbalanced` · `tax_split_mismatch` · `b2b_needs_gstin` · `note_needs_original` · `number_too_long` · `over_settlement` · `msme_terms_exceeded` · `rule_version_overlap` · `portal_session_expired` · `portal_rejected` · `rate_limited` · `internal`
+`validation_failed` · `not_found` · `conflict` · `precondition_failed` · `idempotency_conflict` · `permission_denied` · `two_person_rule` · `approval_required` · `period_locked` · `journal_unbalanced` · `tax_split_mismatch` · `b2b_needs_gstin` · `note_needs_original` · `number_too_long` · `over_settlement` · `msme_terms_exceeded` · `rule_version_overlap` · `portal_session_expired` · `portal_rejected` · `rate_limited` · `unauthorized` · `mfa_required` · `internal`
 
 Most domain errors are raised by the database itself. The API maps constraint names to codes in one table (`CONSTRAINT_CODES` in `server/app/core.py`), so the rule and its error message can never drift apart.
 
@@ -85,7 +85,7 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `parties`, `sale
 - **Modules.** A membership can be limited to a list of modules (`{gst,finance}`); `*` means all.
 - **Advisors.** An advisor grant maps each module to a level: `read`, `comment` (read), `prepare` (read + write) or `certify` (read + write + file).
 - **Two-person rule.** It is enforced in the database: whoever requested an approval can never decide it, whatever their role.
-- **API keys.** A key acts as a named service user, so the same row-level security applies, and it is limited to its listed permissions.
+- **API keys.** A key (`bzx_live_…`, shown once, stored as a hash) acts as a named service user, so the same row-level security applies, and it is limited to its listed `module:read|write|use` permissions. It can never approve, file or pay, and cannot create keys. See `docs/SECURITY.md`.
 
 ---
 
@@ -129,7 +129,7 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `parties`, `sale
 
 ### CA firm
 
-`GET /organizations/{id}/entities?filter=waiting_on_client` returns the client × authority matrix. `GET /organizations/{id}/workload` returns staff load. `POST /organizations/{id}/client-reminders` chases blocked clients.
+`GET /organizations/{id}/entities?filter=waiting_on_client` returns the client × authority matrix. `GET /organizations/{id}/workload` returns staff load. `POST /organizations/{id}/client-reminders` queues an email reminder to the owners of each blocked client (never to the firm's own staff), skips a client reminded in the last 24 hours, and returns who was reminded and who was skipped and why. A firm adds a client through the same onboarding flow, with `organization_id` set.
 
 ---
 
@@ -137,23 +137,25 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `parties`, `sale
 
 | Screen | Endpoints |
 |---|---|
-| Sign in / Create workspace | `POST /auth/otp`, `POST /auth/token`, `POST /onboarding/lookups` |
+| Sign in / Create workspace | `POST /auth/otp`, `POST /auth/signup`, `POST /auth/token`, `POST /onboarding/lookups` |
 | Onboarding | `GET /onboarding/lookups/{id}`, `POST /onboarding/preview`, `POST /onboarding/workspaces` |
 | Command Center | `GET /compliance/summary`, `GET /approvals?assigned_to=me`, `GET /compliance/calendar`, `GET /compliance/standing`, `GET /finance/summary`, `GET /audit-log?limit=5`, `/events` |
 | Compliance Engine | `GET /obligations`, `GET /obligations/{id}`, `GET /compliance/calendar`, `GET /compliance/thresholds`, `GET /notices`, `POST /compliance/engine-runs` |
 | Startup workspace | `GET /cap-table?scenario=…`, `GET /funding-rounds/{id}` (steps), `GET /benefits`, `GET /meetings`, `GET /esop-grants` |
 | MSME workspace | `GET /receivables/ageing`, `GET /benefits`, `GET /entities/{id}` (Udyam), `POST /delayed-payment-claims`, `POST /treds-invoices` |
 | Copilot (web + mobile) | `/copilot/threads`, `…/messages` (SSE), `…/actions/{id}/request-approval` |
-| Finance & Books | `GET /periods`, `GET /periods/{id}/close-tasks`, `PATCH …/close-tasks/{taskId}`, `GET /bank-transactions?match_status=suggested`, `POST /bank-accounts/{id}/transactions`, `POST /bank-matches/{id}/accept`, `GET /reports/profit-and-loss`, `GET /reports/cash-bridge`, `POST /periods/{id}/lock` |
-| Payroll & HR | `GET /payroll-runs/{id}`, `GET /payroll-runs/{id}/payslips`, `GET /payroll/wage-code-check`, `GET /obligations?authority=EPFO` |
-| GST & Tax | `GET /gst-returns?period=…`, `GET /itc-matches`, `GET /itc-matches/summary`, `POST /itc-matches/{id}/resolve`, `POST /itc-matches/remind-suppliers`, `GET /gst/ledger-balances`, `GET /tds-deductions`, `GET /advance-tax` |
-| Legal & Contracts | `GET /contracts?notice_within_days=30`, `GET /contracts/{id}`, `POST …/extract-terms`, `POST …/notices`, `GET /signature-requests`, `GET /contract-templates` |
-| Document Vault | `GET /documents?q=…&folder=…`, `POST /documents` (signed upload), `GET /documents?expiring_within_days=90`, `GET /document-requests`, `POST /document-requests/{id}/share` |
+| Finance & Books | `GET /finance/summary`, `GET /periods`, `GET /periods/{id}/close-tasks`, `PATCH …/close-tasks/{taskId}`, `GET /bank-transactions?match_status=suggested`, `POST /bank-accounts/{id}/transactions`, `POST /bank-matches/{id}/accept`, `POST /bank-matches/{id}/reject`, `GET /reports/profit-and-loss`, `GET /reports/cash-bridge`, `POST /periods/{id}/lock` |
+| Payroll & HR | `GET /payroll-runs`, `POST /payroll-runs`, `POST /payroll-runs/{id}/compute`, `POST /payroll-runs/{id}/submit`, `GET /payroll-runs/{id}`, `GET /employees`, `POST /employees`, `POST /employees/{id}/salary-structures`, `GET /payroll-runs/{id}/inputs`, `PUT /payroll-runs/{id}/inputs`, `POST /payroll-runs/{id}/bank-file`, `GET /payroll-runs/{id}/payslips`, `GET /payroll/wage-code-check`, `GET /payroll/labour-compliance`, `GET /obligations?authority=EPFO` |
+| TDS & Advance tax | `GET /tds-deductions`, `GET /challans`, `POST /challans`, `POST /challans/{id}/pay`, `GET /tds-returns`, `POST /tds-returns/{id}/validate`, `GET /advance-tax`, `GET /tds-receivables`, `POST /tds-receivables/sync` |
+| GST & Tax | `GET /gst-returns?period=…`, `GET /itc-matches`, `GET /itc-matches/summary`, `POST /itc-matches/{id}/resolve`, `POST /itc-matches/remind-suppliers`, `POST /gst-returns/{id}/compute`, `POST /gst-returns/{id}/file`, `POST /gst/inward-sync`, `GET /gst/ledger-balances`, `GET /tds-deductions`, `GET /advance-tax` |
+| Legal & Contracts | `GET /contracts?notice_within_days=30`, `GET /contracts/{id}`, `POST …/extract-terms`, `POST …/notices`, `GET /signature-requests`, `GET /contract-templates`, `GET /documents?q=…`, `GET /documents?expiring_within_days=90`, `GET /document-requests` |
+| Document Vault | `GET /documents?q=…&folder=…`, `POST /documents` (signed upload), `GET /documents?expiring_within_days=90`, `GET /document-requests`, `POST /document-requests/{id}/share`, `GET /data-rooms`, `POST /data-rooms`, `PATCH /data-rooms/{id}`, `DELETE /data-rooms/{id}` |
 | Group view | `GET /organizations/{id}/entities`, `GET /organizations/{id}/workload`, `POST /organizations/{id}/client-reminders` |
-| Settings | `/members`, `/advisor-grants`, `/dsc-certificates`, `/portal-connections` (+ `/portal-connections/{id}/renew`), `/me/notification-preferences`, `/webhooks` |
+| Settings | `/members`, `/advisor-grants`, `/dsc-certificates`, `/portal-connections` (+ `/portal-connections/{id}/renew`), `/me/notification-preferences`, `/webhooks` (+ `/webhooks/{id}/test`, `/webhooks/{id}/deliveries`), `/api-keys`, `/audit-log`, `/audit-log/verify` |
 | Sales & Billing | `GET /sales/summary`, `GET /sales-documents?payment_status=…`, `GET /dunning-sequences`, `GET /recurring-invoices` |
 | New GST invoice | `POST /sales-documents/preview` (every change), `POST /sales-documents`, `POST /sales-documents/{id}/issue` |
-| Quotes | `GET /quotes`, `POST /quotes/{id}/revise`, `POST /quotes/{id}/accept`, `POST /sales-orders/{id}/invoice` |
+| Collections | `GET /receivables/ageing`, `GET /receipts`, `POST /receipts`, `POST /receipts/{id}/allocate`, `GET /dunning-sequences`, `POST /parties/{id}/pause-dunning`, `GET /recurring-invoices`, `PATCH /recurring-invoices/{id}` |
+| Quotes | `GET /quotes`, `POST /quotes`, `POST /quotes/{id}/send`, `POST /quotes/{id}/mark-lost`, `POST /quotes/{id}/revise`, `POST /quotes/{id}/accept`, `POST /sales-orders/{id}/invoice` |
 | Credit note | `POST /sales-documents/preview {doc_type: credit_note}`, `POST /sales-documents/{id}/credit-notes`, `POST …/issue` |
 | Customer payment page | `GET /pay/{shortCode}`, `POST /pay/{shortCode}/intents`, `POST /pay/{shortCode}/queries` |
 
@@ -178,6 +180,9 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `parties`, `sale
 - payroll: employees (bank account encrypted at rest), effective-dated salary structures, payroll runs (inputs, compute, approval, bank file), payslips with PF, ESI, professional tax and TDS on salary, the payroll journal, PF/ESI/PT/TDS challans prepared from the approved run, the wage-code check, labour compliance (gratuity, statutory bonus, POSH committee, shops registration)
 - document vault (register, signed upload and download with size and SHA-256 checks, full-text search over the text layer, expiry, links to any record, advisor requests, data rooms), contracts with notice-window alerts and terms (pattern-based extraction until the copilot, verified terms never overwritten), template library, signature requests with ordered signers that activate a contract, board meetings with the 120-day gap, resolutions that create the MGT-14 obligation when a special resolution is passed, and the notice desk with draft replies
 - portal adapters: one interface per outside system with sandboxes selected by `BIZ_ADAPTERS`; connections whose credentials live in a secret store; jobs that pause in `waiting_for_otp` and resume with `POST /jobs/{id}/otp` (GST filing, EPFO, session renewal); permanent portal refusals fail at once while transient ones retry with backoff; e-way bills, e-invoice cancellation, filing of MCA/EPFO/ESIC/TDS-return obligations, Form 26AS matching, the Account Aggregator (signed callback, incremental sync), registry lookups with a 24-hour cache
+- billing reads: `GET /registrations`, `GET /parties` (with GSTINs and receivable balance), `GET /sales-documents` (filters: type, status, payment status, party, overdue, dates, text search with wildcards treated as text) and `GET /sales/summary` (invoiced and collected in a period, outstanding and overdue as of today)
+- onboarding: `POST /auth/signup` (creates the person, sends a code, same answer for an existing address) and `POST /onboarding/workspaces` (organization, entity, GSTINs, owner membership and first facts from the person's own registry lookup, then the first engine run, all in one transaction with an `Idempotency-Key`; a company that already has a workspace answers 409)
+- auth and hardening: one-time codes (hashed, five attempts, five an hour, no account enumeration), refresh tokens that rotate with reuse detection, TOTP for users with MFA, an identity-provider interface for single sign-on, API keys acting as service users, signed webhooks with retry for 72 h and a block on internal addresses, rate limits with `RateLimit` headers, a daily audit-chain check that raises an alert, and a startup guard that refuses to run in production with a default secret or any sandbox provider (`docs/SECURITY.md`)
 
 Its 14 end-to-end tests run against PostgreSQL 16 and cover the IGST and CGST+SGST split, the 194Q and e-way bill checks, mapping database constraints to error codes, advisor scope limits, idempotency replay and conflict, invisible-entity 404s, over-settlement, the two-person rule, and the audit chain staying intact.
 
@@ -190,7 +195,7 @@ DATABASE_URL=… uvicorn app.main:app --reload        # API on :8000, spec at /v
 DATABASE_URL=… python -m app.worker                 # job worker
 ```
 
-In production the API connects as a login role that is a member of `biz_app`, and the workers as one that is a member of `biz_worker`. Development sign-in accepts OTP `000000`; replace it with a real OTP provider and OIDC/SAML before launch.
+In production the API connects as a login role that is a member of `biz_app`, and the workers as one that is a member of `biz_worker`. Development sign-in accepts OTP `000000`, only when `BIZ_ENV` is `dev` or `test` and the OTP provider is the sandbox; the server refuses to start in production with the sandbox provider. Choose and register a real OTP provider (`auth.register_otp_sender`) and an identity provider (`auth.register_idp`) before launch.
 
 ## 7. What comes next
 
