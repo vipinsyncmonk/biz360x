@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { api, newIdempotencyKey, unwrap } from "@/lib/api";
 import { CloseTask, Period, Report, BankTxn, closeCounts, confidenceLabel, currentPeriod, isTotalRow, lakh, periodName, returnPeriod } from "@/lib/finance";
@@ -67,7 +68,7 @@ export default function Finance() {
           <section className="card" style={{ overflow: "hidden" }}>
             <div style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line-2)" }}>
               <h2 style={{ margin: 0 }}>Bank reconciliation</h2>
-              <span className="t13">{open.length} {open.length === 1 ? "line" : "lines"} left</span>
+              <span className="t13">{open.length} {open.length === 1 ? "line" : "lines"} left · <Link href="/finance/import">Import a statement</Link></span>
             </div>
             <div style={{ padding: "0 20px" }}><ErrorNote error={txns.error} /></div>
             {txns.loading ? <Loading what="bank lines" /> : (
@@ -91,7 +92,7 @@ export default function Finance() {
                     })}
                   </tbody>
                 </table>
-                {rows.length === 0 && <div className="empty">No bank lines yet. Connect an account or import a statement.</div>}
+                {rows.length === 0 && <div className="empty">No bank lines yet. <Link href="/finance/import">Import a statement</Link>.</div>}
               </div>
             )}
           </section>

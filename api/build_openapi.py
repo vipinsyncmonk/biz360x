@@ -744,6 +744,10 @@ collection(E + "/bank-accounts", "Finance & books", "BankAccount", "finance")
 item(E + "/bank-accounts", "Finance & books", "BankAccount", "finance")
 action(E + "/bank-accounts/{id}/statements", "Finance & books", "uploadStatement", "Import a statement file (CSV / MT940 / PDF)", "finance:write",
        body=schema("StatementImport", {"document_id": UUID}, required=("document_id",)), status="202")
+action(E + "/bank-accounts/{id}/transactions/preview", "Finance & books", "previewBankTransactions", "Check bank lines before importing them", "finance:read",
+       body=schema("BankFeedPreviewRequest", {"transactions": ARR(ref("BankFeedLine"), minItems=1, maxItems=1000)}, required=("transactions",)),
+       resp=schema("BankFeedPreview", {"total": I(), "new": I(), "duplicates": I(), "duplicate_ids": ARR(S(), description="The `external_id`s already on this account"), "earliest_existing": NULLABLE(DATE), "latest_existing": NULLABLE(DATE)}), status="200",
+       desc="Changes nothing. Tells which lines are already on the account (same `external_id`), so a statement that overlaps an earlier import can be checked first.")
 schema("BankFeedLine", {"external_id": S(description="Dedupe key from the feed"), "txn_date": DATE, "amount": {**MONEY, "description": "+ credit to us, - debit"}, "description": S(), "utr": NULLABLE(S()), "counterparty_name": NULLABLE(S()), "counterparty_va": NULLABLE(S(description="Virtual account the money was paid into")), "balance_after": NULLABLE(MONEY)}, required=("external_id", "txn_date", "amount", "description"))
 action(E + "/bank-accounts/{id}/transactions", "Finance & books", "importBankTransactions", "Import bank lines from a feed (Account Aggregator, bank API or parsed statement)", "finance:write",
        body=schema("BankFeedImport", {"transactions": ARR(ref("BankFeedLine"), minItems=1, maxItems=1000)}, required=("transactions",)),

@@ -328,10 +328,15 @@ def test_bank_feed_import_and_suggestions(client, h):
         {"external_id": "T2", "txn_date": "2026-10-21", "amount": "1180.00", "description": "RTGS BENGALURU MOTORS PAYMENT FOR M2/KA/002", "utr": "R1"},
         {"external_id": "T3", "txn_date": "2026-10-22", "amount": "-500.00", "description": "SERVICE CHARGES"},
     ]
+    pre = client.post(url(f"/bank-accounts/{BANK}/transactions/preview"), headers=h, json=feed(lines)).json()
+    assert (pre["total"], pre["new"], pre["duplicates"], pre["duplicate_ids"], pre["latest_existing"]) == (3, 3, 0, [], None)
+    assert client.post(url(f"/bank-accounts/{uuid.uuid4()}/transactions/preview"), headers=h, json=feed(lines)).status_code == 404
     r = client.post(url(f"/bank-accounts/{BANK}/transactions"), headers=h, json=feed(lines))
     assert r.status_code == 201 and r.json() == {"imported": 3, "duplicates": 0, "suggested": 2}
     again = client.post(url(f"/bank-accounts/{BANK}/transactions"), headers=h, json=feed(lines)).json()
     assert again == {"imported": 0, "duplicates": 3, "suggested": 0}
+    pre = client.post(url(f"/bank-accounts/{BANK}/transactions/preview"), headers=h, json=feed(lines + [{"external_id": "T9", "txn_date": "2026-10-23", "amount": "10.00", "description": "NEW"}])).json()
+    assert (pre["total"], pre["new"], pre["duplicates"], pre["duplicate_ids"]) == (4, 1, 3, ["T1", "T2", "T3"]) and pre["latest_existing"] == "2026-10-22"
     tx = {t["description"][:4]: t for t in client.get(url("/bank-transactions"), headers=h).json()["data"]}
     assert tx["NEFT"]["match_status"] == "suggested" and tx["RTGS"]["match_status"] == "suggested" and tx["SERV"]["match_status"] == "unmatched"
     s_va, s_num = tx["NEFT"]["suggestions"][0], tx["RTGS"]["suggestions"][0]
