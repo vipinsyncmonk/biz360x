@@ -12,26 +12,13 @@ import os
 import time
 from typing import Protocol
 
-from .core import audit, emit, tx
+from . import adapters, secretbox
+from .core import ApiError, audit, emit, tx
 
 WORKER_ID = os.environ.get("WORKER_ID", f"worker-{os.getpid()}")
 
 
-class IrpAdapter(Protocol):
-    def generate_irn(self, payload: dict) -> dict: ...
-
-
-class SandboxIrp:
-    """Stand-in for the e-invoice registration portal (via your GSP/ASP)."""
-
-    def generate_irn(self, payload: dict) -> dict:
-        key = f"{payload['seller_gstin']}|{payload['fy']}|{payload['doc_type']}|{payload['number']}"
-        return {"irn": hashlib.sha256(key.encode()).hexdigest(),
-                "ack_no": str(int(hashlib.md5(key.encode()).hexdigest()[:12], 16))[:15],
-                "signed_qr": "sandbox-signed-qr:" + hashlib.sha1(key.encode()).hexdigest()}
-
-
-IRP: IrpAdapter = SandboxIrp()
+IRP = adapters.proxy("irp")
 
 
 def handle_generate_irn(cur, job: dict) -> dict:
@@ -80,13 +67,25 @@ def handle_recurring(cur, job: dict) -> dict:
 def schedule_daily_jobs(cur) -> int:
     """Queue the daily dunning and recurring-invoice jobs once per entity per day."""
     n = 0
-    for kind in ("collections.dunning", "collections.recurring", "purchases.msme_alerts"):
+    for kind in ("collections.dunning", "collections.recurring", "purchases.msme_alerts", "portal.check_sessions"):
         cur.execute("""INSERT INTO jobs (entity_id, kind, subject, subject_id)
                        SELECT e.id, %s, 'entities', e.id FROM entities e
                         WHERE e.is_active AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.entity_id = e.id AND j.kind = %s
                                                            AND j.created_at > now() - interval '20 hours')""", (kind, kind))
         n += cur.rowcount
+    cur.execute("""INSERT INTO jobs (entity_id, kind, subject, subject_id)
+                   SELECT DISTINCT c.entity_id, 'aa.sync', 'entities', c.entity_id FROM aa_consents c
+                    WHERE c.status = 'active' AND c.valid_until > now()
+                      AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.entity_id = c.entity_id AND j.kind = 'aa.sync' AND j.created_at > now() - interval '20 hours')""")
+    n += cur.rowcount
     return n
+
+
+def _m6_handlers() -> dict:
+    from . import routes_portals as po
+    return {"portal.renew_session": po.handle_renew_session, "portal.check_sessions": po.handle_check_sessions, "eway.generate": po.handle_eway_generate,
+            "eway.update_vehicle": po.handle_eway_vehicle, "einvoice.cancel_irn": po.handle_cancel_document, "obligation.file": po.handle_file_obligation,
+            "tds.fetch_26as": po.handle_fetch_26as, "aa.sync": po.handle_aa_sync, "registry.lookup": po.handle_registry_lookup}
 
 
 def _m3_handlers() -> dict:
@@ -97,29 +96,76 @@ def _m3_handlers() -> dict:
 
 
 HANDLERS = {"einvoice.generate_irn": handle_generate_irn, "compliance.run_engine": handle_run_engine,
-            "collections.dunning": handle_dunning, "collections.recurring": handle_recurring, **_m3_handlers()}
+            "collections.dunning": handle_dunning, "collections.recurring": handle_recurring, **_m3_handlers(), **_m6_handlers()}
+
+
+FAILURE_HOOKS: dict = {}          # job kind -> fn(cur, job, exc): put the world back when a job ends without succeeding
+
+
+def job_otp(job: dict) -> str | None:
+    """The OTP a person submitted for a paused job (stored encrypted, wiped when the job ends)."""
+    enc = (job["payload"] or {}).get("otp_enc")
+    return secretbox.decrypt(enc.encode()) if enc else None
+
+
+def _hook(cur, job: dict, exc: Exception) -> None:
+    fn = FAILURE_HOOKS.get(job["kind"])
+    if fn:
+        try:
+            with cur.connection.transaction():
+                fn(cur, job, exc)
+        except Exception:                                  # cleanup must never mask the original failure
+            pass
+
+
+def _fail(cur, job: dict, code: str, title: str, detail: str, status: int, exc: Exception, **extra) -> None:
+    cur.execute("""UPDATE jobs SET status = 'failed', error = %s, locked_by = NULL, finished_at = now(), payload = payload - 'otp_enc' - 'otp_session' WHERE id = %s""",
+                (json.dumps({"code": code, "title": title, "status": status, "detail": detail, **extra}), job["id"]))
+    _hook(cur, job, exc)
+    if job["entity_id"]:
+        emit(cur, job["entity_id"], "job.failed", "jobs", job["id"], {"kind": job["kind"], "code": code})
+
+
+def _irn_failed(cur, job: dict, exc: Exception) -> None:
+    cur.execute("UPDATE sales_documents SET irn_status = 'failed' WHERE id = %s AND irn_status = 'pending'", (job["subject_id"],))
+
+
+def _install_hooks() -> None:
+    from . import routes_gst as g, routes_portals as po
+    FAILURE_HOOKS.update({"gst.file_return": g.hook_file_return, "einvoice.generate_irn": _irn_failed, "portal.renew_session": po.hook_renew_session,
+                          "registry.lookup": po.hook_registry_lookup})
 
 
 def run_once() -> bool:
     """Process at most one job. Returns False when the queue is empty."""
+    if not FAILURE_HOOKS:
+        _install_hooks()
     with tx(None, role="biz_worker") as cur:
-        cur.execute("SELECT * FROM app.claim_job(%s, %s)", (WORKER_ID, list(HANDLERS)))   # not (f()).* — that calls f once per column
+        cur.execute("SELECT * FROM app.claim_job(%s, %s)", (WORKER_ID, list(HANDLERS)))   # not (f()).* - that calls f once per column
         job = cur.fetchone()
         if not job or job["id"] is None:
             return False
         try:
             with cur.connection.transaction():            # savepoint: a failing adapter doesn't lose the claim
                 result = HANDLERS[job["kind"]](cur, job)
-            cur.execute("UPDATE jobs SET status = 'succeeded', result = %s, progress = 1, finished_at = now(), locked_by = NULL WHERE id = %s",
-                        (json.dumps(result), job["id"]))
-            emit(cur, job["entity_id"], "job.succeeded", "jobs", job["id"], {"kind": job["kind"]})
-        except Exception as e:                             # retry with backoff, give up after 5 attempts
-            failed = job["attempts"] >= 5
-            cur.execute("""UPDATE jobs SET status = %s, error = %s, run_after = now() + (interval '30 seconds' * power(2, attempts)),
-                                  locked_by = NULL, finished_at = CASE WHEN %s THEN now() END WHERE id = %s""",
-                        ("failed" if failed else "queued",
-                         json.dumps({"code": "portal_rejected", "title": "Portal call failed", "status": 502, "detail": str(e)}),
-                         failed, job["id"]))
+            cur.execute("""UPDATE jobs SET status = 'succeeded', result = %s, progress = 1, finished_at = now(), locked_by = NULL,
+                                  payload = payload - 'otp_enc' - 'otp_session' WHERE id = %s""", (json.dumps(result), job["id"]))
+            if job["entity_id"]:
+                emit(cur, job["entity_id"], "job.succeeded", "jobs", job["id"], {"kind": job["kind"]})
+        except adapters.OtpRequired as o:                  # not a failure: wait for a person, then resume with the OTP
+            cur.execute("""UPDATE jobs SET status = 'waiting_for_otp', progress = 0.5, locked_by = NULL, attempts = greatest(attempts - 1, 0),
+                                  payload = (payload - 'otp_enc') || jsonb_build_object('otp_session', %s::text, 'otp_channel', %s::text, 'otp_message', %s::text)
+                            WHERE id = %s""", (o.session_ref, o.channel, o.message, job["id"]))
+        except adapters.PortalRejected as e:               # the portal said no: retrying the same request cannot help
+            _fail(cur, job, "portal_rejected", "The portal rejected the request", str(e), 422, e, portal_code=e.code)
+        except ApiError as e:                              # a business rule refused it (wrong state, missing data)
+            _fail(cur, job, e.code, e.title, e.detail or e.title, e.status, e)
+        except Exception as e:                             # transient: retry with backoff, give up after 5 attempts
+            if job["attempts"] >= 5:
+                _fail(cur, job, getattr(e, "code", "portal_error"), "Portal call failed", str(e), 502, e)
+            else:
+                cur.execute("""UPDATE jobs SET status = 'queued', error = %s, run_after = now() + (interval '30 seconds' * power(2, attempts)), locked_by = NULL WHERE id = %s""",
+                            (json.dumps({"code": getattr(e, "code", "portal_error"), "title": "Portal call failed", "status": 502, "detail": str(e)}), job["id"]))
     return True
 
 

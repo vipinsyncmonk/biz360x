@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ledger, tax, taxcalc
+from . import adapters, ledger, tax, taxcalc
 from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, jsonable, money, require, tx
 from .routes_orders import js, next_number, offset_of, page
 from .routes_sales import LineIn
@@ -364,18 +364,7 @@ def release_payment(entity_id: uuid.UUID, payment_id: uuid.UUID, p: Principal = 
     return JSONResponse(job, status_code=202, headers={"Location": f"/v1/jobs/{job['id']}"})
 
 
-class BankAdapter(Protocol):
-    def send_payment(self, payload: dict) -> dict: ...
-
-
-class SandboxBank:
-    """Stand-in for the bank's payout API. The real adapter arrives with M6."""
-
-    def send_payment(self, payload: dict) -> dict:
-        return {"utr": "SBX" + uuid.uuid5(uuid.NAMESPACE_URL, payload["payment_no"]).hex[:12].upper(), "status": "accepted"}
-
-
-BANK: BankAdapter = SandboxBank()
+BANK = adapters.proxy("bank")
 
 
 def handle_release_payment(cur, job: dict) -> dict:

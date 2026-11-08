@@ -433,6 +433,24 @@ def suggest_matches(cur, entity_id) -> int:
     return made
 
 
+def import_lines(cur, entity_id, bank_account_id, lines) -> tuple[int, int]:
+    """Insert bank lines (duplicates by external_id are ignored) and propose receipts for the new credits. Returns (imported, suggested)."""
+    imported = 0
+    for t in lines:
+        t = t if isinstance(t, dict) else t.model_dump()
+        if Decimal(str(t["amount"])) == 0:
+            raise ApiError(400, "validation_failed", "amount cannot be zero")
+        cur.execute("""INSERT INTO bank_transactions (bank_account_id, entity_id, txn_date, amount, description, utr, counterparty_name,
+                              counterparty_va, balance_after, external_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (bank_account_id, external_id) DO NOTHING""",
+                    (bank_account_id, entity_id, t["txn_date"], t["amount"], t["description"], t.get("utr"), t.get("counterparty_name"), t.get("counterparty_va"),
+                     t.get("balance_after"), t["external_id"]))
+        imported += cur.rowcount
+    suggested = suggest_matches(cur, entity_id)
+    audit(cur, entity_id, "bank_feed.imported", "bank_accounts", bank_account_id, after={"imported": imported, "suggested": suggested})
+    return imported, suggested
+
+
 @router.post(E + "/bank-accounts/{bank_account_id}/transactions", status_code=201, tags=["Finance & books"])
 def import_bank_transactions(entity_id: uuid.UUID, bank_account_id: uuid.UUID, body: BankFeedIn, p: Principal = Auth):
     with tx(p.user_id) as cur:
@@ -440,18 +458,7 @@ def import_bank_transactions(entity_id: uuid.UUID, bank_account_id: uuid.UUID, b
         cur.execute("SELECT 1 FROM bank_accounts WHERE id = %s AND entity_id = %s", (bank_account_id, entity_id))
         if not cur.fetchone():
             raise ApiError(404, "not_found", "Not found")
-        imported = 0
-        for t in body.transactions:
-            if t.amount == 0:
-                raise ApiError(400, "validation_failed", "amount cannot be zero")
-            cur.execute("""INSERT INTO bank_transactions (bank_account_id, entity_id, txn_date, amount, description, utr, counterparty_name,
-                                  counterparty_va, balance_after, external_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                           ON CONFLICT (bank_account_id, external_id) DO NOTHING""",
-                        (bank_account_id, entity_id, t.txn_date, t.amount, t.description, t.utr, t.counterparty_name, t.counterparty_va,
-                         t.balance_after, t.external_id))
-            imported += cur.rowcount
-        suggested = suggest_matches(cur, entity_id)
-        audit(cur, entity_id, "bank_feed.imported", "bank_accounts", bank_account_id, after={"imported": imported, "suggested": suggested})
+        imported, suggested = import_lines(cur, entity_id, bank_account_id, body.transactions)
         return {"imported": imported, "duplicates": len(body.transactions) - imported, "suggested": suggested}
 
 

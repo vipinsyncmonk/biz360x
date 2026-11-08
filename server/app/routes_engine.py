@@ -86,4 +86,16 @@ def preview_obligations(body: OnboardingAnswers, p: Principal = Auth):
     if body.turnover_band and body.turnover_band not in engine.BAND_TURNOVER:
         raise ApiError(400, "validation_failed", "Unknown turnover_band")
     with tx(p.user_id) as cur:                # read-only: the preview never writes
-        return engine.preview(cur, body.model_dump())
+        answers = body.model_dump()
+        kw = {}
+        cur.execute("SELECT status, result FROM registry_lookups WHERE id = %s", (body.lookup_id,))
+        lk = cur.fetchone()
+        if lk and lk["status"] == "found":                      # what the registry says about the company beats assumptions
+            ent = (lk["result"] or {}).get("entity", {})
+            if ent.get("constitution"):
+                kw["constitution"] = ent["constitution"]
+            if ent.get("incorporated_on"):
+                kw["incorporated_on"] = dt.date.fromisoformat(ent["incorporated_on"])
+            if not answers["gstins"]:
+                answers["gstins"] = [g["gstin"] for g in (lk["result"] or {}).get("gstins", [])]
+        return engine.preview(cur, answers, **kw)

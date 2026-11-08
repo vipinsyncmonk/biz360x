@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ledger, payroll as pr, secretbox
+from . import adapters, ledger, payroll as pr, secretbox
 from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, jsonable, money, require, tx
 from .routes_orders import js, offset_of, page
 
@@ -445,18 +445,7 @@ def bank_file(entity_id: uuid.UUID, run_id: uuid.UUID, body: BankFileIn, p: Prin
     return JSONResponse(job, status_code=202, headers={"Location": f"/v1/jobs/{job['id']}"})
 
 
-class PayrollBank(Protocol):
-    def send_salaries(self, payload: dict) -> dict: ...
-
-
-class SandboxPayrollBank:
-    """Stand-in for the bank's salary-upload API; the real adapter arrives with M6."""
-
-    def send_salaries(self, payload: dict) -> dict:
-        return {"batch_ref": "SAL" + uuid.uuid5(uuid.NAMESPACE_URL, payload["run_id"]).hex[:10].upper(), "status": "accepted"}
-
-
-BANK: PayrollBank = SandboxPayrollBank()
+BANK = adapters.proxy("bank")
 
 
 def handle_bank_file(cur, job: dict) -> dict:

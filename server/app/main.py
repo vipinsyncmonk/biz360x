@@ -23,6 +23,7 @@ from .routes_legal import router as legal
 from .routes_orders import router as orders
 from .routes_payroll import router as payroll
 from .routes_platform import router as platform
+from .routes_portals import router as portals
 from .routes_purchases import router as purchases
 from .routes_vault import router as vault
 from .routes_sales import router as sales
@@ -51,5 +52,5 @@ def health():
     return JSONResponse({"ok": True})
 
 
-for r in (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal):
+for r in (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal, portals):
     app.include_router(r, prefix="/v1")

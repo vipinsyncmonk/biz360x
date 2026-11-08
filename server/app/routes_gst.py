@@ -16,7 +16,7 @@ from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ledger, taxcalc
+from . import adapters, ledger, taxcalc
 from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, jsonable, money, require, tx
 from .routes_orders import js, offset_of, page
 
@@ -27,37 +27,8 @@ RETURN_FOR_RULE = {"GST.GSTR1.MONTHLY": "GSTR1", "GST.GSTR3B.MONTHLY": "GSTR3B"}
 
 
 # ================================================================== adapters (sandbox)
-class GspAdapter(Protocol):
-    def fetch_inward(self, gstin: str, period: str, source: str) -> list[dict]: ...
-    def file_return(self, gstin: str, return_type: str, period: str, payload: dict) -> dict: ...
-
-
-class SandboxGsp:
-    inward: dict[tuple[str, str, str], list[dict]] = {}             # tests (and demos) preload what "the portal" reports
-
-    def fetch_inward(self, gstin, period, source):
-        return list(self.inward.get((gstin, period, source), []))
-
-    def file_return(self, gstin, return_type, period, payload):
-        return {"arn": "AA" + uuid.uuid5(uuid.NAMESPACE_URL, f"{gstin}|{return_type}|{period}").hex[:13].upper()}
-
-
-class TaxPortalAdapter(Protocol):
-    def pay_challan(self, payload: dict) -> dict: ...
-    def fvu_validate(self, payload: dict) -> dict: ...
-
-
-class SandboxTaxPortal:
-    def pay_challan(self, payload):
-        h = uuid.uuid5(uuid.NAMESPACE_URL, payload["challan_id"]).hex
-        return {"challan_ref": "CIN" + h[:14].upper(), "bsr_code": "0510308"}
-
-    def fvu_validate(self, payload):
-        return {"token": "TKN" + uuid.uuid5(uuid.NAMESPACE_URL, payload["return_id"]).hex[:12].upper()}
-
-
-GSP: GspAdapter = SandboxGsp()
-TAXPORTAL: TaxPortalAdapter = SandboxTaxPortal()
+GSP = adapters.proxy("gsp")
+TAXPORTAL = adapters.proxy("traces")
 
 
 # ================================================================== helpers
@@ -272,6 +243,11 @@ def file_return_endpoint(entity_id: uuid.UUID, return_id: uuid.UUID, body: FileI
     return _accepted(job)
 
 
+def hook_file_return(cur, job: dict, exc: Exception) -> None:
+    """Filing did not complete (rejected, cancelled, OTP wrong): the return goes back to ready so it can be filed again."""
+    cur.execute("UPDATE gst_returns SET status = 'ready' WHERE id = %s AND status = 'submitted'", (job["subject_id"],))
+
+
 def handle_compute_return(cur, job: dict) -> dict:
     c = compute_return(cur, job["entity_id"], job["subject_id"])
     return {"output_tax": money(c["output_tax"])}
@@ -283,7 +259,8 @@ def handle_file_return(cur, job: dict) -> dict:
     r = cur.fetchone()
     if r["status"] != "submitted":
         raise RuntimeError(f"return is {r['status']}, expected submitted")
-    res = GSP.file_return(r["gstin"], r["return_type"], r["period"], r["summary"])
+    from .worker import job_otp
+    res = GSP.file_return(r["gstin"], r["return_type"], r["period"], r["summary"], signing=(job["payload"] or {}).get("signing", "evc_otp"), otp=job_otp(job))
     cur.execute("UPDATE gst_returns SET status = 'filed', arn = %s, filed_at = now() WHERE id = %s", (res["arn"], r["id"]))
     if r["return_type"] == "GSTR3B":
         s = r["summary"]
