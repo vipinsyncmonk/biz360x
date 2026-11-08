@@ -125,19 +125,18 @@ test.describe.serial("startup track", () => {
     await expect(text).toContainText("We hired two engineers this month.");
     expect(problems()).toEqual([]);
   });
-});
 
-test("the screen fits a phone and a desktop", async ({ browser, baseURL }) => {
-  for (const [name, size] of [["desktop", { width: 1440, height: 1000 }], ["phone", { width: 375, height: 812 }]] as const) {
-    const ctx = await browser.newContext({ baseURL, viewport: size });
-    const p = await ctx.newPage();
-    await signIn(p, OWNER);
-    await p.goto("/startup");
-    await p.waitForLoadState("networkidle");
-    await expect(p.getByRole("table").first()).toBeVisible();
-    const overflow = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    expect(overflow, `${name} has no sideways scroll`).toBeLessThanOrEqual(0);
-    await p.screenshot({ path: `test-results/startup-${name}.png`, fullPage: true });
-    await ctx.close();
-  }
+  // Reuses this tab's sign-in: a person can ask for only 5 sign-in codes an hour, and the suite already signs in as the demo owner several times.
+  test("the screen fits a phone and a desktop", async () => {
+    for (const [name, size] of [["desktop", { width: 1440, height: 1000 }], ["phone", { width: 375, height: 812 }]] as const) {
+      await page.setViewportSize(size);
+      await page.goto("/startup");
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByRole("table").first()).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, `${name} has no sideways scroll`).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: `test-results/startup-${name}.png`, fullPage: true });
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
+  });
 });
