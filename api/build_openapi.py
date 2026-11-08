@@ -952,6 +952,50 @@ schema("DataRoom", {"id": RO_UUID, "name": S(), "purpose": S(), "expires_at": NU
 collection(E + "/data-rooms", "Documents", "DataRoom", "documents")
 item(E + "/data-rooms", "Documents", "DataRoom", "documents", delete=True)
 
+# =================================================================== EXPORT & IMPORT
+tag("Export & import", "Shipping bills and the realisation of export proceeds, bills of entry and the duty paid on them, the LUT, RoDTEP and drawback claims. A person records what customs and the bank issued; nothing calls ICEGATE, DGFT or a bank, and nothing posts to the ledger yet.")
+CODE20 = S(pattern="^[0-9A-Z/-]{1,20}$")
+PORT_CODE = S(pattern="^[A-Z]{2}[A-Z0-9]{4}$", examples=["INMAA1"])
+CCY = S(pattern="^[A-Z]{3}$", examples=["USD"])
+schema("Realisation", {"id": RO_UUID, "received_on": DATE, "amount_foreign": MONEY, "bank_ref": NULLABLE(S()), "firc_no": NULLABLE(S())}, required=("received_on", "amount_foreign"))
+schema("ShippingBill", {
+    "id": RO_UUID, "sb_number": CODE20, "sb_date": DATE, "port_code": PORT_CODE, "currency": CCY, "fob_foreign": MONEY, "exchange_rate": S(description="Customs notified rate, up to four decimals"),
+    "fob_inr": {**MONEY, "readOnly": True}, "status": ENUM("filed", "let_export", "shipped", "closed"), "exported_on": NULLABLE(DATE),
+    "sales_document_id": NULLABLE(UUID), "invoice_number": NULLABLE(S(readOnly=True)), "buyer_party_id": NULLABLE(UUID), "buyer_name": NULLABLE(S(readOnly=True)),
+    "rodtep_claimed": MONEY, "rodtep_credited": MONEY, "drawback_claimed": MONEY, "drawback_received": MONEY, "brc_ref": NULLABLE(S()),
+    "realised_foreign": {**MONEY, "readOnly": True}, "realisations": ARR(ref("Realisation"), readOnly=True),
+    "realisation_state": ENUM("awaiting_export", "pending", "overdue", "realised", readOnly=True), "realisation_due_on": NULLABLE(DATE_RO), "days_left": NULLABLE(I(readOnly=True)),
+    "outstanding_foreign": {**MONEY, "readOnly": True}, "outstanding_inr": {**MONEY, "readOnly": True}},
+       required=("sb_number", "sb_date", "port_code", "currency", "fob_foreign", "exchange_rate"),
+       desc="Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases).")
+collection(E + "/shipping-bills", "Export & import", "ShippingBill", "trade", filters=[q("state", ENUM("awaiting_export", "pending", "overdue", "realised"))])
+_op("get", E + "/shipping-bills/{id}", "Export & import", "getShippingBill", "Get a shipping bill with its realisations", "trade:read", resp=ref("ShippingBill"))
+_op("patch", E + "/shipping-bills/{id}", "Export & import", "updateShippingBill", "Record progress, the date of export, claims and the e-BRC", "trade:write",
+    body=schema("ShippingBillUpdate", {"status": ENUM("filed", "let_export", "shipped", "closed"), "exported_on": DATE, "rodtep_claimed": MONEY, "rodtep_credited": MONEY,
+                                       "drawback_claimed": MONEY, "drawback_received": MONEY, "brc_ref": S()},
+                desc="The date of export starts the realisation clock and cannot be changed once recorded."), resp=ref("ShippingBill"))
+action(E + "/shipping-bills/{id}/realisations", "Export & import", "recordRealisation", "Record export proceeds received against a shipping bill", "trade:write",
+       body=ref("Realisation"), resp=ref("ShippingBill"), status="201", desc="Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409).")
+schema("BillOfEntry", {
+    "id": RO_UUID, "boe_number": CODE20, "boe_date": DATE, "port_code": PORT_CODE, "currency": CCY, "cif_foreign": MONEY, "exchange_rate": S(), "cif_inr": {**MONEY, "readOnly": True},
+    "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "duty_total": {**MONEY, "readOnly": True},
+    "status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": NULLABLE(DATE), "supplier_party_id": NULLABLE(UUID), "supplier_name": NULLABLE(S(readOnly=True)),
+    "purchase_bill_id": NULLABLE(UUID), "igst_credit": {**MONEY, "readOnly": True, "description": "IGST paid on the import, available as input tax credit once the duty is paid"}},
+       required=("boe_number", "boe_date", "port_code", "currency", "cif_foreign", "exchange_rate"))
+collection(E + "/bills-of-entry", "Export & import", "BillOfEntry", "trade", summary_plural="BillsOfEntry")
+_op("patch", E + "/bills-of-entry/{id}", "Export & import", "updateBillOfEntry", "Record assessment, duty paid and the purchase bill it belongs to", "trade:write",
+    body=schema("BillOfEntryUpdate", {"status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": DATE, "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "purchase_bill_id": UUID}),
+    resp=ref("BillOfEntry"))
+schema("TradeSummary", {
+    "as_of": DATE, "financial_year_from": DATE, "iec": NULLABLE(S()),
+    "lut": schema("LutState", {"state": ENUM("valid", "expiring", "expired", "none"), "valid_until": NULLABLE(DATE), "days_left": NULLABLE(I())}),
+    "exports": schema("ExportTotals", {"bills": I(), "value_inr": MONEY}),
+    "realisation": schema("RealisationTotals", {"outstanding_bills": I(), "outstanding_inr": MONEY, "overdue_bills": I(), "overdue_inr": MONEY, "awaiting_export": I()}),
+    "claims": schema("ClaimTotals", {"rodtep_pending": MONEY, "drawback_pending": MONEY}),
+    "imports": schema("ImportTotals", {"bills": I(), "duty_inr": MONEY, "igst_credit_inr": MONEY})})
+_op("get", E + "/trade/summary", "Export & import", "getTradeSummary", "Where exports and imports stand this financial year", "trade:read", resp=ref("TradeSummary"),
+    desc="Exports and imports are counted from 1 April. The LUT is read from the company's LUT registration.")
+
 # =================================================================== PORTALS & JOBS
 tag("Portals & jobs", "Government / bank connections, OTP sessions, sync jobs and the job resource")
 schema("PortalConnection", {"id": RO_UUID, "portal": ENUM("gstn", "irp", "eway", "mca", "income_tax", "traces", "epfo", "esic", "professional_tax", "udyam", "account_aggregator", "bank_api", "treds", "digilocker"),
@@ -1081,7 +1125,7 @@ SPEC["tags"] = [{"name": k, "description": v} for k, v in TAGS.items()]
 SPEC["x-tagGroups"] = [
     {"name": "Platform", "tags": ["Auth", "Me", "Onboarding", "Entities", "Organizations", "Portals & jobs", "Events & webhooks", "API keys", "Audit"]},
     {"name": "Govern", "tags": ["Compliance", "Approvals", "Legal & board", "Documents"]},
-    {"name": "Run", "tags": ["Parties & items", "Sales & billing", "Public pay", "Purchases", "GST & tax", "Finance & books", "Payroll & HR"]},
+    {"name": "Run", "tags": ["Parties & items", "Sales & billing", "Public pay", "Purchases", "GST & tax", "Finance & books", "Payroll & HR", "Export & import"]},
     {"name": "Grow", "tags": ["Capital", "Schemes & credit", "Copilot"]},
 ]
 

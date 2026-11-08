@@ -66,6 +66,10 @@ tags:
   description: Government schemes and benefits, TReDS, delayed-payment claims
 - name: Documents
   description: Vault uploads, search, links, advisor requests and data rooms
+- name: Export & import
+  description: Shipping bills and the realisation of export proceeds, bills of entry and the duty paid on them, the LUT, RoDTEP
+    and drawback claims. A person records what customs and the bank issued; nothing calls ICEGATE, DGFT or a bank, and nothing
+    posts to the ledger yet.
 - name: Portals & jobs
   description: Government / bank connections, OTP sessions, sync jobs and the job resource
 - name: Copilot
@@ -9217,6 +9221,319 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: documents:write
+  /entities/{entityId}/shipping-bills:
+    get:
+      tags:
+      - Export & import
+      operationId: listShippingBills
+      summary: List shipping bills
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      - name: state
+        in: query
+        schema:
+          type: string
+          enum:
+          - awaiting_export
+          - pending
+          - overdue
+          - realised
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingBillPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: trade:read
+    post:
+      tags:
+      - Export & import
+      operationId: createShippingBill
+      summary: Create shipping bill
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingBill'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingBill'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: trade:write
+  /entities/{entityId}/shipping-bills/{id}:
+    get:
+      tags:
+      - Export & import
+      operationId: getShippingBill
+      summary: Get a shipping bill with its realisations
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingBill'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: trade:read
+    patch:
+      tags:
+      - Export & import
+      operationId: updateShippingBill
+      summary: Record progress, the date of export, claims and the e-BRC
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingBillUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingBill'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: trade:write
+  /entities/{entityId}/shipping-bills/{id}/realisations:
+    post:
+      tags:
+      - Export & import
+      operationId: recordRealisation
+      summary: Record export proceeds received against a shipping bill
+      description: Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409).
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Realisation'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingBill'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: trade:write
+  /entities/{entityId}/bills-of-entry:
+    get:
+      tags:
+      - Export & import
+      operationId: listBillsOfEntry
+      summary: List bills of entry
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillOfEntryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: trade:read
+    post:
+      tags:
+      - Export & import
+      operationId: createBillOfEntry
+      summary: Create bill of entry
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BillOfEntry'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillOfEntry'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: trade:write
+  /entities/{entityId}/bills-of-entry/{id}:
+    patch:
+      tags:
+      - Export & import
+      operationId: updateBillOfEntry
+      summary: Record assessment, duty paid and the purchase bill it belongs to
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BillOfEntryUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillOfEntry'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: trade:write
+  /entities/{entityId}/trade/summary:
+    get:
+      tags:
+      - Export & import
+      operationId: getTradeSummary
+      summary: Where exports and imports stand this financial year
+      description: Exports and imports are counted from 1 April. The LUT is read from the company's LUT registration.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradeSummary'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: trade:read
   /entities/{entityId}/portal-connections:
     get:
       tags:
@@ -16796,6 +17113,379 @@ components:
       required:
       - data
       - next_cursor
+    Realisation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        received_on:
+          type: string
+          format: date
+        amount_foreign:
+          $ref: '#/components/schemas/Money'
+        bank_ref:
+          oneOf:
+          - type: string
+          - type: 'null'
+        firc_no:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - received_on
+      - amount_foreign
+    ShippingBill:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        sb_number:
+          type: string
+          pattern: ^[0-9A-Z/-]{1,20}$
+        sb_date:
+          type: string
+          format: date
+        port_code:
+          type: string
+          pattern: ^[A-Z]{2}[A-Z0-9]{4}$
+          examples:
+          - INMAA1
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          examples:
+          - USD
+        fob_foreign:
+          $ref: '#/components/schemas/Money'
+        exchange_rate:
+          type: string
+          description: Customs notified rate, up to four decimals
+        fob_inr:
+          $ref: '#/components/schemas/Money'
+          readOnly: true
+        status:
+          type: string
+          enum:
+          - filed
+          - let_export
+          - shipped
+          - closed
+        exported_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        sales_document_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        invoice_number:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
+        buyer_party_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        buyer_name:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
+        rodtep_claimed:
+          $ref: '#/components/schemas/Money'
+        rodtep_credited:
+          $ref: '#/components/schemas/Money'
+        drawback_claimed:
+          $ref: '#/components/schemas/Money'
+        drawback_received:
+          $ref: '#/components/schemas/Money'
+        brc_ref:
+          oneOf:
+          - type: string
+          - type: 'null'
+        realised_foreign:
+          $ref: '#/components/schemas/Money'
+          readOnly: true
+        realisations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Realisation'
+          readOnly: true
+        realisation_state:
+          type: string
+          enum:
+          - awaiting_export
+          - pending
+          - overdue
+          - realised
+          readOnly: true
+        realisation_due_on:
+          oneOf:
+          - type: string
+            format: date
+            readOnly: true
+          - type: 'null'
+        days_left:
+          oneOf:
+          - type: integer
+            readOnly: true
+          - type: 'null'
+        outstanding_foreign:
+          $ref: '#/components/schemas/Money'
+          readOnly: true
+        outstanding_inr:
+          $ref: '#/components/schemas/Money'
+          readOnly: true
+      required:
+      - sb_number
+      - sb_date
+      - port_code
+      - currency
+      - fob_foreign
+      - exchange_rate
+      description: 'Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar
+        months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases).'
+    ShippingBillPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShippingBill'
+        next_cursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - data
+      - next_cursor
+    ShippingBillUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - filed
+          - let_export
+          - shipped
+          - closed
+        exported_on:
+          type: string
+          format: date
+        rodtep_claimed:
+          $ref: '#/components/schemas/Money'
+        rodtep_credited:
+          $ref: '#/components/schemas/Money'
+        drawback_claimed:
+          $ref: '#/components/schemas/Money'
+        drawback_received:
+          $ref: '#/components/schemas/Money'
+        brc_ref:
+          type: string
+      description: The date of export starts the realisation clock and cannot be changed once recorded.
+    BillOfEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        boe_number:
+          type: string
+          pattern: ^[0-9A-Z/-]{1,20}$
+        boe_date:
+          type: string
+          format: date
+        port_code:
+          type: string
+          pattern: ^[A-Z]{2}[A-Z0-9]{4}$
+          examples:
+          - INMAA1
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          examples:
+          - USD
+        cif_foreign:
+          $ref: '#/components/schemas/Money'
+        exchange_rate:
+          type: string
+        cif_inr:
+          $ref: '#/components/schemas/Money'
+          readOnly: true
+        bcd:
+          $ref: '#/components/schemas/Money'
+        sws:
+          $ref: '#/components/schemas/Money'
+        igst:
+          $ref: '#/components/schemas/Money'
+        other_duty:
+          $ref: '#/components/schemas/Money'
+        duty_total:
+          $ref: '#/components/schemas/Money'
+          readOnly: true
+        status:
+          type: string
+          enum:
+          - filed
+          - assessed
+          - duty_paid
+          - cleared
+        duty_paid_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        supplier_party_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        supplier_name:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
+        purchase_bill_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        igst_credit:
+          $ref: '#/components/schemas/Money'
+          readOnly: true
+          description: IGST paid on the import, available as input tax credit once the duty is paid
+      required:
+      - boe_number
+      - boe_date
+      - port_code
+      - currency
+      - cif_foreign
+      - exchange_rate
+    BillOfEntryPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillOfEntry'
+        next_cursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - data
+      - next_cursor
+    BillOfEntryUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - filed
+          - assessed
+          - duty_paid
+          - cleared
+        duty_paid_on:
+          type: string
+          format: date
+        bcd:
+          $ref: '#/components/schemas/Money'
+        sws:
+          $ref: '#/components/schemas/Money'
+        igst:
+          $ref: '#/components/schemas/Money'
+        other_duty:
+          $ref: '#/components/schemas/Money'
+        purchase_bill_id:
+          type: string
+          format: uuid
+    LutState:
+      type: object
+      properties:
+        state:
+          type: string
+          enum:
+          - valid
+          - expiring
+          - expired
+          - none
+        valid_until:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        days_left:
+          oneOf:
+          - type: integer
+          - type: 'null'
+    ExportTotals:
+      type: object
+      properties:
+        bills:
+          type: integer
+        value_inr:
+          $ref: '#/components/schemas/Money'
+    RealisationTotals:
+      type: object
+      properties:
+        outstanding_bills:
+          type: integer
+        outstanding_inr:
+          $ref: '#/components/schemas/Money'
+        overdue_bills:
+          type: integer
+        overdue_inr:
+          $ref: '#/components/schemas/Money'
+        awaiting_export:
+          type: integer
+    ClaimTotals:
+      type: object
+      properties:
+        rodtep_pending:
+          $ref: '#/components/schemas/Money'
+        drawback_pending:
+          $ref: '#/components/schemas/Money'
+    ImportTotals:
+      type: object
+      properties:
+        bills:
+          type: integer
+        duty_inr:
+          $ref: '#/components/schemas/Money'
+        igst_credit_inr:
+          $ref: '#/components/schemas/Money'
+    TradeSummary:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date
+        financial_year_from:
+          type: string
+          format: date
+        iec:
+          oneOf:
+          - type: string
+          - type: 'null'
+        lut:
+          $ref: '#/components/schemas/LutState'
+        exports:
+          $ref: '#/components/schemas/ExportTotals'
+        realisation:
+          $ref: '#/components/schemas/RealisationTotals'
+        claims:
+          $ref: '#/components/schemas/ClaimTotals'
+        imports:
+          $ref: '#/components/schemas/ImportTotals'
     PortalConnection:
       type: object
       properties:
@@ -17468,6 +18158,7 @@ x-tagGroups:
   - GST & tax
   - Finance & books
   - Payroll & HR
+  - Export & import
 - name: Grow
   tags:
   - Capital
