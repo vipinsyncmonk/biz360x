@@ -203,7 +203,7 @@ test.describe.serial("startup and MSME tracks", () => {
         await expect(page.getByRole("table").first()).toBeVisible();
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         expect(overflow, `${path} on a ${name} has no sideways scroll`).toBeLessThanOrEqual(0);
-        await page.screenshot({ path: `test-results${path.replace("/", "-")}-${name}.png`, fullPage: true });
+        await page.screenshot({ path: `test-results/${path.slice(1)}-${name}.png`, fullPage: true });
       }
     }
     await page.setViewportSize({ width: 1280, height: 720 });
