@@ -115,3 +115,22 @@ describe("adding a bank account", () => {
     expect(bankBody({ ...ok, ifsc: "" }, "L1").ifsc).toBeUndefined();
   });
 });
+
+describe("an ICICI current account export", () => {
+  const ICICI = [
+    "Account Number:,123456784412",
+    "Transactions List - Current Account,",
+    "S No.,Value Date,Transaction Date,Cheque Number,Transaction Remarks,Withdrawal Amount (INR ),Deposit Amount (INR ),Balance (INR )",
+    '1,01/04/2024,01/04/2024,,NEFT-HDFCN52024040112345-ACME TRADERS-INV 42,,"1,18,000.00","5,18,000.00"',
+    '2,02/04/2024,02/04/2024,,MMT/IMPS/409512345678/RENT/LANDLORD,"45,000.00",,"4,73,000.00"',
+    '3,02/04/2024,02/04/2024,,UPI/412233445566/SWIGGY/swiggy@icici,"1,250.50",,"4,71,749.50"',
+  ].join("\n");
+  it("is recognised with its INR headers and preamble", () => {
+    const s = parseStatement(ICICI);
+    expect(s.fatal).toBeNull();
+    expect(s.lines.map((l) => l.amount)).toEqual(["118000.00", "-45000.00", "-1250.50"]);
+    expect(s.balanceBreaks).toBe(0);
+    expect(s.columns).toMatchObject({ date: "Transaction Date", debit: "Withdrawal Amount (INR )", credit: "Deposit Amount (INR )", balance: "Balance (INR )" });
+    expect(s.lines.map((l) => l.utr)).toEqual(["HDFCN52024040112345", "409512345678", "412233445566"]);
+  });
+});

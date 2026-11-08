@@ -56,9 +56,9 @@ const HEADERS: Record<string, RegExp> = {
   date: /^(txn date|transaction date|tran date|trans date|post date|posting date|date|booking date)$/,
   value_date: /^(value date|value dt|val date)$/,
   description: /^(narration|particulars|description|transaction remarks|remarks|transaction details|details|transaction description)$/,
-  ref: /^(chq ref no|chq no|cheque no|cheque number|ref no|reference no|reference number|ref no cheque no|chq ref number|utr no|utr|transaction id|tran id)$/,
-  debit: /^(withdrawal amt|withdrawal amount|withdrawals|withdrawal|debit|debit amount|dr|dr amount|debits|amount debited)$/,
-  credit: /^(deposit amt|deposit amount|deposits|deposit|credit|credit amount|cr|cr amount|credits|amount credited)$/,
+  ref: /^(cheque no ref no|cheque ref no|chq ref no|chq no|cheque no|cheque number|ref no|reference no|reference number|ref no cheque no|chq ref number|utr no|utr|transaction id|tran id)$/,
+  debit: /^(withdrawal amt|withdrawal amount|withdrawal amount inr|withdrawals|withdrawal|debit|debit amount|dr|dr amount|debits|amount debited)$/,
+  credit: /^(deposit amt|deposit amount|deposit amount inr|deposits|deposit|credit|credit amount|cr|cr amount|credits|amount credited)$/,
   amount: /^(amount|transaction amount|txn amount|amount inr)$/,
   drcr: /^(dr cr|cr dr|type|transaction type|debit credit|dr\/cr)$/,
   balance: /^(balance|closing balance|running balance|balance amt|available balance|balance inr)$/,
@@ -117,7 +117,7 @@ export function fingerprint(s: string): string {
   return h.toString(16).padStart(8, "0");
 }
 
-const UTR_RX = [/\bUTR[\s:.\-#]*([A-Z0-9]{10,22})\b/i, /\b(?:NEFT|RTGS|IMPS)[\s\-/:]*(?:CR|DR)?[\s\-/:]*([A-Z]{4}[A-Z0-9]{8,18})\b/i, /\b([A-Z]{4}[RN]\d{10,14})\b/, /\bUPI[\s/\-]*(?:CR|DR)?[\s/\-]*(\d{12})\b/i];
+const UTR_RX = [/\bIMPS[\s/\-]*(?:CR|DR)?[\s/\-]*(\d{12})\b/i, /\bUTR[\s:.\-#]*([A-Z0-9]{10,22})\b/i, /\b(?:NEFT|RTGS)[\s\-/:]*(?:CR|DR)?[\s\-/:]*([A-Z]{4}[A-Z0-9]{8,18})\b/i, /\b([A-Z]{4}[RN]\d{10,14})\b/, /\bUPI[\s/\-]*(?:CR|DR)?[\s/\-]*(\d{12})\b/i];
 export function extractUtr(text: string): string | null {
   for (const rx of UTR_RX) { const m = rx.exec(text); if (m) return m[1]!.toUpperCase(); }
   return null;
