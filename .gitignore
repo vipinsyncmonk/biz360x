@@ -9,3 +9,5 @@ api/api-reference.html
 .DS_Store
 Thumbs.db
 var/
+web/test-results/
+web/playwright-report/

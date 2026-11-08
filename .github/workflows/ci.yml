@@ -63,3 +63,54 @@ jobs:
       - run: npx next build
       - name: Dependency vulnerability scan
         run: npm audit --omit=dev
+
+  e2e:
+    # Real browser tests against the real stack: PostgreSQL with the demo data, the API, the worker and the built web app.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: biz360x
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: server/requirements.txt }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: pip install -r server/requirements.txt
+      - name: Reset the database, start the API and the worker
+        run: E2E_PYTHON="$(which python)" bash scripts/e2e-stack.sh start
+      - name: Build and start the web app
+        working-directory: web
+        run: |
+          npm ci
+          npx next build
+          nohup npx next start -p 3000 > ../var/e2e-web.log 2>&1 &
+          for i in $(seq 1 60); do curl -fs http://localhost:3000/login >/dev/null && exit 0; sleep 1; done
+          echo "web app did not start"; cat ../var/e2e-web.log; exit 1
+      - name: Install the browser
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Browser tests
+        working-directory: web
+        run: npx playwright test
+      - name: Keep the report and server logs when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure
+          path: |
+            web/playwright-report
+            web/test-results
+            var/e2e-*.log
+          if-no-files-found: ignore
+          retention-days: 7

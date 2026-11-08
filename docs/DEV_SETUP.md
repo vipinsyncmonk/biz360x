@@ -45,6 +45,8 @@ The runner applies `db/NN_*.sql` in order, records a checksum for each file in `
 cd web && npm ci && npm run dev    # http://localhost:3000; start the API on :8000 first
 ```
 
+Browser tests: `scripts/e2e-local.ps1` (see `web/README.md`).
+
 `API_URL` (web server side) says where the API is; the browser only ever calls `/api/v1` on its own origin. The WSL local CI copies `web/` to a temp folder, so Windows and Linux `node_modules` never mix.
 
 ## Environment variables
