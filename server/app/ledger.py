@@ -27,6 +27,14 @@ SYSTEM_ACCOUNTS = {
     "cash": ("1110", "Cash", "asset", "cash"),
     "receivable": ("1200", "Trade receivables", "asset", "receivable"),
     "tds_receivable": ("1350", "TDS receivable", "asset", "tds_receivable"),
+    "gst_input_cgst": ("1310", "Input CGST", "asset", "gst_input_cgst"),
+    "gst_input_sgst": ("1320", "Input SGST", "asset", "gst_input_sgst"),
+    "gst_input_igst": ("1330", "Input IGST", "asset", "gst_input_igst"),
+    "payable": ("2100", "Trade payables", "liability", "payable"),
+    "tds_payable": ("2200", "TDS payable", "liability", "tds_payable"),
+    "purchases": ("5000", "Purchases and expenses", "expense", "purchases"),
+    "interest_penalty": ("5900", "Interest and penalties", "expense", "interest_penalty"),
+    "advance_tax": ("1360", "Advance tax paid", "asset", "advance_tax"),
     "advances_received": ("2150", "Customer advances", "liability", "customer_advance"),
     "gst_output_cgst": ("2310", "Output CGST", "liability", "gst_output_cgst"),
     "gst_output_sgst": ("2320", "Output SGST", "liability", "gst_output_sgst"),
@@ -94,6 +102,36 @@ def receipt_lines(*, amount: Decimal, allocated: Decimal, party_id, method: str,
     if amount - allocated:
         out.append(Line("advances_received", credit=amount - allocated, party_id=party_id))
     return out
+
+
+def purchase_bill_lines(bill: dict, expense: list[tuple[str, Decimal]] | None = None) -> list[Line]:
+    """Booked purchase bill. Dr expense (plus any tax that is not claimable as ITC), Dr input GST when the bill is
+    eligible; Cr payables for the amount we will pay the supplier, Cr TDS payable for what we withhold.
+    `expense` optionally splits the taxable value over account keys; it must add up to taxable_total."""
+    eligible = bill["itc_eligibility"] == "eligible"
+    taxes = [("gst_input_cgst", bill["cgst_total"]), ("gst_input_sgst", bill["sgst_total"]), ("gst_input_igst", bill["igst_total"])]
+    tax_total = sum((t for _, t in taxes), ZERO)
+    split = expense or [("purchases", bill["taxable_total"])]
+    if sum((a for _, a in split), ZERO) != bill["taxable_total"]:
+        raise PostingError("expense split does not add up to the taxable value")
+    out: list[Line] = []
+    for i, (key, amount) in enumerate(split):
+        out.append(Line(key, debit=amount + (tax_total if (not eligible and i == 0) else ZERO)))
+    if eligible:
+        out += [Line(k, debit=t) for k, t in taxes if t]
+    tds = bill.get("tds_amount") or ZERO
+    out.append(Line("payable", credit=bill["grand_total"] - tds, party_id=bill["party_id"]))
+    if tds:
+        out.append(Line("tds_payable", credit=tds, party_id=bill["party_id"]))
+    if bill["grand_total"] != bill["taxable_total"] + tax_total:
+        raise PostingError(f"bill {bill.get('bill_no')} does not add up: taxable + tax != grand total")
+    if not balanced(out):
+        raise PostingError(f"bill {bill.get('bill_no')} does not balance")
+    return out
+
+
+def vendor_payment_lines(*, amount: Decimal, party_id, bank_account_key: str) -> list[Line]:
+    return [Line("payable", debit=amount, party_id=party_id), Line(bank_account_key, credit=amount)]
 
 
 # ------------------------------------------------------------------ database helpers

@@ -3,6 +3,7 @@ RFC 9457 errors, authentication, permissions, idempotency, audit, events."""
 from __future__ import annotations
 
 import contextlib
+import logging
 import datetime as dt
 import hashlib
 import json
@@ -101,6 +102,7 @@ def map_db_error(e: psycopg.Error) -> ApiError:
         return ApiError(409, "conflict", "Conflict", msg)
     if isinstance(e, (psycopg.errors.InvalidTextRepresentation, psycopg.errors.DataException)):
         return ApiError(400, "validation_failed", "Invalid value", msg)
+    logging.getLogger("biz360x").error("unmapped database error: %s: %s", type(e).__name__, msg)
     return ApiError(500, "internal", "Internal error")
 
 

@@ -174,6 +174,7 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `parties`, `sale
 - a worker with a sandbox IRP adapter
 - the compliance engine: engine runs, calendar, thresholds and the onboarding preview (dry run)
 - ledger posting (invoices, credit notes and receipts post journals in the same transaction), quotes -> sales orders -> invoices by lot, credit notes, payment links with per-invoice virtual accounts and the public pay page, bank-feed matching, month-end close and period lock, reports, dunning and recurring invoices
+- purchases (orders, bills booked to the ledger with TDS withheld), the MSME 45-day clock, vendor payments that need an independent approval before the bank job runs, GSTR-1 and GSTR-3B built from the books (ITC claimed only when it is in 2B, set off in the legal order), 2B matching, TDS deposit challans, TDS returns and advance tax, all driven from `POST /obligations/{id}/prepare`
 
 Its 14 end-to-end tests run against PostgreSQL 16 and cover the IGST and CGST+SGST split, the 194Q and e-way bill checks, mapping database constraints to error codes, advisor scope limits, idempotency replay and conflict, invisible-entity 404s, over-settlement, the two-person rule, and the audit chain staying intact.
 
