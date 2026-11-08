@@ -17,6 +17,7 @@ from . import ratelimit, security
 from .core import ApiError, problem_response
 from .routes_billing import router as billing
 from .routes_settings import router as settings
+from .routes_capital import router as capital
 from .routes_copilot import router as copilot
 from .routes_compliance import router as compliance
 from .receivables import router as receivables
@@ -59,7 +60,7 @@ def health():
     return JSONResponse({"ok": True})
 
 
-_ROUTERS = (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal, portals, integrations, billing, settings, copilot)
+_ROUTERS = (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal, portals, integrations, billing, settings, copilot, capital)
 for r in _ROUTERS:
     app.include_router(r, prefix="/v1")
 ratelimit.register_heavy_routes(_ROUTERS, "/v1")
