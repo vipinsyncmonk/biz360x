@@ -3,6 +3,7 @@ import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, t
 import { clauseText, dueRuleText, daysLabel, factLabel, kpis, monthGrid, reasonLines, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
+import { actionItems, actionResult, actionState, actionTitle, answerBlocks, askReady, canRequestApproval, citationHref, groupThreads } from "./copilot";
 import { DEPOSIT_RULE, depositNote, depositOptions, plainError, blankChallan, canPay, canValidate, challanBody, challanProblem, deductionTotals, fyChoices, fyOf, instalmentState, nextInstalment, unmatched, validationNote } from "./tds";
 import { ACTION_LABEL, canCompute, canFile, fileBody, isOpen, lastMonth, matchActions, periodOk, remindLabel, remindable, resolveBody, syncBody, taxNote } from "./gst";
 import { SKIP_REASON, addClientHref, chaseLabel, chaseSummary, chaseTargets, orgFromSearch } from "./group";
@@ -406,7 +407,7 @@ describe("phone tabs", () => {
     expect(activeTab("/")).toBe("today");
     expect(activeTab("/compliance")).toBe("compliance");
     expect(activeTab("/compliance/abc")).toBe("compliance");
-    expect(activeTab("/m/copilot")).toBe("copilot");
+    expect(activeTab("/copilot")).toBe("copilot");
     expect(activeTab("/billing/receivables")).toBe("more");
     expect(activeTab("/more")).toBe("more");
     expect(activeTab("/m/startup")).toBe("more");
@@ -945,5 +946,54 @@ describe("why it applies", () => {
     ]);
     expect(reasonLines({ provisional: "assumes the latest date" })).toEqual([{ label: "Note", text: "assumes the latest date" }]);
     expect(reasonLines({})).toEqual([]);
+  });
+});
+
+describe("copilot", () => {
+  it("only sends a real question", () => {
+    expect(askReady("  ")).toBe(false);
+    expect(askReady("Who owes me money?")).toBe(true);
+    expect(askReady("x".repeat(4001))).toBe(false);
+  });
+  it("splits an answer into lines and citation markers", () => {
+    const blocks = answerBlocks("Two suppliers owe you papers.\n- Shakti: 2 invoices [1]\n- Vega: 1 invoice [2] and more [9]", 2);
+    expect(blocks).toEqual([
+      { bullet: false, pieces: [{ type: "text", text: "Two suppliers owe you papers." }] },
+      { bullet: true, pieces: [{ type: "text", text: "Shakti: 2 invoices " }, { type: "cite", n: 1 }] },
+      { bullet: true, pieces: [{ type: "text", text: "Vega: 1 invoice " }, { type: "cite", n: 2 }, { type: "text", text: " and more [9]" }] },   // a marker with no source stays plain text
+    ]);
+    expect(answerBlocks("\n\n", 0)).toEqual([]);
+  });
+  it("points each source at the screen that shows it", () => {
+    expect(citationHref({ subject: "obligations", subject_id: "o1" })).toBe("/compliance?o=o1");
+    expect(citationHref({ subject: "sales_documents", subject_id: "d1" })).toBe("/billing/d1");
+    expect(citationHref({ subject: "itc_matches", subject_id: "m1" })).toBe("/gst");
+    expect(citationHref({ subject: "mystery", subject_id: null })).toBeNull();
+  });
+  it("shows where an action stands", () => {
+    expect(actionState({ status: "proposed", approval_request_id: null })).toEqual({ label: "Proposed", tone: "prep" });
+    expect(actionState({ status: "proposed", approval_request_id: "a" })).toEqual({ label: "Waiting for approval", tone: "wait" });
+    expect(actionState({ status: "executed", approval_request_id: "a" }).label).toBe("Done");
+    expect(actionState({ status: "failed", approval_request_id: "a" }).label).toBe("Approved, but could not run");
+    expect(canRequestApproval({ status: "proposed", approval_request_id: null })).toBe(true);
+    expect(canRequestApproval({ status: "proposed", approval_request_id: "a" })).toBe(false);
+    expect(canRequestApproval({ status: "rejected", approval_request_id: "a" })).toBe(false);
+  });
+  it("words an action and lists who it touches", () => {
+    const remind = { kind: "send_supplier_reminders", payload: { party_ids: ["p1", "p2"], suppliers: [{ name: "Shakti", invoices: 2, tax: "74300.00" }, { name: "Vega", invoices: 1, tax: "100.00" }] } };
+    expect(actionTitle(remind)).toBe("Remind 2 suppliers about invoices missing from GSTR-2A");
+    expect(actionItems(remind, (v) => `Rs ${v}`)).toEqual([{ name: "Shakti", detail: "2 invoices · Rs 74300.00" }, { name: "Vega", detail: "1 invoice · Rs 100.00" }]);
+    expect(actionTitle({ kind: "create_task", payload: { title: "Follow up with Delta" } })).toBe("Follow up with Delta");
+    expect(actionItems({ kind: "create_task", payload: { title: "x" } }, String)).toEqual([]);
+    expect(actionResult({ ...remind, status: "executed", payload: { ...remind.payload, result: { suppliers: 1, invoices: 3 } } })).toBe("Follow-up tasks added for 1 supplier (3 invoices).");
+    expect(actionResult({ kind: "create_task", status: "failed", payload: { error: "boom" } })).toBe("It could not run: boom");
+    expect(actionResult({ ...remind, status: "proposed" })).toBe("");
+  });
+  it("groups conversations into today and earlier", () => {
+    const t = (id: string, at: string) => ({ id, title: id, module: null, created_at: at });
+    const now = new Date(2026, 10, 8, 12, 0, 0);
+    const groups = groupThreads([t("old", new Date(2026, 10, 1, 9).toISOString()), t("new", new Date(2026, 10, 8, 9).toISOString()), t("newer", new Date(2026, 10, 8, 11).toISOString())], now);
+    expect(groups.map((g) => [g.heading, g.items.map((x) => x.id)])).toEqual([["TODAY", ["newer", "new"]], ["EARLIER", ["old"]]]);
+    expect(groupThreads([], now)).toEqual([]);
   });
 });

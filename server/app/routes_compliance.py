@@ -129,6 +129,9 @@ def _decide(entity_id, approval_id, p, body, outcome, idem_key):
         if ar["subject"] == "payroll_run" and outcome == "approved":
             from .routes_payroll import on_run_approved
             on_run_approved(cur, entity_id, ar["subject_id"])
+        if ar["subject"] == "copilot_action":
+            from .routes_copilot import on_approval_decided
+            on_approval_decided(cur, entity_id, ar["subject_id"], outcome)
         if ar["subject"] == "vendor_payment":
             cur.execute("UPDATE vendor_payments SET status = %s WHERE id = %s AND status = 'scheduled'",
                         ("approved" if outcome == "approved" else "cancelled", ar["subject_id"]))

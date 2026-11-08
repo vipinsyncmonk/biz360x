@@ -413,6 +413,24 @@ class RemindIn(BaseModel):
     channels: list[str] = []
 
 
+def queue_supplier_reminders(cur, entity_id, party_ids, source: str = "user") -> dict:
+    """One follow-up task per supplier whose invoices are missing from GSTR-2A, and mark those differences as reminded.
+    Used by the reminders endpoint and by the copilot once a person has approved the action."""
+    cur.execute("""SELECT b.party_id, p.legal_name, array_agg(m.id) AS ids, array_agg(b.bill_no) AS bills
+                     FROM itc_matches m JOIN purchase_bills b ON b.id = m.purchase_bill_id JOIN parties p ON p.id = b.party_id
+                    WHERE m.entity_id = %s AND m.status = 'not_in_portal' AND m.action_taken_at IS NULL
+                      AND (cardinality(%s::uuid[]) = 0 OR b.party_id = ANY(%s::uuid[])) GROUP BY b.party_id, p.legal_name""",
+                (entity_id, party_ids, party_ids))
+    groups = cur.fetchall()
+    invoices = 0
+    for g in groups:
+        cur.execute("INSERT INTO tasks (entity_id, title, source) VALUES (%s, %s, %s)",
+                    (entity_id, f"Remind {g['legal_name']}: {len(g['ids'])} invoice(s) missing from GSTR-2A ({', '.join(g['bills'][:5])})", source))
+        cur.execute("UPDATE itc_matches SET action = 'remind_supplier', action_taken_at = now(), action_by = app.current_user_id() WHERE id = ANY(%s)", (g["ids"],))
+        invoices += len(g["ids"])
+    return {"suppliers": len(groups), "invoices": invoices}
+
+
 @router.post(E + "/itc-matches/remind-suppliers", status_code=202, tags=["GST & tax"])
 def remind_suppliers(entity_id: uuid.UUID, body: RemindIn, p: Principal = Auth,
                      idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
@@ -421,19 +439,7 @@ def remind_suppliers(entity_id: uuid.UUID, body: RemindIn, p: Principal = Auth,
         replay = idempotency_begin(cur, idempotency_key, "POST", f"/entities/{entity_id}/itc-matches/remind-suppliers", body.model_dump(mode="json"))
         if replay:
             return JSONResponse(replay["body"], status_code=replay["status"])
-        cur.execute("""SELECT b.party_id, p.legal_name, array_agg(m.id) AS ids, array_agg(b.bill_no) AS bills
-                         FROM itc_matches m JOIN purchase_bills b ON b.id = m.purchase_bill_id JOIN parties p ON p.id = b.party_id
-                        WHERE m.entity_id = %s AND m.status = 'not_in_portal' AND m.action_taken_at IS NULL
-                          AND (cardinality(%s::uuid[]) = 0 OR b.party_id = ANY(%s::uuid[])) GROUP BY b.party_id, p.legal_name""",
-                    (entity_id, body.party_ids, body.party_ids))
-        groups = cur.fetchall()
-        invoices = 0
-        for g in groups:
-            cur.execute("INSERT INTO tasks (entity_id, title, source) VALUES (%s, %s, 'user')",
-                        (entity_id, f"Remind {g['legal_name']}: {len(g['ids'])} invoice(s) missing from GSTR-2A ({', '.join(g['bills'][:5])})"))
-            cur.execute("UPDATE itc_matches SET action = 'remind_supplier', action_taken_at = now(), action_by = app.current_user_id() WHERE id = ANY(%s)", (g["ids"],))
-            invoices += len(g["ids"])
-        out = {"suppliers": len(groups), "invoices": invoices}
+        out = queue_supplier_reminders(cur, entity_id, body.party_ids)
         audit(cur, entity_id, "itc_match.reminders", "itc_matches", None, after=out)
         idempotency_finish(cur, idempotency_key, 202, out)
     return JSONResponse(out, status_code=202)

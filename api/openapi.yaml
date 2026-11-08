@@ -9518,6 +9518,7 @@ paths:
       parameters:
       - $ref: '#/components/parameters/EntityId'
       - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:

@@ -26,7 +26,7 @@ export const NAV: NavGroup[] = [
     { t: "Today", href: "/", icon: I.today, built: true },
     { t: "Compliance", href: "/compliance", icon: I.shield, built: true },
     { t: "Notice desk", href: "/notices", icon: I.legal, built: true },
-    soon("Copilot", "copilot", I.spark),
+    { t: "Copilot", href: "/copilot", icon: I.spark, built: true },
     { t: "Documents", href: "/documents", icon: I.folder, built: true },
   ] },
   { h: "RUN", items: [
@@ -46,13 +46,13 @@ export const SOON_TITLES: Record<string, string> = Object.fromEntries(
 export const TABS: Array<{ key: string; t: string; href: string; icon: string }> = [
   { key: "today", t: "Today", href: "/", icon: I.today },
   { key: "compliance", t: "Compliance", href: "/compliance", icon: I.shield },
-  { key: "copilot", t: "Copilot", href: "/m/copilot", icon: I.spark },
+  { key: "copilot", t: "Copilot", href: "/copilot", icon: I.spark },
   { key: "more", t: "More", href: "/more", icon: I.grid },
 ];
 
 export function activeTab(path: string): string {
   if (path === "/") return "today";
   if (path === "/compliance" || path.startsWith("/compliance/")) return "compliance";
-  if (path === "/m/copilot") return "copilot";
+  if (path === "/copilot" || path.startsWith("/copilot/")) return "copilot";
   return "more";
 }
