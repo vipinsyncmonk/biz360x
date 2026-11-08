@@ -15932,7 +15932,10 @@ export interface operations {
     requestCopilotActionApproval: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 /** @description Legal entity the call acts on */
                 entityId: components["parameters"]["EntityId"];

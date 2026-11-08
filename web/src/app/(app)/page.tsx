@@ -16,7 +16,7 @@ const SUBJECT_ICON: Record<string, string> = {
 };
 const SUBJECT_LABEL: Record<string, string> = {
   obligation: "Filing", vendor_payment: "Vendor payment", payroll_run: "Payroll run", board_resolution: "Board resolution",
-  sales_document: "Invoice", purchase_bill: "Bill", journal_entry: "Journal", contract: "Contract", credit_note: "Credit note", quote: "Quote",
+  sales_document: "Invoice", purchase_bill: "Bill", journal_entry: "Journal", contract: "Contract", credit_note: "Credit note", quote: "Quote", copilot_action: "Copilot suggestion",
 };
 
 export default function Today() {
