@@ -8,3 +8,4 @@ node_modules/
 api/api-reference.html
 .DS_Store
 Thumbs.db
+var/

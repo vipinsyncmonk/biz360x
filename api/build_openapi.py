@@ -410,7 +410,7 @@ action(E + "/approvals/{id}/approve", "Approvals", "approveRequest", "Approve", 
        idem=True, desc="Rejected with `two_person_rule` when the caller requested it. Approving a filing does not file it — call the file action.")
 action(E + "/approvals/{id}/reject", "Approvals", "rejectRequest", "Reject", "approvals:approve", body=ref("Decision"), resp=ref("ApprovalRequest"), idem=True)
 action(E + "/approvals/{id}/withdraw", "Approvals", "withdrawRequest", "Withdraw my request", "approvals:read", resp=ref("ApprovalRequest"))
-schema("Signer", {"person_id": NULLABLE(UUID), "external_name": S(), "external_email": S(format="email"), "sign_order": I(),
+schema("Signer", {"id": I(readOnly=True), "person_name": NULLABLE(S(readOnly=True)), "person_id": NULLABLE(UUID), "external_name": S(), "external_email": S(format="email"), "sign_order": I(),
                   "status": ENUM("queued", "waiting", "signed", "declined", readOnly=True), "signed_at": NULLABLE(RO_TS)})
 schema("SignatureRequest", {"id": RO_UUID, "subject": S(), "subject_id": UUID, "document_id": UUID,
                             "method": ENUM("dsc", "aadhaar_esign", "click_to_sign"), "signers": ARR(ref("Signer")),
@@ -419,6 +419,12 @@ schema("SignatureRequest", {"id": RO_UUID, "subject": S(), "subject_id": UUID, "
 collection(E + "/signature-requests", "Approvals", "SignatureRequest", "approvals", filters=[q("status", S())], idem=True)
 _op("get", E + "/signature-requests/{id}", "Approvals", "getSignatureRequest", "Get a signature request", "approvals:read", resp=ref("SignatureRequest"))
 action(E + "/signature-requests/{id}/remind", "Approvals", "remindSigners", "Remind pending signers", "approvals:read", status="204")
+action(E + "/signature-requests/{id}/signers/{signerId}/sign", "Approvals", "signAsSigner", "Sign (the signer themselves, or an approver recording it)", "approvals:read",
+       body=schema("SignAction", {"evidence": S()}), resp=ref("SignatureRequest"),
+       params=[{"name": "signerId", "in": "path", "required": True, "schema": UUID}],
+       desc="Signers sign in order. When the last one signs the request completes; a contract becomes active with this document as its signed copy.")
+action(E + "/signature-requests/{id}/signers/{signerId}/decline", "Approvals", "declineAsSigner", "Decline to sign", "approvals:read",
+       body=schema("DeclineAction", {"reason": S()}), resp=ref("SignatureRequest"), params=[{"name": "signerId", "in": "path", "required": True, "schema": UUID}])
 schema("Task", {"id": RO_UUID, "title": S(), "subject": NULLABLE(S()), "subject_id": NULLABLE(UUID), "assignee_id": NULLABLE(UUID),
                 "due_on": NULLABLE(DATE), "status": ENUM("open", "done", "cancelled"), "source": ENUM("user", "engine", "dunning", "copilot", "advisor", readOnly=True)},
        required=("title",))
@@ -896,6 +902,12 @@ _op("get", E + "/documents", "Documents", "searchDocuments", "Search and list", 
     params=[P("Limit"), P("Cursor"), P("Q"), q("folder", S()), q("source", S()), q("expiring_within_days", I()), q("subject", S()), q("subject_id", UUID)],
     resp=page_of("Document"))
 item(E + "/documents", "Documents", "Document", "documents")
+_op("put", "/storage/{token}", "Documents", "uploadObject", "Upload the bytes to a signed URL (size and SHA-256 are checked)",
+    params=[{"name": "token", "in": "path", "required": True, "schema": S()}], status="204", security=[],
+    desc="The URL comes from `POST /documents` and expires after 15 minutes. The token is the credential; send no Authorization header.")
+_op("get", "/storage/{token}", "Documents", "downloadObject", "Download from a short-lived signed URL",
+    params=[{"name": "token", "in": "path", "required": True, "schema": S()}], security=[],
+    desc="The URL is the `download_url` of a document and expires after 5 minutes.")
 schema("DocumentRequest", {"id": RO_UUID, "advisor_grant_id": NULLABLE(UUID), "requested_by_name": S(), "title": S(), "due_on": NULLABLE(DATE),
                            "status": ENUM("open", "partially_fulfilled", "fulfilled", "cancelled", readOnly=True), "document_ids": ARR(UUID, readOnly=True)},
        required=("title",))

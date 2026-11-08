@@ -133,9 +133,9 @@ def current_principal(authorization: str = Header(default="")) -> Principal:
 
 # ------------------------------------------------------------------ permissions
 ROLE_ACTIONS = {
-    "owner": {"read", "write", "approve", "file", "pay"},
-    "approver": {"read", "write", "approve", "file", "pay"},
-    "maker": {"read", "write"},
+    "owner": {"read", "write", "approve", "file", "pay", "use"},
+    "approver": {"read", "write", "approve", "file", "pay", "use"},
+    "maker": {"read", "write", "use"},
     "viewer": {"read"},
 }
 ADVISOR_ACTIONS = {"read": {"read"}, "comment": {"read"}, "prepare": {"read", "write"}, "certify": {"read", "write", "file"}}
