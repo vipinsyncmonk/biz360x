@@ -106,3 +106,60 @@ def sales_summary(entity_id: uuid.UUID, from_: dt.date | None = Query(default=No
     from decimal import Decimal
     return {"invoiced": money(invoiced), "collected": money(sum((Decimal(v) for v in by_method.values()), Decimal(0))), "outstanding": money(o["outstanding"]),
             "overdue": money(o["overdue"]), "overdue_count": o["overdue_count"], "tds_to_claim": money(o["tds"]), "collected_by_method": by_method}
+
+
+# ------------------------------------------------------------------ receipts and ageing
+RECEIPT_SQL = """SELECT r.id, r.receipt_no, r.party_id, p.legal_name AS party_name, r.received_on, r.amount, r.method::text AS method, r.utr,
+                         r.bank_account_id, r.bank_transaction_id, r.is_advance, r.status,
+                         coalesce((SELECT json_agg(json_build_object('invoice_id', s.invoice_id, 'number', d.number, 'amount', s.amount::numeric(15,2)::text) ORDER BY s.id)
+                                     FROM invoice_settlements s JOIN sales_documents d ON d.id = s.invoice_id WHERE s.receipt_id = r.id), '[]'::json) AS allocations,
+                         r.amount - coalesce((SELECT sum(s.amount) FROM invoice_settlements s WHERE s.receipt_id = r.id), 0) AS unallocated
+                    FROM receipts r JOIN parties p ON p.id = r.party_id"""
+
+
+@router.get(E + "/receipts", tags=["Sales & billing"])
+def list_receipts(entity_id: uuid.UUID, party_id: uuid.UUID | None = None, from_: dt.date | None = Query(default=None, alias="from"), to: dt.date | None = None,
+                  limit: int = Query(default=50, ge=1, le=200), cursor: str | None = None, p: Principal = Auth):
+    off = offset_of(cursor)
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "sales:read")
+        cur.execute(RECEIPT_SQL + """ WHERE r.entity_id = %s AND (%s::uuid IS NULL OR r.party_id = %s) AND (%s::date IS NULL OR r.received_on >= %s)
+                                       AND (%s::date IS NULL OR r.received_on <= %s)
+                                     ORDER BY r.received_on DESC, r.receipt_no LIMIT %s OFFSET %s""",
+                    (entity_id, party_id, party_id, from_, from_, to, to, limit + 1, off))
+        return js(page(cur.fetchall(), limit, off))
+
+
+@router.get(E + "/receipts/{receipt_id}", tags=["Sales & billing"])
+def get_receipt(entity_id: uuid.UUID, receipt_id: uuid.UUID, p: Principal = Auth):
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "sales:read")
+        cur.execute(RECEIPT_SQL + " WHERE r.entity_id = %s AND r.id = %s", (entity_id, receipt_id))
+        r = cur.fetchone()
+        if not r:
+            raise ApiError(404, "not_found", "Not found")
+        return js(r)
+
+
+@router.get(E + "/receivables/ageing", tags=["Sales & billing"])
+def receivables_ageing(entity_id: uuid.UUID, as_of: dt.date | None = None, p: Principal = Auth):
+    """One row per customer, open balances bucketed by invoice age at `as_of` (default today). Balances are as they stand now."""
+    day = as_of or dt.date.today()
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "sales:read")
+        cur.execute("""SELECT d.party_id, p.legal_name, p.msme_class::text AS msme_class,
+                              coalesce(sum(d.balance_due) FILTER (WHERE %s - d.doc_date <= 30), 0) AS b0_30,
+                              coalesce(sum(d.balance_due) FILTER (WHERE %s - d.doc_date BETWEEN 31 AND 45), 0) AS b31_45,
+                              coalesce(sum(d.balance_due) FILTER (WHERE %s - d.doc_date BETWEEN 46 AND 60), 0) AS b46_60,
+                              coalesce(sum(d.balance_due) FILTER (WHERE %s - d.doc_date BETWEEN 61 AND 90), 0) AS b61_90,
+                              coalesce(sum(d.balance_due) FILTER (WHERE %s - d.doc_date > 90), 0) AS b90_plus,
+                              sum(d.balance_due) AS total
+                         FROM sales_documents d JOIN parties p ON p.id = d.party_id
+                        WHERE d.entity_id = %s AND d.status = 'issued' AND d.balance_due > 0 AND d.doc_date <= %s
+                          AND d.doc_type IN ('tax_invoice', 'export_invoice', 'bill_of_supply', 'debit_note')
+                        GROUP BY d.party_id, p.legal_name, p.msme_class ORDER BY sum(d.balance_due) DESC, p.legal_name""",
+                    (day, day, day, day, day, entity_id, day))
+        rows = cur.fetchall()
+    for r in rows:
+        r["interest_accrued_msmed"] = None
+    return js(rows)

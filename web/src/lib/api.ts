@@ -96,6 +96,13 @@ export function unwrap<T>(r: { data?: T; error?: unknown; response: Response }):
   return r.data;
 }
 
+/** For endpoints that answer 204 with no body: fine when the status is a success, a thrown ApiProblem otherwise. */
+export function unwrapEmpty(r: { error?: unknown; response: Response }): void {
+  if (r.error === undefined && r.response.ok) return;
+  const e = (r.error ?? {}) as { code?: string; title?: string; detail?: string; errors?: Array<{ field: string; message: string }> };
+  throw new ApiProblem(r.response.status, e.code ?? "error", e.title ?? (r.response.statusText || "Request failed"), e.detail, e.errors ?? []);
+}
+
 // ---- sign-in (these calls need no bearer token, so they bypass the client)
 export async function requestCode(email: string): Promise<void> {
   const res = await postJson("/auth/otp", { email });

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, toPaise } from "./format";
 import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
+import { unwrapEmpty } from "./api";
+import { allocatedTotal, allocationBody, allocationProblem, offsetLabel, pauseReady, receiptReady, recurringState, stepSentence, suggestAllocation, unallocated } from "./receivables";
 
 describe("money", () => {
   it("groups digits the Indian way and never uses floats", () => {
@@ -324,5 +326,65 @@ describe("quotes and credit notes", () => {
     expect(creditLines(inv, { 2: "1" })[0]).toMatchObject({ discount: "0.00" });
     expect(creditLines(inv, { 1: "1" })[0]!.discount).toBe("10.00");
     expect(creditLines(inv, { 1: "  " })).toEqual([]);
+  });
+});
+
+describe("receipts and reminders", () => {
+  const open = [
+    { id: "new", number: "NI/KA/9", doc_date: "2026-10-20", due_date: "2026-11-19", balance_due: "5000.00" },
+    { id: "old", number: "NI/KA/3", doc_date: "2026-08-01", due_date: "2026-08-31", balance_due: "1200.50" },
+  ];
+  it("suggests the oldest invoice first and never past a balance", () => {
+    expect(suggestAllocation("3000.00", open)).toEqual({ old: "1200.50", new: "1799.50" });
+    expect(suggestAllocation("500", open)).toEqual({ old: "500.00" });
+    expect(suggestAllocation("99999", open)).toEqual({ old: "1200.50", new: "5000.00" });
+    expect(suggestAllocation("", open)).toEqual({});
+  });
+  it("adds exactly and shows what stays as an advance", () => {
+    expect(allocatedTotal({ a: "0.10", b: "0.20" })).toBe("0.30");
+    expect(unallocated("1000.00", { a: "250.25" })).toBe("749.75");
+    expect(unallocated("100.00", { a: "250.25" })).toBe("0.00");
+  });
+  it("flags what the server would refuse", () => {
+    expect(allocationProblem("3000.00", { old: "1200.50", new: "1799.50" }, open)).toBeNull();
+    expect(allocationProblem("3000.00", { old: "1300.00" }, open)).toMatch(/more than the 1200.50/);
+    expect(allocationProblem("1000.00", { old: "1200.50" }, open)).toMatch(/more than the receipt/);
+    expect(allocationProblem("1000.00", { old: "12x" }, open)).toMatch(/amount like/);
+  });
+  it("sends only invoices that have an amount", () => {
+    expect(allocationBody({ a: "100", b: "", c: "0.00", d: "5.5" })).toEqual([{ invoice_id: "a", amount: "100.00" }, { invoice_id: "d", amount: "5.50" }]);
+  });
+  it("needs a customer, a date and a positive amount", () => {
+    expect(receiptReady({ partyId: "p", date: "2026-11-07", amount: "10" })).toBe(true);
+    expect(receiptReady({ partyId: "", date: "2026-11-07", amount: "10" })).toBe(false);
+    expect(receiptReady({ partyId: "p", date: "2026-11-07", amount: "0" })).toBe(false);
+  });
+  it("words the reminder steps", () => {
+    expect(offsetLabel(-3)).toBe("3 days before the due date");
+    expect(offsetLabel(0)).toBe("On the due date");
+    expect(offsetLabel(1)).toBe("1 day after the due date");
+    expect(stepSentence({ offset_days: 7, action: "message", channels: ["email", "whatsapp"] })).toBe("7 days after the due date: send a reminder by email and WhatsApp");
+    expect(stepSentence({ offset_days: 15, action: "task" })).toBe("15 days after the due date: create a task");
+  });
+  it("only pauses until a future date", () => {
+    const today = new Date(2026, 10, 7);
+    expect(pauseReady("2026-11-08", today)).toBe(true);
+    expect(pauseReady("2026-11-07", today)).toBe(false);
+    expect(pauseReady("", today)).toBe(false);
+  });
+  it("names the state of a recurring invoice", () => {
+    const today = new Date(2026, 10, 7);
+    expect(recurringState({ is_active: false, next_run_on: "2026-12-01", ends_on: null }, today).label).toBe("Paused");
+    expect(recurringState({ is_active: true, next_run_on: "2026-12-01", ends_on: "2026-10-01" }, today).label).toBe("Ended");
+    expect(recurringState({ is_active: true, next_run_on: "2026-11-07", ends_on: null }, today).label).toBe("Due now");
+    expect(recurringState({ is_active: true, next_run_on: "2026-12-01", ends_on: null }, today).label).toBe("Active");
+  });
+});
+
+describe("empty responses", () => {
+  it("accepts a 204 and refuses a failure", () => {
+    expect(() => unwrapEmpty({ response: new Response(null, { status: 204 }) })).not.toThrow();
+    expect(() => unwrapEmpty({ error: { code: "not_found", title: "Not found" }, response: new Response(null, { status: 404 }) })).toThrow(/Not found/);
+    expect(() => unwrapEmpty({ response: new Response(null, { status: 500 }) })).toThrow();
   });
 });

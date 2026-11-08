@@ -51,6 +51,7 @@ export default function Billing() {
           <h1 className="disp" style={{ margin: "6px 0 0", fontSize: 36 }}>Sales &amp; Billing</h1>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/billing/receivables" className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Collections</Link>
           <Link href="/billing/quotes" className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Quotes</Link>
           <Link href="/billing/new" className="btn primary" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>+ New invoice</Link>
         </div>

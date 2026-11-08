@@ -316,3 +316,53 @@ def create_receipt(entity_id: uuid.UUID, body: ReceiptIn, p: Principal = Auth,
         out = record_receipt(cur, entity_id, body)
         idempotency_finish(cur, idempotency_key, 201, out)
     return JSONResponse(out, status_code=201)
+
+
+@router.post(E + "/receipts/{receipt_id}/allocate", tags=["Sales & billing"])
+def allocate_receipt(entity_id: uuid.UUID, receipt_id: uuid.UUID, body: list[AllocationIn], p: Principal = Auth,
+                     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
+    """Settle invoices from what is left of a receipt. The advance on the ledger moves to receivables."""
+    if not body:
+        raise ApiError(400, "validation_failed", "Give at least one invoice to settle")
+    path = f"/entities/{entity_id}/receipts/{receipt_id}/allocate"
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "sales:write")
+        replay = idempotency_begin(cur, idempotency_key, "POST", path, [a.model_dump() for a in body])
+        if replay:
+            return JSONResponse(replay["body"], status_code=replay["status"])
+        cur.execute("SELECT * FROM receipts WHERE id = %s AND entity_id = %s FOR UPDATE", (receipt_id, entity_id))
+        rc = cur.fetchone()
+        if not rc:
+            raise ApiError(404, "not_found", "Not found")
+        if rc["status"] != "confirmed":
+            raise ApiError(409, "conflict", f"A {rc['status']} receipt cannot be allocated")
+        cur.execute("SELECT coalesce(sum(amount), 0) AS s FROM invoice_settlements WHERE receipt_id = %s", (receipt_id,))
+        left = rc["amount"] - cur.fetchone()["s"]
+        total = sum((a.amount for a in body), Decimal("0"))
+        if total > left:
+            raise ApiError(409, "over_settlement", "Allocation exceeds what is left of the receipt", f"{money(left)} is unallocated")
+        today = dt.date.today()
+        for a in body:
+            cur.execute("SELECT balance_due FROM sales_documents WHERE id = %s AND entity_id = %s AND party_id = %s AND status = 'issued' FOR UPDATE",
+                        (a.invoice_id, entity_id, rc["party_id"]))
+            inv = cur.fetchone()
+            if not inv:
+                raise ApiError(400, "validation_failed", "Allocation must target an issued invoice of the same customer",
+                               errors=[{"field": "invoice_id", "message": str(a.invoice_id)}])
+            if a.amount > inv["balance_due"]:
+                raise ApiError(409, "over_settlement", "Allocation exceeds the invoice balance", f"invoice {a.invoice_id} owes {money(inv['balance_due'])}")
+            cur.execute("""INSERT INTO invoice_settlements (entity_id, invoice_id, source_kind, receipt_id, amount, settled_on)
+                           VALUES (%s, %s, 'receipt', %s, %s, %s)""", (entity_id, a.invoice_id, receipt_id, a.amount, today))
+            cur.execute("SELECT payment_status FROM sales_documents WHERE id = %s", (a.invoice_id,))
+            if cur.fetchone()["payment_status"] == "paid":
+                emit(cur, entity_id, "sales_document.paid", "sales_documents", a.invoice_id)
+        ledger.post_journal(cur, entity_id, today, "receipt", receipt_id, f"Receipt {rc['receipt_no']} allocated",
+                            [ledger.Line("advances_received", debit=total, party_id=rc["party_id"]), ledger.Line("receivable", credit=total, party_id=rc["party_id"])])
+        cur.execute("UPDATE receipts SET is_advance = (%s > 0) WHERE id = %s", (left - total, receipt_id))
+        audit(cur, entity_id, "receipt.allocated", "receipts", receipt_id, after={"amount": money(total)})
+        from .routes_billing import RECEIPT_SQL
+        from .routes_orders import js
+        cur.execute(RECEIPT_SQL + " WHERE r.id = %s", (receipt_id,))
+        out = js(cur.fetchone())
+        idempotency_finish(cur, idempotency_key, 200, out)
+    return JSONResponse(out)
