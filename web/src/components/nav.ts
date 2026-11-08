@@ -31,7 +31,7 @@ export const NAV: NavGroup[] = [
   { h: "RUN", items: [
     { t: "Sales & Billing", href: "/billing", icon: I.bill, built: true },
     { t: "Finance & Books", href: "/finance", icon: I.book, built: true }, { t: "GST & Tax", href: "/gst", icon: I.gst, built: true },
-    soon("Payroll & HR", "payroll", I.people), soon("Legal & Contracts", "legal", I.legal),
+    { t: "Payroll & HR", href: "/payroll", icon: I.people, built: true }, soon("Legal & Contracts", "legal", I.legal),
   ] },
   { h: "TRACKS", items: [soon("Startup", "startup", I.rocket), soon("MSME", "msme", I.factory), soon("All modules", "modules", I.grid)] },
   { h: "ADMIN", items: [soon("Group view", "group", I.group), soon("Settings", "settings", I.cog)] },

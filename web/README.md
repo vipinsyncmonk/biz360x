@@ -35,6 +35,8 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/finance` | Finance & Books: key numbers (`GET /finance/summary`), close checklist and month lock, bank reconciliation (accept or reject suggested matches), profit & loss in lakh |
 | `src/app/(app)/gst` | GST & Tax: returns by GSTIN, purchase register vs GSTR-2B summary, electronic ledger balances |
 | `src/lib/finance.ts` | Period choice, lakh display, GST ledger totals. Unit-tested |
+| `src/app/(app)/payroll` | Payroll & HR: run status and progress, start a run, compute, send for approval, salary register with wage-code filter, statutory deposits, labour compliance |
+| `src/lib/payroll.ts` | Run naming, next month, next step, status labels. Unit-tested |
 | `src/app/(app)/m/[slug]` | Placeholder for screens that are not built yet |
 
 ## Rules for new screens

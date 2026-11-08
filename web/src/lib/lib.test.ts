@@ -209,3 +209,24 @@ describe("finance helpers", () => {
     expect(totalOf(ledgerTotals(rows, "cash"))).toBe("50.00");
   });
 });
+
+import { nextAction, nextRunMonth, runName, stepIndex, type Run } from "./payroll";
+
+describe("payroll helpers", () => {
+  const run = (m: string, status = "paid"): Run => ({ id: m, period_month: m, status, headcount: 1, gross_total: "0.00", net_total: "0.00", employer_cost_total: "0.00", approval_request_id: null, paid_on: null, statutory: [] });
+  it("names runs and chooses the next month, across a year end", () => {
+    expect(runName("2026-10-01")).toBe("October 2026");
+    expect(nextRunMonth([run("2026-09-01"), run("2026-10-01")])).toBe("2026-11-01");
+    expect(nextRunMonth([run("2026-12-01")])).toBe("2027-01-01");
+    expect(nextRunMonth([], new Date(2026, 10, 7))).toBe("2026-11-01");          // no run yet: this month
+    expect(nextRunMonth([], new Date(2027, 0, 5))).toBe("2027-01-01");
+  });
+  it("offers the right next step", () => {
+    expect(nextAction(run("2026-10-01", "inputs_open"))).toBe("compute");
+    expect(nextAction(run("2026-10-01", "computed"))).toBe("submit");
+    expect(nextAction({ status: "computed", approval_request_id: "a" })).toBe("waiting");
+    expect(nextAction(run("2026-10-01", "approved"))).toBeNull();
+    expect(stepIndex("inputs_locked")).toBe(0);
+    expect(stepIndex("paid")).toBe(4);
+  });
+});
