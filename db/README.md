@@ -6,7 +6,7 @@
 
 ```bash
 createdb biz360x
-for f in 0*.sql 10_seed_reference.sql 11_api_support.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -f "$f"; done
+for f in [0-9][0-9]_*.sql; do psql -d biz360x -v ON_ERROR_STOP=1 -f "$f"; done
 psql -d biz360x -f tests/demo_and_checks.sql      # optional: demo data + 23 behaviour checks
 ```
 
