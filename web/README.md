@@ -27,6 +27,11 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/lib/onboarding.ts` | Identifier formats, answer bands, hint text. Unit-tested |
 | `src/app/(app)/page.tsx` | Today (Command Center) |
 | `src/app/(app)/compliance` | Obligations with the reason each applies, calendar, thresholds, re-run engine |
+| `src/app/(app)/billing` | Sales & Billing: KPIs, invoice list with tabs and search, issue a draft, how customers paid |
+| `src/app/(app)/billing/new` | Invoice editor. Every change calls `POST /sales-documents/preview`, so the tax shown is the server's, never recomputed in the browser |
+| `src/app/(app)/billing/[id]` | One document: lines, totals, e-invoice state, issue a draft |
+| `src/app/(app)/billing/quotes` | Quotes list (read-only for now) |
+| `src/lib/billing.ts` | Tab queries, status labels, line validation, request bodies. Unit-tested |
 | `src/app/(app)/m/[slug]` | Placeholder for screens that are not built yet |
 
 ## Rules for new screens
@@ -43,4 +48,4 @@ The access token lives in memory; the refresh token is in `sessionStorage` (it s
 
 ## Not built yet
 
-Advisor invites at the end of onboarding, the incorporation checklist for companies that do not exist yet, the invoice editor and billing screens, finance, GST, payroll, legal, documents, group view, settings, mobile layouts for Today/Compliance/Copilot/More, and the customer payment page. The design for each is in `design/screens/`.
+Advisor invites at the end of onboarding, the incorporation checklist for companies that do not exist yet, creating, sending and accepting quotes, credit notes, recording receipts and the dunning and recurring-invoice screens, finance, GST, payroll, legal, documents, group view, settings, mobile layouts for Today/Compliance/Copilot/More, and the customer payment page. The design for each is in `design/screens/`.

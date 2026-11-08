@@ -124,3 +124,57 @@ describe("onboarding helpers", () => {
     expect(isTrack("other")).toBe(false);
   });
 });
+
+import { ageLabel, blankLine, docBody, docStatus, einvoiceLabel, formReady, hasBlock, lineProblem, linesBody, linesComplete, tabQuery } from "./billing";
+
+describe("billing helpers", () => {
+  const good = { ...blankLine(), description: "Pressure transmitter", hsn_sac: "902620", qty: "10", rate: "1000.00" };
+  it("maps tabs to queries", () => {
+    expect(tabQuery("all")).toEqual({});
+    expect(tabQuery("overdue")).toEqual({ overdue: "true" });
+    expect(tabQuery("unpaid")).toEqual({ status: "issued", payment_status: "unpaid" });
+    expect(tabQuery("draft")).toEqual({ status: "draft" });
+  });
+  it("names a document's state", () => {
+    const base = { status: "issued", payment_status: "unpaid", days_overdue: 0, irn_status: "generated" };
+    expect(docStatus({ ...base, status: "draft" })).toEqual({ label: "Draft", tone: "prep" });
+    expect(docStatus(base).label).toBe("Unpaid");
+    expect(docStatus({ ...base, days_overdue: 12 })).toEqual({ label: "Overdue", tone: "due" });
+    expect(docStatus({ ...base, payment_status: "paid" }).tone).toBe("ok");
+    expect(docStatus({ ...base, payment_status: "partially_paid" }).label).toBe("Part paid");
+    expect(einvoiceLabel("pending", "issued")).toBe("IRN pending");
+    expect(einvoiceLabel("pending", "draft")).toBe("Not issued");
+    expect(einvoiceLabel("not_required", "issued")).toBe("E-invoice not required");
+  });
+  it("describes age", () => {
+    expect(ageLabel(12, "2026-10-01")).toBe("12 days overdue");
+    expect(ageLabel(1, "2026-10-01")).toBe("1 day overdue");
+    expect(ageLabel(0, "2026-11-10", new Date(2026, 10, 7))).toBe("Due in 3 days");
+    expect(ageLabel(0, "2026-11-07", new Date(2026, 10, 7))).toBe("Due today");
+    expect(ageLabel(0, null)).toBe("");
+  });
+  it("finds what is missing from a line", () => {
+    expect(lineProblem(good)).toBeNull();
+    expect(lineProblem({ ...good, description: " " })).toMatch(/Describe/);
+    expect(lineProblem({ ...good, hsn_sac: "12" })).toMatch(/HSN/);
+    expect(lineProblem({ ...good, qty: "0" })).toMatch(/Quantity/);
+    expect(lineProblem({ ...good, qty: "1e3" })).toMatch(/Quantity/);
+    expect(lineProblem({ ...good, rate: "" })).toMatch(/rate/);
+    expect(lineProblem({ ...good, gst_rate: "7" })).toMatch(/GST/);
+    expect(linesComplete([good, blankLine()])).toBe(false);
+    expect(linesComplete([])).toBe(false);
+  });
+  it("builds the request without doing any maths on money", () => {
+    expect(linesBody([{ ...good, description: " Pressure transmitter " }])[0]).toEqual({ description: "Pressure transmitter", hsn_sac: "902620", qty: "10", rate: "1000.00", gst_rate: 18, discount: "0", uqc: "NOS" });
+    const f = { registrationId: "R", partyId: "P", partyGstId: "", docDate: "2026-11-07", terms: "", po: " PO-7 ", lines: [good] };
+    expect(formReady(f)).toBe(true);
+    expect(docBody(f)).toMatchObject({ doc_type: "tax_invoice", registration_id: "R", party_id: "P", customer_po_ref: "PO-7" });
+    expect(docBody(f)).not.toHaveProperty("party_gst_id");
+    expect(docBody(f)).not.toHaveProperty("payment_terms_days");
+    expect(docBody({ ...f, partyGstId: "G", terms: "45" })).toMatchObject({ party_gst_id: "G", payment_terms_days: 45 });
+    expect(formReady({ ...f, partyId: "" })).toBe(false);
+    expect(formReady({ ...f, terms: "abc" })).toBe(false);
+    expect(hasBlock([{ level: "ok" }, { level: "block" }])).toBe(true);
+    expect(hasBlock([{ level: "warn" }])).toBe(false);
+  });
+});
