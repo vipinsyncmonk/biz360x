@@ -37,6 +37,7 @@ cd server && DATABASE_URL=… python -m app.worker
 # web (needs the API running on :8000)
 cd web && npm ci && npm run dev                           # :3000, forwards /api/v1 to the API
 cd web && npm run typecheck && npm test && npm run gen:api # gen:api must leave no diff
+powershell -ExecutionPolicy Bypass -File scripts/e2e-local.ps1  # browser tests (Playwright): resets a separate DB, starts API + worker in WSL and the web app, runs web/e2e, stops all. CI runs the same suite as the `e2e` job
 
 # contract
 python api/build_openapi.py api/openapi.yaml && npx @redocly/cli@1.25.0 lint api/openapi.yaml

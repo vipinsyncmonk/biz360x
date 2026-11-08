@@ -11,6 +11,17 @@ npm run gen:api        # regenerate src/api/schema.d.ts after the contract chang
 npm run typecheck && npm test
 ```
 
+## Browser tests
+
+`web/e2e` holds Playwright tests that drive the real app in Chromium against the real stack (PostgreSQL with the demo data, API, worker). `smoke.e2e.ts` signs in and opens every screen, failing on an error banner, an uncaught page error or a 5xx from the server. `flows.e2e.ts` runs the key flows end to end: issue an invoice, file a GSTR-1 with a wrong then the right one-time code, create and delete a data room, add a client to a firm. The tests change the demo data, so they always run on a freshly reset database.
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/e2e-local.ps1          # Windows with WSL: does everything and cleans up
+powershell -ExecutionPolicy Bypass -File scripts/e2e-local.ps1 -g invoice   # only tests whose name matches
+```
+
+On Linux, run `bash scripts/e2e-stack.sh start`, build and start the web app (`npx next build && npx next start -p 3000`), then `npx playwright install chromium && npm run e2e`, and `bash scripts/e2e-stack.sh stop` afterwards. CI does this in the `e2e` job and keeps the report when it fails.
+
 Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a company that is not already cached also run the worker (`python -m app.worker`); the development registry knows `U72900MH2022PTC999999` (Orchid Labs), which has no demo workspace. In development sign in with any seeded email, for example `ananya@example.in`, and the code `000000`.
 
 ## What is here
