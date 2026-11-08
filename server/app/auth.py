@@ -146,6 +146,19 @@ def request_code(email: str | None, mobile: str | None) -> None:
             pass
 
 
+def signup(email: str, full_name: str) -> None:
+    """Create the person if they do not exist, then send a code. Proving the mailbox is what makes the account usable, and an
+    account with no workspace can see nothing. The answer is the same whether or not the address was already registered, and an
+    existing person's name is never changed by someone who only knows their email."""
+    e = _norm(email)
+    name = " ".join(full_name.split())
+    if "@" not in e or len(e) > 254 or not name or len(name) > 120:
+        raise ApiError(400, "validation_failed", "A name and a valid email are required")
+    with tx(None, role="biz_worker") as cur:
+        cur.execute("INSERT INTO users (email, full_name, auth_provider) VALUES (%s, %s, 'otp') ON CONFLICT (email) DO NOTHING", (e, name))
+    request_code(e, None)
+
+
 def _verify_code(cur, ident: str, code: str) -> bool:
     if dev_code_enabled() and hmac.compare_digest(code, DEV_CODE):
         return True

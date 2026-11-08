@@ -10,6 +10,7 @@ interface Session {
   me: Me | null;
   entity: EntityRow | null;
   setEntityId: (id: string) => void;
+  reload: (selectEntityId?: string) => Promise<void>;
   login: (email: string, otp: string, mfa?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -26,13 +27,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [entityId, setId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (select?: string) => {
     try {
       const m = unwrap(await api.GET("/me"));
       setMe(m);
       const ids = (m.entities ?? []).map((e) => e.id);
-      const pick = remembered();
+      const pick = select ?? remembered();
       setId(pick && ids.includes(pick) ? pick : (ids[0] ?? null));
+      if (select) { try { window.localStorage.setItem(ENTITY_KEY, select); } catch { /* ignore */ } }
       setStatus("authed");
     } catch {
       clearTokens();
@@ -50,6 +52,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     status, me,
     entity: (me?.entities ?? []).find((e) => e.id === entityId) ?? null,
     setEntityId: (id) => { setId(id); try { window.localStorage.setItem(ENTITY_KEY, id); } catch { /* ignore */ } },
+    reload: (select) => load(select),
     login: async (email, otp, mfa) => { await signInWithCode(email, otp, mfa); await load(); },
     logout: async () => { await signOut(); setMe(null); setId(null); setStatus("anon"); },
   }), [status, me, entityId, load]);

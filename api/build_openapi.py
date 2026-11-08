@@ -239,6 +239,9 @@ schema("TokenResponse", {"access_token": S(), "refresh_token": S(), "token_type"
        required=("access_token", "token_type", "expires_in"))
 _op("post", "/auth/otp", "Auth", "requestOtp", "Send a one-time code", body=schema("OtpRequest", {"mobile_e164": S(), "email": S(format="email")}),
     status="204", security=[], desc="Rate-limited to 5 per hour per identifier. The answer is the same whether or not the person exists.")
+_op("post", "/auth/signup", "Auth", "signUp", "Create an account and send a one-time code",
+    body=schema("SignupRequest", {"email": S(format="email"), "full_name": S()}, required=("email", "full_name")),
+    status="204", security=[], desc="Same answer whether or not the address is registered; an existing person's name is not changed. 5 per minute per IP.")
 _op("post", "/auth/token", "Auth", "issueToken", "Exchange credentials, an OTP or a refresh token for tokens",
     body=schema("TokenRequest", {
         "grant_type": ENUM("password", "otp", "refresh_token", "authorization_code"),

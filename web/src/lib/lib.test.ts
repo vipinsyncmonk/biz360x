@@ -95,3 +95,32 @@ describe("tokens", () => {
     expect(needsRefresh(null, 0)).toBe(true);
   });
 });
+
+import { answersBody, DEFAULT_ANSWERS, hints, identifierKind, isLookupFinished, isTrack, normaliseIdentifier } from "./onboarding";
+
+describe("onboarding helpers", () => {
+  it("recognises what a person pastes", () => {
+    expect(identifierKind("u26510ka2019ptc123456")).toBe("cin");
+    expect(identifierKind(" U26510KA2019PTC123456 ")).toBe("cin");
+    expect(identifierKind("AAB-1234")).toBe("llpin");
+    expect(identifierKind("29AAHCN1234Q1Z8")).toBe("gstin");
+    expect(identifierKind("AAHCN1234Q")).toBe("pan");
+    expect(identifierKind("12345")).toBeNull();
+    expect(identifierKind("")).toBeNull();
+    expect(normaliseIdentifier(" 29aahcn 1234q1z8 ")).toBe("29AAHCN1234Q1Z8");
+  });
+  it("builds the request body the API expects", () => {
+    expect(answersBody("L1", "msme", ["29AAHCN1234Q1Z8"], { ...DEFAULT_ANSWERS, foreign: true })).toEqual({
+      lookup_id: "L1", track: "msme", gstins: ["29AAHCN1234Q1Z8"], headcount_band: "20-49", turnover_band: "1.5-5cr", has_foreign_shareholder: true, buys_from_mse: "unsure",
+    });
+  });
+  it("explains each answer and knows when a lookup is over", () => {
+    expect(hints.foreign(true)).toMatch(/FEMA/);
+    expect(hints.headcount("1-9")).toMatch(/Below/);
+    expect(hints.turnover(">10cr")).toMatch(/audit/);
+    expect(isLookupFinished("running")).toBe(false);
+    expect(["found", "not_found", "failed"].every(isLookupFinished)).toBe(true);
+    expect(isTrack("startup")).toBe(true);
+    expect(isTrack("other")).toBe(false);
+  });
+});
