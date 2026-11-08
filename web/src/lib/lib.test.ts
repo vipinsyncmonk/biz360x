@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays, formatInr, greeting, initials, isoDate, shortDate, sumMoney, toPaise } from "./format";
-import { daysLabel, kpis, monthGrid, standing, statusInfo, weekBuckets } from "./compliance";
+import { clauseText, dueRuleText, daysLabel, factLabel, kpis, monthGrid, reasonLines, standing, statusInfo, weekBuckets } from "./compliance";
 import { decodeExp, needsRefresh } from "./tokens";
 import { unwrapEmpty } from "./api";
 import { DEPOSIT_RULE, depositNote, depositOptions, plainError, blankChallan, canPay, canValidate, challanBody, challanProblem, deductionTotals, fyChoices, fyOf, instalmentState, nextInstalment, unmatched, validationNote } from "./tds";
@@ -909,5 +909,41 @@ describe("TDS deposit", () => {
     expect(plainError("Deduction 49f4a4ab-5694-4fa5-b51e-32dc36dd9cdc (194C) has no challan")).toBe("A 194C deduction has no challan");
     expect(plainError("The return has no deductions")).toBe("The return has no deductions");
     expect(validationNote({ valid: false, errors: ["Deduction 49f4a4ab-5694-4fa5-b51e-32dc36dd9cdc (194J) is on a challan that is not paid"] }).lines).toEqual(["A 194J deduction is on a challan that is not paid"]);
+  });
+});
+
+describe("why it applies", () => {
+  it("spells out fact names", () => {
+    expect(factLabel("gst_frequency")).toBe("GST filing frequency");
+    expect(factLabel("has_foreign_investor")).toBe("Has foreign investor");
+    expect(factLabel("tds_threshold_pf")).toBe("TDS threshold PF");
+    expect(factLabel("")).toBe("");
+  });
+  it("words one test the engine ran", () => {
+    expect(clauseText({ fact: "gst_frequency", op: "=", value: "monthly", actual: "monthly", result: true, missing: false })).toEqual({ text: "GST filing frequency is monthly", met: true, note: "met" });
+    expect(clauseText({ fact: "headcount", op: ">=", value: 20, actual: 12, result: false, missing: false })).toEqual({ text: "Headcount is at least 20", met: false, note: "not met (yours: 12)" });
+    expect(clauseText({ fact: "has_tan", op: "=", value: true, actual: null, result: false, missing: true })).toEqual({ text: "Has a TAN: yes", met: false, note: "not known yet" });
+    expect(clauseText({ fact: "udyam_class", op: "in", value: ["micro", "small"], actual: "medium", result: false, missing: false }).text).toBe("Udyam class is one of micro, small");
+  });
+  it("words the due rule", () => {
+    expect(dueRuleText({ type: "day_of_following_month", day: 20 })).toBe("The 20th of the month after the period");
+    expect(dueRuleText({ type: "day_of_following_month", day: 7, exceptions: { "03": {} } })).toBe("The 7th of the month after the period, with exceptions for some months");
+    expect(dueRuleText({ type: "day_of_following_month", day: 11 })).toBe("The 11th of the month after the period");
+    expect(dueRuleText({ type: "day_of_following_month", day: 22 })).toBe("The 22nd of the month after the period");
+    expect(dueRuleText({ type: "fixed_dates", dates: { Q1: "07-31", Q2: "10-31" } })).toBe("Fixed dates: Q1 by 31 July, Q2 by 31 October");
+    expect(dueRuleText({ type: "days_after_event", event: "agm", days: 30 })).toBe("30 days after AGM");
+    expect(dueRuleText({ type: "per_document", when: "before_issue" })).toBe("Each time a document is issued");
+    expect(dueRuleText({ type: "something_new" })).toBe('{"type":"something_new"}');
+    expect(dueRuleText(null)).toBe("");
+  });
+  it("lines up the rule, due rule and registration", () => {
+    const lines = reasonLines({ rule: { code: "GST.GSTR3B.MONTHLY", version: 1, statute_ref: "CGST Act s.39; r.61" }, due_rule: { type: "day_of_following_month", day: 20 }, registration: { kind: "gstin", number: "27AAKCO5678M1Z2" }, applicability: [] });
+    expect(lines).toEqual([
+      { label: "Rule", text: "GST.GSTR3B.MONTHLY · version 1 · CGST Act s.39; r.61" },
+      { label: "When it is due", text: "The 20th of the month after the period" },
+      { label: "Registration", text: "GSTIN 27AAKCO5678M1Z2" },
+    ]);
+    expect(reasonLines({ provisional: "assumes the latest date" })).toEqual([{ label: "Note", text: "assumes the latest date" }]);
+    expect(reasonLines({})).toEqual([]);
   });
 });

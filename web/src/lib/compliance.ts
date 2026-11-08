@@ -118,3 +118,67 @@ export function monthGrid(year: number, month0: number): Array<Array<number | nu
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
   return rows;
 }
+
+// ---- "why it applies": the engine's recorded reason, in words
+const ACRONYMS = new Set(["gst", "gstin", "tds", "tan", "pan", "pf", "esi", "pt", "mca", "msme", "agm", "aato", "dpiit", "mse", "itr", "epfo", "esic"]);
+const FACT_WORDS: Record<string, string> = {
+  gst_frequency: "GST filing frequency", aato: "Annual turnover (AATO)", turnover_max_any_year: "Highest yearly turnover", has_mse_dues_over_45_days: "Dues to small suppliers over 45 days",
+  employs_in_state_29: "Employs people in Karnataka", udyam_class: "Udyam class", udyam_registered: "Registered on Udyam", dpiit_recognised: "DPIIT recognised",
+  has_tan: "Has a TAN", is_new_unit: "New unit", age_years: "Age of the company (years)", estimated_tax: "Estimated tax for the year",
+};
+/** "gst_frequency" -> "GST filing frequency"; unknown keys are spelled out with known acronyms in capitals. */
+export function factLabel(key: string): string {
+  if (FACT_WORDS[key]) return FACT_WORDS[key];
+  const words = key.split("_").filter(Boolean).map((w) => (ACRONYMS.has(w) ? w.toUpperCase() : w));
+  const s = words.join(" ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+const valueText = (v: unknown): string => {
+  if (v === true) return "yes";
+  if (v === false) return "no";
+  if (v === null || v === undefined) return "not set";
+  if (Array.isArray(v)) return v.map(valueText).join(", ");
+  if (typeof v === "string") return v.replace(/_/g, " ");
+  return String(v);
+};
+const OP_WORDS: Record<string, string> = { "=": "is", "!=": "is not", ">=": "is at least", ">": "is more than", "<=": "is at most", "<": "is less than", in: "is one of" };
+
+export interface Clause { fact?: string; op?: string; value?: unknown; actual?: unknown; result?: boolean; missing?: boolean }
+/** One test the engine ran: "GST filing frequency is monthly" with whether it was met and, if not, what the company has. */
+export function clauseText(c: Clause): { text: string; met: boolean; note: string } {
+  const label = factLabel(c.fact ?? "");
+  const text = typeof c.value === "boolean" && c.op === "=" ? `${label}: ${valueText(c.value)}` : `${label} ${OP_WORDS[c.op ?? ""] ?? c.op ?? ""} ${valueText(c.value)}`.trim();
+  if (c.missing) return { text, met: false, note: "not known yet" };
+  if (c.result) return { text, met: true, note: "met" };
+  return { text, met: false, note: `not met (yours: ${valueText(c.actual)})` };
+}
+
+const ORD = (n: number) => `${n}${[11, 12, 13].includes(n % 100) ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th"}`;
+const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const mmdd = (s: string) => { const [m, d] = s.split("-").map(Number); return `${d} ${MONTHS_LONG[(m ?? 1) - 1] ?? ""}`; };
+/** The due-date rule in a sentence. */
+export function dueRuleText(r: unknown): string {
+  if (!r || typeof r !== "object") return "";
+  const x = r as Record<string, unknown>;
+  switch (x.type) {
+    case "day_of_following_month": return `The ${ORD(Number(x.day))} of the month after the period${x.exceptions ? ", with exceptions for some months" : ""}`;
+    case "fixed_dates": return `Fixed dates: ${Object.entries((x.dates ?? {}) as Record<string, string>).map(([k, v]) => `${k} by ${mmdd(v)}`).join(", ")}`;
+    case "days_after_event": return `${x.days} days after ${valueText(x.event).toUpperCase()}`;
+    case "per_document": return "Each time a document is issued";
+    default: return JSON.stringify(r);
+  }
+}
+
+export interface ReasonLine { label: string; text: string }
+/** The rule version, due rule and registration, in words. Applicability is read separately with clauseText. */
+export function reasonLines(reason: Record<string, unknown>): ReasonLine[] {
+  const out: ReasonLine[] = [];
+  const rule = reason.rule as { code?: string; version?: number; statute_ref?: string } | undefined;
+  if (rule) out.push({ label: "Rule", text: [rule.code, rule.version !== undefined ? `version ${rule.version}` : "", rule.statute_ref].filter(Boolean).join(" · ") });
+  if (reason.due_rule) out.push({ label: "When it is due", text: dueRuleText(reason.due_rule) });
+  const reg = reason.registration as { kind?: string; number?: string } | undefined;
+  if (reg) out.push({ label: "Registration", text: `${(reg.kind ?? "").toUpperCase()} ${reg.number ?? ""}`.trim() });
+  if (typeof reason.provisional === "string") out.push({ label: "Note", text: reason.provisional });
+  return out;
+}

@@ -3,10 +3,10 @@ import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, unwrap, type Obligation } from "@/lib/api";
 import { formatInr, isoDate, shortDate } from "@/lib/format";
-import { CLOSED, daysLabel, monthGrid, statusInfo, type CalDay } from "@/lib/compliance";
+import { CLOSED, clauseText, daysLabel, monthGrid, reasonLines, statusInfo, type CalDay, type Clause } from "@/lib/compliance";
 import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import { ErrorNote, Loading, StatusPill } from "@/components/ui";
+import { ErrorNote, Loading, Pill, StatusPill } from "@/components/ui";
 
 type Tab = "list" | "calendar" | "thresholds";
 const STATUS_FILTERS: Array<[string, string]> = [["open", "Open"], ["needs", "Needs action"], ["filed", "Filed"], ["all", "All"]];
@@ -136,9 +136,20 @@ function Detail({ o }: { o: Obligation }) {
       <div>
         <span className="mono t13">WHY IT APPLIES</span>
         {Object.keys(reason).length === 0 ? <p className="t13">No reason was recorded for this obligation.</p> : (
-          <dl className="facts" style={{ marginTop: 8 }}>
-            {Object.entries(reason).map(([k, v]) => <div key={k} style={{ display: "contents" }}><dt className="mono">{k.toUpperCase().replace(/_/g, " ")}</dt><dd>{typeof v === "object" ? JSON.stringify(v) : String(v)}</dd></div>)}
-          </dl>
+          <>
+            <dl className="facts" style={{ marginTop: 8 }}>
+              {reasonLines(reason).map((l) => <div key={l.label} style={{ display: "contents" }}><dt className="mono">{l.label.toUpperCase()}</dt><dd>{l.text}</dd></div>)}
+            </dl>
+            {Array.isArray(reason.applicability) && reason.applicability.length > 0 && (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                <span className="t13">It applies to you when:</span>
+                {(reason.applicability as Clause[]).map((c, i) => {
+                  const t = clauseText(c);
+                  return <div key={i} style={{ fontSize: 14, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><Pill tone={t.met ? "ok" : "due"}>{t.met ? "Met" : "Not met"}</Pill>{t.text}{!t.met || c.missing ? <span className="t13">· {t.note}</span> : null}</div>;
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
       <p className="t13" style={{ margin: 0 }}>Dates, fees and thresholds are a starter library and need review by a CA or CS before you rely on them.</p>
