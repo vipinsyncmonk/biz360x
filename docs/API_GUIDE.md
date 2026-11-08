@@ -144,7 +144,7 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `parties`, `sale
 | Startup workspace | `GET /cap-table?scenario=…`, `GET /funding-rounds/{id}` (steps), `GET /benefits`, `GET /meetings`, `GET /esop-grants` |
 | MSME workspace | `GET /receivables/ageing`, `GET /benefits`, `GET /entities/{id}` (Udyam), `POST /delayed-payment-claims`, `POST /treds-invoices` |
 | Copilot (web + mobile) | `/copilot/threads`, `…/messages` (SSE), `…/actions/{id}/request-approval` |
-| Finance & Books | `GET /periods`, `GET /periods/{id}/close-tasks`, `PATCH …/close-tasks/{taskId}`, `GET /bank-transactions?match_status=suggested`, `POST /bank-accounts/{id}/transactions`, `POST /bank-matches/{id}/accept`, `GET /reports/profit-and-loss`, `GET /reports/cash-bridge`, `POST /periods/{id}/lock` |
+| Finance & Books | `GET /finance/summary`, `GET /periods`, `GET /periods/{id}/close-tasks`, `PATCH …/close-tasks/{taskId}`, `GET /bank-transactions?match_status=suggested`, `POST /bank-accounts/{id}/transactions`, `POST /bank-matches/{id}/accept`, `POST /bank-matches/{id}/reject`, `GET /reports/profit-and-loss`, `GET /reports/cash-bridge`, `POST /periods/{id}/lock` |
 | Payroll & HR | `GET /payroll-runs/{id}`, `GET /payroll-runs/{id}/payslips`, `GET /payroll/wage-code-check`, `GET /obligations?authority=EPFO` |
 | GST & Tax | `GET /gst-returns?period=…`, `GET /itc-matches`, `GET /itc-matches/summary`, `POST /itc-matches/{id}/resolve`, `POST /itc-matches/remind-suppliers`, `GET /gst/ledger-balances`, `GET /tds-deductions`, `GET /advance-tax` |
 | Legal & Contracts | `GET /contracts?notice_within_days=30`, `GET /contracts/{id}`, `POST …/extract-terms`, `POST …/notices`, `GET /signature-requests`, `GET /contract-templates` |
