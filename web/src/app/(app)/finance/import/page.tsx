@@ -87,7 +87,7 @@ export default function ImportStatement() {
   return (
     <main className="page">
       <div>
-        <Link href="/finance" className="muted" style={{ fontSize: 14 }}>← Finance &amp; Books</Link>
+        <Link href="/finance" className="muted" style={{ fontSize: 14 }}>← Finance &amp; Books</Link> <span className="t13">· <Link href="/finance/history">Opening balances, open invoices and bills</Link></span>
         <h1 className="disp" style={{ margin: "6px 0 0", fontSize: 36 }}>Import a bank statement</h1>
       </div>
       <span className="t13">Save the statement from your bank as CSV and choose it here. Nothing is sent until you have seen what was read and checked it against what is already on the account. Lines already imported are skipped, so overlapping statements are safe.</span>

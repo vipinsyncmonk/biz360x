@@ -2383,6 +2383,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/history/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check or save the opening position from earlier books
+         * @description `opening_balances` rows: account_code, account_name, type, subtype?, debit, credit (the trial balance must tie). `open_invoices` rows: number, date, customer_name, customer_gstin?, place_of_supply?, taxable, cgst, sgst, igst, total, outstanding?, due_date?. `open_bills` rows: bill_no, date, supplier_name, supplier_gstin?, supplier_state?, taxable, cgst, sgst, igst, total, tds?, outstanding?, due_date?. Dry run is the default and returns every problem by row; a real import is all or nothing (422 `import_rejected`). Invoices and bills are records of the position on the cut-off date: nothing is e-invoiced, filed or posted to the ledger, and bills are marked as already claimed in their month's return.
+         */
+        post: operations["importHistory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/history/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List earlier-books imports */
+        get: operations["listHistoryBatches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/history/batches/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo an earlier-books import
+         * @description Removes the invoices or bills of the batch, or reverses its opening journal. Refused (409) once money has been received or paid against them.
+         */
+        post: operations["undoHistoryBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/bank-accounts/{id}/transactions": {
         parameters: {
             query?: never;
@@ -5634,6 +5691,59 @@ export interface components {
             duplicate_ids?: string[];
             earliest_existing?: string | null;
             latest_existing?: string | null;
+        };
+        HistoryProblem: {
+            /** @description 1-based row in the upload; 0 for a problem with the whole file */
+            row: number;
+            field?: string | null;
+            message: string;
+        };
+        HistoryBatch: {
+            /** Format: uuid */
+            readonly id?: string;
+            /** @enum {string} */
+            kind?: "opening_balances" | "open_invoices" | "open_bills";
+            label?: string | null;
+            /** Format: date */
+            as_of?: string;
+            row_count?: number;
+            summary?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            readonly created_at?: string;
+            undone_at?: string | null;
+        };
+        HistoryImport: {
+            /** @enum {string} */
+            kind: "opening_balances" | "open_invoices" | "open_bills";
+            /** Format: date */
+            as_of: string;
+            label?: string | null;
+            /**
+             * @description Check only; nothing is saved
+             * @default true
+             */
+            dry_run: boolean;
+            rows: {
+                [key: string]: unknown;
+            }[];
+        };
+        HistoryImportResult: {
+            kind?: string;
+            dry_run?: boolean;
+            accepted?: number;
+            problem_count?: number;
+            problems?: components["schemas"]["HistoryProblem"][];
+            warnings?: string[];
+            summary?: {
+                [key: string]: unknown;
+            };
+            batch_id?: string | null;
+        };
+        HistoryBatchList: {
+            data?: components["schemas"]["HistoryBatch"][];
+            next_cursor?: string | null;
         };
         BankFeedLine: {
             /** @description Dedupe key from the feed */
@@ -12659,6 +12769,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BankFeedPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    importHistory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HistoryImport"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryImportResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listHistoryBatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryBatchList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    undoHistoryBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryBatch"];
                 };
             };
             400: components["responses"]["BadRequest"];

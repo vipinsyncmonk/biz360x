@@ -68,7 +68,7 @@ export default function Finance() {
           <section className="card" style={{ overflow: "hidden" }}>
             <div style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line-2)" }}>
               <h2 style={{ margin: 0 }}>Bank reconciliation</h2>
-              <span className="t13">{open.length} {open.length === 1 ? "line" : "lines"} left · <Link href="/finance/import">Import a statement</Link></span>
+              <span className="t13">{open.length} {open.length === 1 ? "line" : "lines"} left · <Link href="/finance/import">Import a statement</Link> · <Link href="/finance/history">Opening balances</Link></span>
             </div>
             <div style={{ padding: "0 20px" }}><ErrorNote error={txns.error} /></div>
             {txns.loading ? <Loading what="bank lines" /> : (
