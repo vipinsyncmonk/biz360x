@@ -1,0 +1,30 @@
+{
+  "name": "biz360x-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "gen:api": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts"
+  },
+  "dependencies": {
+    "next": "^15.5.29",
+    "openapi-fetch": "^0.14.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "openapi-typescript": "^7.9.0",
+    "typescript": "~5.9.0",
+    "vitest": "^3.2.0"
+  },
+  "overrides": {
+    "postcss": "^8.5.23"
+  }
+}
