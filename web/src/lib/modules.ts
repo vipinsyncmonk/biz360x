@@ -14,7 +14,7 @@ const I = {
   book: "M4 4h16v16H4zM4 10h16M10 4v16", gst: "M7 3h10l2 4H5zM5 7v14h14V7M9 13h6M9 17h4", tax: "M6 3h9l3 3v15H6zM9 12h6M9 16h6M9 8h3", bank: "M3 10l9-6 9 6M5 10v9M19 10v9M9 10v9M15 10v9M3 21h18",
   up: "M4 19l5-6 4 3 7-9M15 7h5v5", cart: "M3 4h3l2 12h11l2-8H7M10 20h.01M17 20h.01", box: "M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10", build: "M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6",
   graph: "M5 5h4v4H5zM15 5h4v4h-4zM10 15h4v4h-4zM7 9l4 6M17 9l-4 6", ledger: "M5 3h12a2 2 0 0 1 2 2v16H7a2 2 0 0 1-2-2zM9 7h6M9 11h6", flow: "M4 6h6v4H4zM14 14h6v4h-6zM7 10v4a2 2 0 0 0 2 2h5",
-  key: "M15 7a4 4 0 1 1-3.9 5H3v3h3v3h3v-3h2.1A4 4 0 0 1 15 7z", folder: "M3 7h6l2 2h10v11H3z",
+  key: "M15 7a4 4 0 1 1-3.9 5H3v3h3v3h3v-3h2.1A4 4 0 0 1 15 7z", ship: "M3 17l2 3h14l2-3M5 17l-1-6h16l-1 6M12 11V4l5 4M12 4L7 8", folder: "M3 7h6l2 2h10v11H3z",
 };
 
 const m = (name: string, about: string, icon: string, tracks: Track[], href: string | null): Module => ({ name, about, icon, tracks, href });
@@ -45,6 +45,7 @@ export const LAYERS: Layer[] = [
     m("Sales & Receivables", "Quotes, invoices, dunning, MSME-aware ageing.", I.up, ALL, "/billing"),
     m("Procurement & Vendors", "Purchase orders, bills, vendor KYC, 45-day payment tracking.", I.cart, ["Business", "MSME"], null),
     m("Inventory & Dispatch", "Stock, BOM, dispatch orders linked to e-way bills.", I.box, ["MSME", "Business"], null),
+    m("Exports & Imports", "Shipping bills, the nine-month clock for proceeds, LUT, RoDTEP and drawback, bills of entry.", I.ship, ["Business", "MSME"], "/trade"),
   ] },
   { key: "L1 · FOUNDATION", title: "Foundation", about: "Shared core every module writes to. Always on.", modules: [
     m("Entity & Incorporation", "Name approval, SPICe+, LLP, changes, multi-entity.", I.build, ALL, null),
@@ -64,7 +65,7 @@ export function countLine(track: Track | "All"): string {
   const all = allModules();
   return track === "All" ? `${all.length} modules across ${LAYERS.length} layers` : `${all.filter((x) => switchedOn(x, track)).length} of ${all.length} modules switch on for ${track}`;
 }
-/** How much of the map has a screen: "20 of 26 modules have a screen". */
+/** How much of the map has a screen: "20 of 27 modules have a screen". */
 export function coverage(track: Track | "All"): { withScreen: number; total: number } {
   const mods = allModules().filter((x) => switchedOn(x, track));
   return { withScreen: mods.filter(hasScreen).length, total: mods.length };
