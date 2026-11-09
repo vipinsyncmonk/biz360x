@@ -265,6 +265,71 @@ def open_draft_shipping_bill(cur, entity_id, doc_id, number) -> uuid.UUID | None
     return sid
 
 
+def invoice_goods_foreign(cur, doc_id):
+    """What is to be shipped on an export invoice, in the foreign currency: its goods, less the goods credited back by issued credit notes."""
+    cur.execute("""SELECT d.exchange_rate,
+                          coalesce((SELECT sum(l.taxable_value) FROM sales_document_lines l WHERE l.document_id = d.id AND NOT l.is_service), 0)
+                        - coalesce((SELECT sum(l.taxable_value) FROM sales_documents c JOIN sales_document_lines l ON l.document_id = c.id
+                                     WHERE c.original_document_id = d.id AND c.doc_type = 'credit_note' AND c.status = 'issued' AND NOT l.is_service), 0) AS goods
+                     FROM sales_documents d WHERE d.id = %s""", (doc_id,))
+    r = cur.fetchone()
+    if not r or not r["exchange_rate"]:
+        return None
+    return max(tax.foreign_amount(r["goods"], r["exchange_rate"]), Decimal("0"))
+
+
+def check_shipment_total(cur, doc_id) -> None:
+    """The shipping bills of one export invoice together cannot be worth more than the goods on it."""
+    target = invoice_goods_foreign(cur, doc_id)
+    if target is None:
+        return
+    cur.execute("SELECT coalesce(sum(fob_foreign), 0) AS n FROM shipping_bills WHERE sales_document_id = %s", (doc_id,))
+    total = cur.fetchone()["n"]
+    if total > target + trade.TOLERANCE:
+        raise ApiError(409, "shipments_exceed_invoice", "These shipping bills are worth more than the goods on the invoice",
+                       f"The invoice's goods come to {target}; its shipping bills would come to {total}. A partial shipment takes only its share.")
+
+
+def reconcile_shipments(cur, entity_id, doc_id, number=None) -> None:
+    """Keep the draft shipping bill in step with the goods still to ship on an export invoice.
+    Goods credited back reduce the draft (or remove it); goods not yet covered by any shipping bill, once one has been filed, open a draft for the rest (a partial shipment).
+    A credit that no draft can absorb leaves a task: the filed shipping bill is customs' and is amended there."""
+    target = invoice_goods_foreign(cur, doc_id)
+    if target is None:
+        return
+    cur.execute("""SELECT s.id, s.status, s.fob_foreign, s.currency, s.exchange_rate, s.buyer_party_id,
+                          EXISTS (SELECT 1 FROM export_realisations r WHERE r.shipping_bill_id = s.id) AS has_money
+                     FROM shipping_bills s WHERE s.sales_document_id = %s ORDER BY s.created_at""", (doc_id,))
+    bills = cur.fetchall()
+    if not bills:
+        return
+    total = sum((b["fob_foreign"] for b in bills), Decimal("0"))
+    excess = total - target
+    if excess > trade.TOLERANCE:
+        for b in bills:
+            if b["status"] != "draft" or b["has_money"] or excess <= trade.TOLERANCE:
+                continue
+            cut = min(b["fob_foreign"], excess)
+            if b["fob_foreign"] - cut <= trade.TOLERANCE:
+                cur.execute("DELETE FROM shipping_bills WHERE id = %s", (b["id"],))
+            else:
+                cur.execute("UPDATE shipping_bills SET fob_foreign = fob_foreign - %s WHERE id = %s", (cut, b["id"]))
+            audit(cur, entity_id, "shipping_bill.reduced", "shipping_bills", b["id"], after={"reduced_by": cut, "sales_document_id": str(doc_id)})
+            excess -= cut
+        if excess > trade.TOLERANCE:
+            cur.execute("INSERT INTO tasks (entity_id, title, due_on, source) VALUES (%s, %s, %s, 'engine')",
+                        (entity_id, f"Goods worth {bills[0]['currency']} {excess:,.2f} on export invoice {number or ''} were credited back: have the filed shipping bill amended with customs",
+                         dt.date.today()))
+    elif -excess > trade.TOLERANCE and any(b["status"] != "draft" for b in bills) and not any(b["status"] == "draft" for b in bills):
+        b = bills[0]
+        cur.execute("""INSERT INTO shipping_bills (entity_id, sales_document_id, buyer_party_id, currency, fob_foreign, exchange_rate, status)
+                       VALUES (%s, %s, %s, %s, %s, %s, 'draft') RETURNING id""", (entity_id, doc_id, b["buyer_party_id"], b["currency"], -excess, b["exchange_rate"]))
+        sid = cur.fetchone()["id"]
+        cur.execute("INSERT INTO tasks (entity_id, title, due_on, source) VALUES (%s, %s, %s, 'engine')",
+                    (entity_id, f"Part of the goods on export invoice {number or ''} ({b['currency']} {-excess:,.2f}) is still to ship: add its shipping bill details when customs issues them", dt.date.today()))
+        audit(cur, entity_id, "shipping_bill.drafted", "shipping_bills", sid, after={"sales_document_id": str(doc_id), "fob_foreign": -excess, "partial": True})
+
+
 def issue_core(cur, entity_id, doc_id, *, eway_bill: bool = True, payment_link: bool = True) -> dict:
     """Take the next number, post the journal, settle a credit note against its invoice, queue the IRN job.
     Runs in the caller's transaction (API request or worker)."""
@@ -286,6 +351,11 @@ def issue_core(cur, entity_id, doc_id, *, eway_bill: bool = True, payment_link: 
     ledger.post_sales_document(cur, entity_id, doc_id)
     if d["doc_type"] == "export_invoice":
         open_draft_shipping_bill(cur, entity_id, doc_id, number)
+    if d["doc_type"] == "credit_note" and d["original_document_id"]:
+        cur.execute("SELECT doc_type::text AS t, number FROM sales_documents WHERE id = %s", (d["original_document_id"],))
+        o = cur.fetchone()
+        if o and o["t"] == "export_invoice":                 # goods credited back are no longer to be shipped
+            reconcile_shipments(cur, entity_id, d["original_document_id"], o["number"])
     if d["doc_type"] == "credit_note":                       # a credit note reduces what the customer owes on the invoice
         cur.execute("SELECT balance_due FROM sales_documents WHERE id = %s", (d["original_document_id"],))
         applicable = min(d["grand_total"], cur.fetchone()["balance_due"])

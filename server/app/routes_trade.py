@@ -10,12 +10,14 @@ import uuid
 from decimal import Decimal
 from typing import Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import trade
-from .core import ApiError, Auth, Principal, audit, emit, require, tx
+from . import ledger, trade
+from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, require, tx
 from .routes_orders import js, offset_of, page
+from .routes_sales import check_shipment_total, reconcile_shipments
 
 router = APIRouter()
 E = "/entities/{entity_id}"
@@ -73,7 +75,8 @@ def _sb_out(cur, entity_id, sid) -> dict:
     s = cur.fetchone()
     if not s:
         raise ApiError(404, "not_found", "Not found")
-    cur.execute("SELECT id, received_on, amount_foreign, bank_ref, firc_no FROM export_realisations WHERE shipping_bill_id = %s ORDER BY received_on, created_at", (sid,))
+    cur.execute("""SELECT id, received_on, amount_foreign, bank_ref, firc_no, amount_inr, bank_charges, booked_inr, forex_gain, receipt_id
+                     FROM export_realisations WHERE shipping_bill_id = %s ORDER BY received_on, created_at""", (sid,))
     s["realisations"] = cur.fetchall()
     st = trade.realisation_state(s["fob_foreign"], s["realised_foreign"], s["exported_on"], dt.date.today())
     s["realisation_state"] = st["state"]
@@ -125,6 +128,8 @@ def create_shipping_bill(entity_id: uuid.UUID, body: ShippingBillIn, p: Principa
                                       exported_on = %s, rodtep_claimed = %s, drawback_claimed = %s, brc_ref = %s WHERE id = %s""",
                             (body.sb_number, body.sb_date, body.port_code, body.currency, body.fob_foreign, body.exchange_rate, body.status, body.exported_on,
                              body.rodtep_claimed, body.drawback_claimed, body.brc_ref, draft["id"]))
+                check_shipment_total(cur, body.sales_document_id)
+                reconcile_shipments(cur, entity_id, body.sales_document_id)
                 if body.exported_on:
                     _realisation_task(cur, entity_id, body.sb_number, body.exported_on, body.fob_foreign, body.currency)
                 audit(cur, entity_id, "shipping_bill.recorded", "shipping_bills", draft["id"], after={"sb_number": body.sb_number, "fob_foreign": body.fob_foreign, "currency": body.currency})
@@ -135,6 +140,9 @@ def create_shipping_bill(entity_id: uuid.UUID, body: ShippingBillIn, p: Principa
                     (entity_id, body.sales_document_id, buyer, body.sb_number, body.sb_date, body.port_code, body.currency, body.fob_foreign, body.exchange_rate, body.status,
                      body.exported_on, body.rodtep_claimed, body.drawback_claimed, body.brc_ref))
         sid = cur.fetchone()["id"]
+        if body.sales_document_id:
+            check_shipment_total(cur, body.sales_document_id)
+            reconcile_shipments(cur, entity_id, body.sales_document_id)
         if body.exported_on:
             _realisation_task(cur, entity_id, body.sb_number, body.exported_on, body.fob_foreign, body.currency)
         audit(cur, entity_id, "shipping_bill.recorded", "shipping_bills", sid, after={"sb_number": body.sb_number, "fob_foreign": body.fob_foreign, "currency": body.currency})
@@ -196,6 +204,12 @@ def update_shipping_bill(entity_id: uuid.UUID, sb_id: uuid.UUID, body: ShippingB
                 raise ApiError(409, "conflict", "The date of export is already recorded", "It starts the realisation clock, so it is not changed after the fact.")
         sets = ", ".join(f"{k} = %s" for k in changes)
         cur.execute(f"UPDATE shipping_bills SET {sets} WHERE id = %s", (*changes.values(), sb_id))
+        cur.execute("SELECT sales_document_id FROM shipping_bills WHERE id = %s", (sb_id,))
+        doc = cur.fetchone()["sales_document_id"]
+        if doc and ("fob_foreign" in changes or (s["status"] == "draft" and changes.get("status", "draft") != "draft")):
+            check_shipment_total(cur, doc)
+            if s["status"] == "draft" and changes.get("status", "draft") != "draft":
+                reconcile_shipments(cur, entity_id, doc)
         if changes.get("exported_on") and not s["exported_on"]:
             _realisation_task(cur, entity_id, s["sb_number"], changes["exported_on"], s["fob_foreign"], s["currency"])
         audit(cur, entity_id, "shipping_bill.updated", "shipping_bills", sb_id, before={"status": s["status"]}, after=js(changes))
@@ -207,14 +221,24 @@ class RealisationIn(BaseModel):
     amount_foreign: Money = Field(gt=0, max_digits=15, decimal_places=2)
     bank_ref: str | None = Field(default=None, max_length=60)
     firc_no: str | None = Field(default=None, max_length=60)
+    amount_inr: Money | None = Field(default=None, gt=0, max_digits=15, decimal_places=2)     # what the bank credited, net of its charges: posts the receipt and the forex gain or loss
+    bank_charges: Money = Field(default=Decimal("0"), ge=0, max_digits=15, decimal_places=2)
+    bank_account_id: uuid.UUID | None = None
 
 
 @router.post(E + "/shipping-bills/{sb_id}/realisations", status_code=201, tags=["Export & import"])
-def record_realisation(entity_id: uuid.UUID, sb_id: uuid.UUID, body: RealisationIn, p: Principal = Auth):
-    """Money that has come in against a shipping bill. It may arrive before the goods leave (an advance); it may not exceed what is owed."""
+def record_realisation(entity_id: uuid.UUID, sb_id: uuid.UUID, body: RealisationIn, p: Principal = Auth,
+                       idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
+    """Money that has come in against a shipping bill. It may arrive before the goods leave (an advance); it may not exceed what is owed.
+    With the rupees the bank credited it also settles the export invoice and posts the foreign exchange gain or loss."""
     with tx(p.user_id) as cur:
         require(cur, entity_id, "trade:write")
-        cur.execute("SELECT fob_foreign, sb_date FROM shipping_bills WHERE id = %s AND entity_id = %s FOR UPDATE", (sb_id, entity_id))
+        if body.amount_inr is None and (body.bank_charges or body.bank_account_id):
+            raise ApiError(400, "validation_failed", "Bank charges and the bank account go with the rupees credited", errors=[{"field": "amount_inr", "message": "enter what the bank credited"}])
+        replay = idempotency_begin(cur, idempotency_key, "POST", f"/entities/{entity_id}/shipping-bills/{sb_id}/realisations", body.model_dump(mode="json")) if body.amount_inr else None
+        if replay:
+            return JSONResponse(replay["body"], status_code=replay["status"])
+        cur.execute("SELECT fob_foreign, sb_date, sales_document_id FROM shipping_bills WHERE id = %s AND entity_id = %s FOR UPDATE", (sb_id, entity_id))
         s = cur.fetchone()
         if not s:
             raise ApiError(404, "not_found", "Not found")
@@ -224,11 +248,55 @@ def record_realisation(entity_id: uuid.UUID, sb_id: uuid.UUID, body: Realisation
         already = cur.fetchone()["n"]
         if already + body.amount_foreign > s["fob_foreign"] + trade.TOLERANCE:
             raise ApiError(409, "conflict", "That is more than the shipping bill is worth", f"{s['fob_foreign'] - already} is still to be realised.")
-        cur.execute("INSERT INTO export_realisations (entity_id, shipping_bill_id, received_on, amount_foreign, bank_ref, firc_no) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-                    (entity_id, sb_id, body.received_on, body.amount_foreign, body.bank_ref, body.firc_no))
+        posted = _post_proceeds(cur, entity_id, s, body) if body.amount_inr else None
+        cur.execute("""INSERT INTO export_realisations (entity_id, shipping_bill_id, received_on, amount_foreign, bank_ref, firc_no, receipt_id, amount_inr, bank_charges, booked_inr, forex_gain)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                    (entity_id, sb_id, body.received_on, body.amount_foreign, body.bank_ref, body.firc_no,
+                     posted and posted["receipt_id"], body.amount_inr, body.bank_charges, posted and posted["booked"], posted and posted["gain"]))
         rid = cur.fetchone()["id"]
-        audit(cur, entity_id, "export_realisation.recorded", "export_realisations", rid, after={"shipping_bill_id": sb_id, "amount_foreign": body.amount_foreign})
-        return _sb_out(cur, entity_id, sb_id)
+        audit(cur, entity_id, "export_realisation.recorded", "export_realisations", rid,
+              after={"shipping_bill_id": sb_id, "amount_foreign": body.amount_foreign, **({"amount_inr": body.amount_inr, "forex_gain": posted["gain"]} if posted else {})})
+        out = _sb_out(cur, entity_id, sb_id)
+        if body.amount_inr:
+            idempotency_finish(cur, idempotency_key, 201, out)
+        return out
+
+
+def _post_proceeds(cur, entity_id, s, body: RealisationIn) -> dict:
+    """The receipt, the settlement of the export invoice and the journal for proceeds from abroad. The invoice is settled at its own rate; the rest is forex."""
+    if not s["sales_document_id"]:
+        raise ApiError(409, "proceeds_need_invoice", "Link the shipping bill to its export invoice first", "The rupees credited settle that invoice in the books.")
+    cur.execute("""SELECT status, party_id, exchange_rate, balance_due FROM sales_documents WHERE id = %s AND entity_id = %s FOR UPDATE""", (s["sales_document_id"], entity_id))
+    inv = cur.fetchone()
+    if not inv or inv["status"] != "issued" or not inv["exchange_rate"]:
+        raise ApiError(409, "proceeds_need_invoice", "The export invoice must be issued first", "Money is posted against an issued invoice.")
+    booked = min((body.amount_foreign * inv["exchange_rate"]).quantize(CENT), inv["balance_due"])
+    if booked <= 0:
+        raise ApiError(409, "conflict", "The export invoice is already settled", "There is nothing left to receive against it.")
+    bank_key = None
+    if body.bank_account_id:
+        cur.execute("SELECT ledger_account_id FROM bank_accounts WHERE id = %s AND entity_id = %s", (body.bank_account_id, entity_id))
+        b = cur.fetchone()
+        if not b:
+            raise ApiError(400, "validation_failed", "Unknown bank account", errors=[{"field": "bank_account_id", "message": "not one of this company's bank accounts"}])
+        bank_key = "account:" + str(b["ledger_account_id"])
+    gain = body.amount_inr + body.bank_charges - booked
+    receipt_no = "RCPT-" + uuid.uuid4().hex[:8].upper()
+    cur.execute("""INSERT INTO receipts (entity_id, party_id, receipt_no, received_on, amount, method, utr, bank_account_id, is_advance)
+                   VALUES (%s, %s, %s, %s, %s, 'rtgs', %s, %s, false) RETURNING id""",
+                (entity_id, inv["party_id"], receipt_no, body.received_on, body.amount_inr, body.bank_ref, body.bank_account_id))
+    rcid = cur.fetchone()["id"]
+    cur.execute("INSERT INTO invoice_settlements (entity_id, invoice_id, source_kind, receipt_id, amount, settled_on) VALUES (%s, %s, 'receipt', %s, %s, %s)",
+                (entity_id, s["sales_document_id"], rcid, booked, body.received_on))
+    jid = ledger.post_journal(cur, entity_id, body.received_on, "receipt", rcid, f"Export proceeds {receipt_no}",
+                              ledger.export_proceeds_lines(received=body.amount_inr, charges=body.bank_charges, booked=booked, party_id=inv["party_id"], bank_account_key=bank_key))
+    cur.execute("UPDATE receipts SET journal_entry_id = %s WHERE id = %s", (jid, rcid))
+    audit(cur, entity_id, "receipt.created", "receipts", rcid, after={"amount": body.amount_inr, "export": True})
+    emit(cur, entity_id, "receipt.created", "receipts", rcid, {"amount": str(body.amount_inr)})
+    cur.execute("SELECT payment_status FROM sales_documents WHERE id = %s", (s["sales_document_id"],))
+    if cur.fetchone()["payment_status"] == "paid":
+        emit(cur, entity_id, "sales_document.paid", "sales_documents", s["sales_document_id"])
+    return {"receipt_id": rcid, "booked": booked, "gain": gain}
 
 
 # ================================================================== bills of entry

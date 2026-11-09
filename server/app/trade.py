@@ -54,3 +54,19 @@ def lut_state(valid_until: dt.date | None, today: dt.date, have_one: bool) -> di
         return {"state": "valid", "valid_until": None, "days_left": None}
     left = (valid_until - today).days
     return {"state": "expired" if left < 0 else "expiring" if left <= LUT_WARNING_DAYS else "valid", "valid_until": valid_until, "days_left": left}
+
+
+def irp_export_details(doc: dict, bills: list[dict]) -> dict | None:
+    """What the e-invoice portal wants on an export invoice that an ordinary one does not carry: the supply type (EXPWOP under LUT, EXPWP with payment of IGST),
+    the unregistered-person buyer (URP) with place of supply 96, the foreign currency and the buyer's country, and the shipping bill and port once customs has issued them.
+    None for a domestic document."""
+    if not str(doc.get("supply_type") or "").startswith("export"):
+        return None
+    filed = next((b for b in bills if b.get("sb_number") and b.get("sb_date")), None)
+    out = {"supply_type": "EXPWOP" if doc["supply_type"] == "export_under_lut" else "EXPWP", "buyer_gstin": "URP", "place_of_supply": "96",
+           "foreign_currency": doc.get("currency"), "buyer_country": doc.get("country")}
+    if filed:
+        out["shipping_bill_no"] = filed["sb_number"]
+        out["shipping_bill_date"] = filed["sb_date"].isoformat() if hasattr(filed["sb_date"], "isoformat") else str(filed["sb_date"])
+        out["port_code"] = filed["port_code"]
+    return out

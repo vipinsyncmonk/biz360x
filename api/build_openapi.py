@@ -1009,11 +1009,16 @@ collection(E + "/data-rooms", "Documents", "DataRoom", "documents")
 item(E + "/data-rooms", "Documents", "DataRoom", "documents", delete=True)
 
 # =================================================================== EXPORT & IMPORT
-tag("Export & import", "Shipping bills and the realisation of export proceeds, bills of entry and the duty paid on them, the LUT, RoDTEP and drawback claims. A person records what customs and the bank issued; nothing calls ICEGATE, DGFT or a bank, and nothing posts to the ledger yet.")
+tag("Export & import", "Shipping bills and the realisation of export proceeds, bills of entry and the duty paid on them, the LUT, RoDTEP and drawback claims. A person records what customs and the bank issued; nothing calls ICEGATE, DGFT or a bank. Proceeds recorded with the rupees the bank credited settle the export invoice and post the foreign exchange gain or loss.")
 CODE20 = S(pattern="^[0-9A-Z/-]{1,20}$")
 PORT_CODE = S(pattern="^[A-Z]{2}[A-Z0-9]{4}$", examples=["INMAA1"])
 CCY = S(pattern="^[A-Z]{3}$", examples=["USD"])
-schema("Realisation", {"id": RO_UUID, "received_on": DATE, "amount_foreign": MONEY, "bank_ref": NULLABLE(S()), "firc_no": NULLABLE(S())}, required=("received_on", "amount_foreign"))
+schema("Realisation", {"id": RO_UUID, "received_on": DATE, "amount_foreign": MONEY, "bank_ref": NULLABLE(S()), "firc_no": NULLABLE(S()),
+                       "amount_inr": NULLABLE({**MONEY, "description": "What the bank credited, net of its charges. With it the proceeds settle the export invoice and post the foreign exchange gain or loss."}),
+                       "bank_charges": {**MONEY, "description": "What the bank deducted; needs amount_inr"}, "bank_account_id": NULLABLE(UUID),
+                       "booked_inr": NULLABLE({**MONEY, "readOnly": True, "description": "The part of the invoice this settled, at the invoice's rate"}),
+                       "forex_gain": NULLABLE({**MONEY, "readOnly": True, "description": "Foreign exchange gain (positive) or loss (negative) posted"}), "receipt_id": NULLABLE(RO_UUID)},
+       required=("received_on", "amount_foreign"))
 schema("ShippingBill", {
     "id": RO_UUID, "sb_number": NULLABLE(CODE20), "sb_date": NULLABLE(DATE), "port_code": NULLABLE(PORT_CODE), "currency": CCY, "fob_foreign": MONEY, "exchange_rate": S(description="Customs notified rate, up to four decimals"),
     "fob_inr": {**MONEY, "readOnly": True}, "status": ENUM("draft", "filed", "let_export", "shipped", "closed"), "exported_on": NULLABLE(DATE),
@@ -1032,7 +1037,7 @@ _op("patch", E + "/shipping-bills/{id}", "Export & import", "updateShippingBill"
                                        "drawback_claimed": MONEY, "drawback_received": MONEY, "brc_ref": S()},
                 desc="The customs details (number, date, port, value, rate) can be added only while the shipping bill is a draft; adding all three of number, date and port files it. The date of export starts the realisation clock and cannot be changed once recorded."), resp=ref("ShippingBill"))
 action(E + "/shipping-bills/{id}/realisations", "Export & import", "recordRealisation", "Record export proceeds received against a shipping bill", "trade:write",
-       body=ref("Realisation"), resp=ref("ShippingBill"), status="201", desc="Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409).")
+       body=ref("Realisation"), resp=ref("ShippingBill"), status="201", idem=True, desc="Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409). With amount_inr the shipping bill must be linked to an issued export invoice (409 proceeds_need_invoice): a receipt is created, the invoice is settled at its own rate and the difference is posted as foreign exchange gain or loss.")
 schema("BillOfEntry", {
     "id": RO_UUID, "boe_number": CODE20, "boe_date": DATE, "port_code": PORT_CODE, "currency": CCY, "cif_foreign": MONEY, "exchange_rate": S(), "cif_inr": {**MONEY, "readOnly": True},
     "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "duty_total": {**MONEY, "readOnly": True},

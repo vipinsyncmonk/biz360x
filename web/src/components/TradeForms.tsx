@@ -1,6 +1,6 @@
 "use client";
 import { useState, type ReactNode } from "react";
-import { api, unwrap } from "@/lib/api";
+import { api, newIdempotencyKey, unwrap } from "@/lib/api";
 import { formatInr, isoDate } from "@/lib/format";
 import {
   BoeForm, ClaimsForm, CURRENCIES, ExportInvoice, RealisationForm, SbForm, ShippingBill, blankBoe, blankRealisation, blankSb, boeBody, boeProblem, claimsBody, claimsForm, claimsProblem,
@@ -65,14 +65,17 @@ export function RecordMoney({ entityId, bill, onDone, onCancel }: { entityId: st
   const k = bill.id;
   return (
     <Shell compact label="Record money received" problem={realisationProblem(f, bill.outstanding_foreign, today)} started={!!f.date} onCancel={onCancel} onSubmit={async () => {
-      unwrap(await api.POST("/entities/{entityId}/shipping-bills/{id}/realisations", { params: { path: { entityId, id: bill.id } }, body: realisationBody(f) as never })); onDone();
+      unwrap(await api.POST("/entities/{entityId}/shipping-bills/{id}/realisations", { params: { path: { entityId, id: bill.id }, header: { "Idempotency-Key": newIdempotencyKey() } }, body: realisationBody(f) as never })); onDone();
     }}>
       <div style={grid}>
         <Field id={`rm-d-${k}`} label="Received on"><input id={`rm-d-${k}`} type="date" className="input" style={{ height: 40 }} max={today} value={f.date} onChange={(e) => set({ date: e.target.value })} /></Field>
         <Field id={`rm-a-${k}`} label={`Amount (${bill.currency})`}><input id={`rm-a-${k}`} className="input mono" style={{ height: 40 }} inputMode="decimal" value={f.amount} onChange={(e) => set({ amount: e.target.value })} /></Field>
         <Field id={`rm-b-${k}`} label="Bank reference"><input id={`rm-b-${k}`} className="input mono" style={{ height: 40 }} value={f.bankRef} onChange={(e) => set({ bankRef: e.target.value })} /></Field>
         <Field id={`rm-f-${k}`} label="FIRC no. (optional)"><input id={`rm-f-${k}`} className="input mono" style={{ height: 40 }} value={f.firc} onChange={(e) => set({ firc: e.target.value })} /></Field>
+        {bill.sales_document_id && <Field id={`rm-i-${k}`} label="Rupees the bank credited (₹)"><input id={`rm-i-${k}`} className="input mono" style={{ height: 40 }} inputMode="decimal" placeholder="82950.00" value={f.inr} onChange={(e) => set({ inr: e.target.value })} /></Field>}
+        {bill.sales_document_id && f.inr && <Field id={`rm-c-${k}`} label="Bank charges deducted (₹)"><input id={`rm-c-${k}`} className="input mono" style={{ height: 40 }} inputMode="decimal" placeholder="0.00" value={f.charges} onChange={(e) => set({ charges: e.target.value })} /></Field>}
       </div>
+      {bill.sales_document_id && <span className="t13">{f.inr ? "The invoice is settled at its own rate and the difference from the rupees credited is posted as foreign exchange gain or loss." : "Add the rupees the bank credited to settle the invoice and post the exchange difference in the books."}</span>}
     </Shell>
   );
 }

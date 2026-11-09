@@ -9,7 +9,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from app import tax
+from app import ledger, tax, trade, worker
 
 DB = os.environ["DATABASE_URL"]
 ORG = "00000000-0000-0000-0000-000000f1a000"
@@ -63,6 +63,27 @@ def test_a_note_on_an_export_invoice_follows_the_invoice_and_needs_no_buyer_gsti
     assert taxed.igst_total == D("1800.00") and codes(taxed)["export_note"] == "ok" and "export_no_lut" not in codes(taxed)
     late = codes(tax.compute(GOODS, ctx(doc_type="credit_note", zero_rated=False, lut="none", supply_type="export_with_tax", original_doc_date=dt.date(2020, 4, 1))))
     assert late["sec34_time_limit"] == "block"                                                                        # IGST was charged, so the time limit still applies
+
+
+def test_proceeds_from_abroad_settle_the_invoice_at_its_own_rate_and_the_rest_is_forex():
+    P = "party"
+    gain = ledger.export_proceeds_lines(received=D("83500.00"), charges=D("0"), booked=D("83000.00"), party_id=P)
+    assert ledger.balanced(gain) and [(l.key, l.debit, l.credit) for l in gain] == [("bank", D("83500.00"), D(0)), ("receivable", D(0), D("83000.00")), ("forex_gain_loss", D(0), D("500.00"))]
+    loss = ledger.export_proceeds_lines(received=D("82600.00"), charges=D("0"), booked=D("83000.00"), party_id=P)
+    assert ledger.balanced(loss) and loss[-1].key == "forex_gain_loss" and loss[-1].debit == D("400.00")
+    charged = ledger.export_proceeds_lines(received=D("82900.00"), charges=D("100.00"), booked=D("83000.00"), party_id=P, bank_account_key="account:x")
+    assert ledger.balanced(charged) and [l.key for l in charged] == ["account:x", "bank_charges", "receivable"]          # the charges account for the gap: no forex
+    assert ledger.balanced(ledger.export_proceeds_lines(received=D("83000.00"), charges=D("0"), booked=D("83000.00"), party_id=P))
+
+
+def test_the_e_invoice_carries_the_export_details_only_for_an_export():
+    doc = {"supply_type": "export_under_lut", "currency": "USD", "country": "US"}
+    assert trade.irp_export_details({"supply_type": "b2b"}, []) is None
+    d = trade.irp_export_details(doc, [])
+    assert d == {"supply_type": "EXPWOP", "buyer_gstin": "URP", "place_of_supply": "96", "foreign_currency": "USD", "buyer_country": "US"}
+    with_sb = trade.irp_export_details({**doc, "supply_type": "export_with_tax"}, [{"sb_number": "7712345", "sb_date": dt.date(2026, 11, 3), "port_code": "INMAA1"}])
+    assert with_sb["supply_type"] == "EXPWP" and with_sb["shipping_bill_no"] == "7712345" and with_sb["shipping_bill_date"] == "2026-11-03" and with_sb["port_code"] == "INMAA1"
+    assert "shipping_bill_no" not in trade.irp_export_details(doc, [{"sb_number": None, "sb_date": None, "port_code": None}])
 
 
 def test_an_export_is_einvoiced_without_a_buyer_gstin_above_the_turnover_limit():
@@ -278,6 +299,99 @@ def test_a_credit_note_on_an_export_invoice_with_igst_credits_the_igst(client):
     assert {c["code"] for c in p["checks"]} >= {"export_note", "export_foreign_value"} and not any(c["level"] == "block" for c in p["checks"])
     r = client.post(url("/sales-documents"), headers=o, json=body)
     assert r.status_code == 201 and r.json()["supply_type"] == "export_with_tax" and r.json()["igst_total"] == "1494.00"
+
+
+def invoice_with_draft(client, o, qty="10"):
+    d = client.post(url("/sales-documents"), headers=o, json=doc(S["abroad"], [{**GOODS_LINE, "qty": qty}], currency="USD", exchange_rate="83")).json()
+    assert client.post(url(f"/sales-documents/{d['id']}/issue"), headers={**o, **key()}, json={}).status_code == 202
+    return d["id"]
+
+
+def bills_of(client, o, inv):
+    return sorted((b for b in client.get(url("/shipping-bills"), headers=o).json()["data"] if b["sales_document_id"] == inv), key=lambda b: b["fob_foreign"])
+
+
+def test_goods_credited_back_after_the_bill_was_filed_leave_a_task_for_customs(client, db):
+    assert db.execute("SELECT count(*) AS n FROM tasks WHERE entity_id = %s AND title LIKE 'Goods worth USD 200.00%%'", (EN,)).fetchone()["n"] == 1      # the first credit note: 2 of 10 valves
+
+
+def test_money_from_abroad_settles_the_invoice_and_posts_the_exchange_difference(client, db):
+    o, v = login(client, OWNER), login(client, VIEWER)
+    ok = {"received_on": str(TODAY), "amount_foreign": "800.00", "bank_ref": "SWIFT-1", "firc_no": "FIRC-9", "amount_inr": "66100.00", "bank_charges": "100.00"}
+    assert client.post(url(f"/shipping-bills/{S['sb']}/realisations"), headers={**v, **key()}, json=ok).status_code == 403
+    r = client.post(url(f"/shipping-bills/{S['sb']}/realisations"), headers=o, json=ok)
+    assert r.status_code == 400                                                                                   # money needs an idempotency key
+    r = client.post(url(f"/shipping-bills/{S['sb']}/realisations"), headers=o, json={k: v for k, v in ok.items() if k != "amount_inr"} | {"bank_charges": "5.00"})
+    assert r.status_code == 400                                                                                   # charges go with the rupees credited
+    k = key()
+    r = client.post(url(f"/shipping-bills/{S['sb']}/realisations"), headers={**o, **k}, json=ok)
+    assert r.status_code == 201, r.text
+    got = r.json()["realisations"][0]
+    assert got["amount_inr"] == "66100.00" and got["booked_inr"] == "66400.00" and got["forex_gain"] == "-200.00" and got["bank_charges"] == "100.00"          # 800 at the invoice's 83
+    again = client.post(url(f"/shipping-bills/{S['sb']}/realisations"), headers={**o, **k}, json=ok)
+    assert again.status_code == 201 and len(again.json()["realisations"]) == 1                                  # a replay adds nothing
+    inv = client.get(url(f"/sales-documents/{S['inv']}"), headers=o).json()
+    assert inv["balance_due"] == "0.00" and inv["payment_status"] == "paid"
+    rows = db.execute("""SELECT a.subtype, l.debit, l.credit FROM journal_lines l JOIN ledger_accounts a ON a.id = l.account_id
+                          WHERE l.entry_id = (SELECT journal_entry_id FROM receipts WHERE id = %s) ORDER BY l.line_no""", (got["receipt_id"],)).fetchall()
+    assert [(x["subtype"], x["debit"], x["credit"]) for x in rows][1:] == [("bank_charges", D("100.00"), D("0.00")), ("receivable", D("0.00"), D("66400.00")), ("forex_gain_loss", D("200.00"), D("0.00"))]
+    assert rows[0]["debit"] == D("66100.00")
+    assert client.post(url(f"/shipping-bills/{S['sb']}/realisations"), headers={**o, **key()}, json={**ok, "amount_foreign": "300.00"}).status_code == 409          # more than the bill is worth
+    assert client.post(url(f"/shipping-bills/{S['sb']}/realisations"), headers={**o, **key()}, json={**ok, "amount_foreign": "100.00", "amount_inr": "8300.00", "bank_charges": "0"}).status_code == 409   # the invoice is settled
+
+
+def test_proceeds_need_an_issued_export_invoice_behind_the_shipping_bill(client):
+    o = login(client, OWNER)
+    r = client.post(url("/shipping-bills"), headers=o, json={"sb_number": "7799001", "sb_date": str(TODAY), "port_code": "INMAA1", "currency": "USD", "fob_foreign": "500.00", "exchange_rate": "83.0000"})
+    assert r.status_code == 201
+    r = client.post(url(f"/shipping-bills/{r.json()['id']}/realisations"), headers={**o, **key()}, json={"received_on": str(TODAY), "amount_foreign": "500.00", "amount_inr": "41500.00"})
+    assert r.status_code == 409 and r.json()["code"] == "proceeds_need_invoice"
+
+
+def test_a_partial_shipment_files_its_share_and_opens_a_draft_for_the_rest(client):
+    o = login(client, OWNER)
+    inv = invoice_with_draft(client, o)
+    draft = bills_of(client, o, inv)[0]
+    assert draft["status"] == "draft" and draft["fob_foreign"] == "1000.00"
+    r = client.patch(url(f"/shipping-bills/{draft['id']}"), headers=o, json={"sb_number": "7788001", "sb_date": str(TODAY), "port_code": "INMAA1", "fob_foreign": "1100.00"})
+    assert r.status_code == 409 and r.json()["code"] == "shipments_exceed_invoice"                                 # more than the goods on the invoice
+    r = client.patch(url(f"/shipping-bills/{draft['id']}"), headers=o, json={"sb_number": "7788001", "sb_date": str(TODAY), "port_code": "INMAA1", "fob_foreign": "600.00"})
+    assert r.status_code == 200 and r.json()["status"] == "filed"
+    bills = bills_of(client, o, inv)
+    assert [(b["status"], b["fob_foreign"]) for b in bills] == [("draft", "400.00"), ("filed", "600.00")]          # the rest waits as a draft
+    rest = client.post(url("/shipping-bills"), headers=o, json={"sb_number": "7788002", "sb_date": str(TODAY), "port_code": "INBLR4", "currency": "USD", "fob_foreign": "400.00",
+                                                              "exchange_rate": "83.0000", "sales_document_id": inv})
+    assert rest.status_code == 201 and rest.json()["status"] == "filed"
+    assert [(b["status"], b["fob_foreign"]) for b in bills_of(client, o, inv)] == [("filed", "400.00"), ("filed", "600.00")]       # filled in, no further draft
+    extra = client.post(url("/shipping-bills"), headers=o, json={"sb_number": "7788003", "sb_date": str(TODAY), "port_code": "INBLR4", "currency": "USD", "fob_foreign": "10.00",
+                                                               "exchange_rate": "83.0000", "sales_document_id": inv})
+    assert extra.status_code == 409 and extra.json()["code"] == "shipments_exceed_invoice"
+
+
+def test_goods_credited_back_shrink_the_draft_and_remove_it_when_nothing_is_left(client):
+    o = login(client, OWNER)
+    inv = invoice_with_draft(client, o)
+    for qty, left in (("2", "800.00"), ("8", None)):
+        cn = client.post(url(f"/sales-documents/{inv}/credit-notes"), headers=o, json={"cn_reason": "sales_return", "lines": [{**CN_LINE, "qty": qty}]}).json()
+        assert client.post(url(f"/sales-documents/{cn['id']}/issue"), headers={**o, **key()}, json={}).status_code == 202
+        bills = bills_of(client, o, inv)
+        assert [b["fob_foreign"] for b in bills] == ([left] if left else [])
+
+
+def test_the_e_invoice_request_for_an_export_names_the_buyer_as_unregistered_and_carries_the_shipping_bill(client, db, monkeypatch):
+    o = login(client, OWNER)
+    inv = invoice_with_draft(client, o, qty="1")
+    sent = {}
+
+    class Irp:
+        def generate_irn(self, payload):
+            sent.update(payload)
+            return {"irn": "i" * 64, "ack_no": "123456789012345", "signed_qr": "qr"}
+    monkeypatch.setattr(worker, "IRP", Irp())
+    with psycopg.connect(DB, row_factory=dict_row) as c:
+        worker.handle_generate_irn(c.cursor(), {"subject_id": inv})
+    assert sent["buyer_gstin"] == "URP" and sent["export"]["supply_type"] == "EXPWOP" and sent["export"]["place_of_supply"] == "96" and sent["export"]["foreign_currency"] == "USD"
+    assert "shipping_bill_no" not in sent["export"]                                                                 # still a draft: customs has not issued the number yet
 
 
 def test_a_note_to_a_customer_abroad_must_correct_an_export_invoice(client):

@@ -3569,7 +3569,7 @@ export interface paths {
         put?: never;
         /**
          * Record export proceeds received against a shipping bill
-         * @description Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409).
+         * @description Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409). With amount_inr the shipping bill must be linked to an issued export invoice (409 proceeds_need_invoice): a receipt is created, the invoice is settled at its own rate and the difference is posted as foreign exchange gain or loss.
          */
         post: operations["recordRealisation"];
         delete?: never;
@@ -6743,6 +6743,13 @@ export interface components {
             amount_foreign: components["schemas"]["Money"];
             bank_ref?: string | null;
             firc_no?: string | null;
+            amount_inr?: components["schemas"]["Money"] | null;
+            /** @description What the bank deducted; needs amount_inr */
+            bank_charges?: components["schemas"]["Money"];
+            bank_account_id?: string | null;
+            booked_inr?: components["schemas"]["Money"] | null;
+            forex_gain?: components["schemas"]["Money"] | null;
+            receipt_id?: string | null;
         };
         /** @description A draft is opened when an export invoice with goods is issued; the number, port and date customs issues turn it into a filed shipping bill. Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases). */
         ShippingBill: {
@@ -16418,7 +16425,10 @@ export interface operations {
     recordRealisation: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 /** @description Legal entity the call acts on */
                 entityId: components["parameters"]["EntityId"];

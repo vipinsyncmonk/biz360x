@@ -185,4 +185,4 @@ def test_audit_chain_still_intact():
     with psycopg.connect(DB) as c:
         assert c.execute("SELECT app.audit_verify()").fetchone()[0] is None
         assert c.execute("SELECT count(*) FROM audit_log").fetchone()[0] >= 8
-        assert c.execute("SELECT count(*) FROM event_outbox WHERE type = 'sales_document.paid'").fetchone()[0] == 1
+        assert c.execute("SELECT count(*) FROM event_outbox WHERE type = 'sales_document.paid' AND entity_id = %s", (ENTITY,)).fetchone()[0] == 1

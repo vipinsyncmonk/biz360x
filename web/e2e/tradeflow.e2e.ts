@@ -83,4 +83,20 @@ test.describe.serial("the export flow", () => {
     await expect(page.getByLabel("Export", { exact: true })).toContainText("Supplied under LUT");
     expect(problems()).toEqual([]);
   });
+
+  test("money from the customer abroad settles the invoice and shows the exchange difference", async () => {
+    await page.goto("/trade");
+    const row = page.locator("div").filter({ hasText: "SB 7790001" }).filter({ has: page.getByRole("button", { name: "Record money received" }) }).last();
+    await row.getByRole("button", { name: "Record money received" }).click();
+    await page.getByLabel("Received on").fill(daysAgo(0));
+    await page.getByLabel("Amount (USD)").fill("800.00");
+    await page.getByLabel("Rupees the bank credited (₹)").fill("66100.00");
+    await page.getByLabel("Bank charges deducted (₹)").fill("100.00");
+    await page.getByRole("button", { name: "Record money received" }).last().click();
+    await expect(page.getByText(/USD 800\.00 on .* · exchange loss ₹200\.00/)).toBeVisible();      // ₹66,200 gross against ₹66,400 booked at 83
+    await page.goto(invoiceUrl);
+    await expect(page.getByText("Balance due")).toBeVisible();
+    await expect(page.getByText("₹0.00").first()).toBeVisible();
+    expect(problems()).toEqual([]);
+  });
 });

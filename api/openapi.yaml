@@ -68,8 +68,8 @@ tags:
   description: Vault uploads, search, links, advisor requests and data rooms
 - name: Export & import
   description: Shipping bills and the realisation of export proceeds, bills of entry and the duty paid on them, the LUT, RoDTEP
-    and drawback claims. A person records what customs and the bank issued; nothing calls ICEGATE, DGFT or a bank, and nothing
-    posts to the ledger yet.
+    and drawback claims. A person records what customs and the bank issued; nothing calls ICEGATE, DGFT or a bank. Proceeds
+    recorded with the rupees the bank credited settle the export invoice and post the foreign exchange gain or loss.
 - name: Portals & jobs
   description: Government / bank connections, OTP sessions, sync jobs and the job resource
 - name: Copilot
@@ -9654,10 +9654,13 @@ paths:
       - Export & import
       operationId: recordRealisation
       summary: Record export proceeds received against a shipping bill
-      description: Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409).
+      description: 'Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill''s value (409).
+        With amount_inr the shipping bill must be linked to an issued export invoice (409 proceeds_need_invoice): a receipt
+        is created, the invoice is settled at its own rate and the difference is posted as foreign exchange gain or loss.'
       parameters:
       - $ref: '#/components/parameters/EntityId'
       - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -17944,6 +17947,38 @@ components:
         firc_no:
           oneOf:
           - type: string
+          - type: 'null'
+        amount_inr:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+            description: What the bank credited, net of its charges. With it the proceeds settle the export invoice and post
+              the foreign exchange gain or loss.
+          - type: 'null'
+        bank_charges:
+          $ref: '#/components/schemas/Money'
+          description: What the bank deducted; needs amount_inr
+        bank_account_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        booked_inr:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+            readOnly: true
+            description: The part of the invoice this settled, at the invoice's rate
+          - type: 'null'
+        forex_gain:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+            readOnly: true
+            description: Foreign exchange gain (positive) or loss (negative) posted
+          - type: 'null'
+        receipt_id:
+          oneOf:
+          - type: string
+            format: uuid
+            readOnly: true
           - type: 'null'
       required:
       - received_on

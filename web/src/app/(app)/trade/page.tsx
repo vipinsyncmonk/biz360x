@@ -4,7 +4,7 @@ import { api, unwrap } from "@/lib/api";
 import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import { BOE_STATUS, BillOfEntry, ExportInvoice, LUT_STATE, REALISATION, ShippingBill, Summary, claimsPending, clockText, lutText } from "@/lib/trade";
+import { BOE_STATUS, BillOfEntry, ExportInvoice, LUT_STATE, REALISATION, ShippingBill, Summary, claimsPending, clockText, lutText, receivedText } from "@/lib/trade";
 import { AddBoe, AddShippingBill, EditClaims, MarkExported, PayDuty, RecordMoney, money } from "@/components/TradeForms";
 import { FileDraft, RecordRegistration } from "@/components/ExportForms";
 import { draftText } from "@/lib/export";
@@ -92,7 +92,7 @@ export default function Trade() {
                     {!draft && b.realisation_state !== "realised" && <button type="button" className="btn" aria-expanded={here === "money"} onClick={() => toggle("money", b.id)}>Record money received</button>}
                     {!draft && <button type="button" className="btn" aria-expanded={here === "claims"} onClick={() => toggle("claims", b.id)}>Claims and e-BRC</button>}
                   </div>
-                  {(b.realisations ?? []).length > 0 && <div className="t13" style={{ padding: "0 20px 12px" }}>Received: {b.realisations.map((r) => `${b.currency} ${r.amount_foreign} on ${shortDate(r.received_on)}${r.firc_no ? ` (FIRC ${r.firc_no})` : ""}`).join("; ")}</div>}
+                  {(b.realisations ?? []).length > 0 && <div className="t13" style={{ padding: "0 20px 12px" }}>Received: {b.realisations.map((r) => receivedText(b.currency, r, shortDate(r.received_on))).join("; ")}</div>}
                   {id && here === "customs" && <FileDraft entityId={id} bill={b} onDone={reload} onCancel={() => setOpen(null)} />}
                   {id && here === "money" && <RecordMoney entityId={id} bill={b} onDone={reload} onCancel={() => setOpen(null)} />}
                   {id && here === "exported" && <MarkExported entityId={id} bill={b} onDone={reload} onCancel={() => setOpen(null)} />}
