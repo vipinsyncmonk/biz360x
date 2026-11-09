@@ -777,15 +777,22 @@ schema("BankFeedLine", {"external_id": S(description="Dedupe key from the feed")
 action(E + "/bank-accounts/{id}/transactions", "Finance & books", "importBankTransactions", "Import bank lines from a feed (Account Aggregator, bank API or parsed statement)", "finance:write",
        body=schema("BankFeedImport", {"transactions": ARR(ref("BankFeedLine"), minItems=1, maxItems=1000)}, required=("transactions",)),
        resp=schema("BankFeedResult", {"imported": I(), "duplicates": I(), "suggested": I()}), status="201",
-       desc="Duplicates (same `external_id`) are ignored. Credits paid into an invoice virtual account, or naming an invoice number, get a suggested receipt to accept or reject.")
+       desc="Duplicates (same `external_id`) are ignored. Credits paid into an invoice virtual account, or naming an invoice number, get a suggested receipt to accept or reject. A credit that reads like money from abroad gets a suggested shipping bill instead (accept it with bankCreditAsExportProceeds).")
+schema("ExportMatchHint", {"shipping_bill_id": UUID, "sb_number": NULLABLE(S()), "currency": NULLABLE(S()),
+                           "proposed_foreign": NULLABLE(MONEY), "expected_inr": NULLABLE(MONEY), "difference_inr": NULLABLE(MONEY)},
+       desc="For a suggestion that names a shipping bill: the foreign amount the matcher guessed, what that is worth at the invoice's rate, and how far the credit is from it. The statement shows rupees after the bank's charges and its own rate, so the credit is rarely exact.")
 schema("BankMatchSuggestion", {"id": RO_UUID, "target_kind": S(), "target_id": UUID, "label": S(examples=["Invoice NI/KA/184"]), "amount": MONEY,
-                               "confidence": N(), "rule": S(), "status": ENUM("suggested", "accepted", "rejected")})
+                               "confidence": N(), "rule": S(), "status": ENUM("suggested", "accepted", "rejected"), "export": NULLABLE(ref("ExportMatchHint"))})
 schema("BankTransaction", {"id": RO_UUID, "bank_account_id": UUID, "txn_date": DATE, "amount": MONEY, "description": S(), "utr": NULLABLE(S()),
                            "counterparty_name": NULLABLE(S()), "match_status": ENUM("unmatched", "suggested", "matched", "ignored"),
                            "suggestions": ARR(ref("BankMatchSuggestion"))}, extra={"readOnly": True})
 _op("get", E + "/bank-transactions", "Finance & books", "listBankTransactions", "Bank lines", "finance:read",
     params=[P("Limit"), P("Cursor"), q("bank_account_id", UUID), q("match_status", S()), P("From"), P("To")], resp=page_of("BankTransaction"))
 action(E + "/bank-matches/{id}/accept", "Finance & books", "acceptBankMatch", "Accept a suggested match", "finance:write", resp=ref("BankTransaction"), idem=True)
+action(E + "/bank-transactions/{id}/export-proceeds", "Export & import", "bankCreditAsExportProceeds", "Take a bank credit as the proceeds of an export", "trade:write",
+       body=schema("ProceedsFromBank", {"shipping_bill_id": UUID, "amount_foreign": MONEY, "bank_charges": MONEY, "firc_no": S()}, required=("shipping_bill_id", "amount_foreign")),
+       resp=ref("BankTransaction"), idem=True,
+       desc="A credit that reads like an inward remittance gets a suggested shipping bill (rule export_proceeds), tolerant of the bank's charges and rate. The line is the rupees after those charges, so the person gives the foreign amount and the charges: a receipt is created, the export invoice is settled at its own rate and the difference is posted as foreign exchange gain or loss. Needs finance:write too. 409 if the line is already matched or the shipping bill has no issued export invoice (proceeds_need_invoice).")
 action(E + "/bank-matches/{id}/reject", "Finance & books", "rejectBankMatch", "Reject a suggested match", "finance:write", resp=ref("BankTransaction"))
 action(E + "/bank-transactions/{id}/match", "Finance & books", "matchBankTransaction", "Match a line manually", "finance:write",
        body=schema("ManualMatch", {"targets": ARR(schema("MatchTarget", {"target_kind": S(), "target_id": UUID, "amount": MONEY}, required=("target_kind", "target_id", "amount")))}, required=("targets",)),

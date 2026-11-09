@@ -76,6 +76,20 @@ def test_proceeds_from_abroad_settle_the_invoice_at_its_own_rate_and_the_rest_is
     assert ledger.balanced(ledger.export_proceeds_lines(received=D("83000.00"), charges=D("0"), booked=D("83000.00"), party_id=P))
 
 
+def test_a_bank_credit_is_ranked_against_shipping_bills_without_needing_an_exact_amount():
+    cand = {"sb_id": "sb1", "sb_number": "7790001", "number": "EXP/2026-27/0001", "legal_name": "Acme Inc", "currency": "USD", "rate": D("83.0000"), "remaining": D("500.00"), "balance_due": D("41500.00")}
+    got = trade.rank_proceeds(D("41150.00"), "INWARD REMITTANCE ACME INC USD 500.00 SWIFT", "ACME INC", [cand])             # the bank took ₹350 and converted at its own rate
+    assert [(g["shipping_bill_id"], g["confidence"], g["proposed_foreign"]) for g in got] == [("sb1", D("0.95"), D("500.00"))]
+    assert trade.rank_proceeds(D("41150.00"), "NEFT SALARY REFUND", None, [cand]) == []                                      # nothing says it is from abroad
+    assert trade.rank_proceeds(D("1000.00"), "Acme Inc", None, [cand]) == []                                                # a name alone is not enough
+    far = trade.rank_proceeds(D("20000.00"), "IRM FCY ACME INC", None, [cand])                                               # about half the invoice: a part payment, the dollars are guessed
+    assert far and far[0]["confidence"] == D("0.60") and far[0]["proposed_foreign"] == D("240.96")
+    by_number = trade.rank_proceeds(D("5000.00"), "TT EXP/2026-27/0001", None, [cand])
+    assert by_number and by_number[0]["confidence"] == D("0.75") and by_number[0]["proposed_foreign"] == D("60.24")
+    assert trade.rank_proceeds(D("41150.00"), "INWARD REMITTANCE ACME INC USD 900.00", None, [cand])[0]["proposed_foreign"] == D("500.00")      # more than is owed: ignored
+    assert trade.rank_proceeds(D("41150.00"), "INWARD REMITTANCE ACME INC", None, [{**cand, "remaining": D("0.00")}]) == []
+
+
 def test_the_e_invoice_carries_the_export_details_only_for_an_export():
     doc = {"supply_type": "export_under_lut", "currency": "USD", "country": "US"}
     assert trade.irp_export_details({"supply_type": "b2b"}, []) is None
@@ -392,6 +406,61 @@ def test_the_e_invoice_request_for_an_export_names_the_buyer_as_unregistered_and
         worker.handle_generate_irn(c.cursor(), {"subject_id": inv})
     assert sent["buyer_gstin"] == "URP" and sent["export"]["supply_type"] == "EXPWOP" and sent["export"]["place_of_supply"] == "96" and sent["export"]["foreign_currency"] == "USD"
     assert "shipping_bill_no" not in sent["export"]                                                                 # still a draft: customs has not issued the number yet
+
+
+def test_a_credit_that_reads_like_an_inward_remittance_is_taken_as_proceeds_though_the_bank_charged_for_it(client, db):
+    o, v = login(client, OWNER), login(client, VIEWER)
+    inv = invoice_with_draft(client, o, qty="5")                                                                    # USD 500 at 83 = ₹41,500
+    sb = bills_of(client, o, inv)[0]["id"]
+    ledger_id, bank = str(uuid.uuid4()), str(uuid.uuid4())
+    db.execute("INSERT INTO ledger_accounts (id, entity_id, code, name, type, subtype) VALUES (%s, %s, '1199', 'Export collections account', 'asset', 'bank')", (ledger_id, EN))
+    db.execute("INSERT INTO bank_accounts (id, entity_id, ledger_account_id, bank_name, account_last4, ifsc, kind) VALUES (%s, %s, %s, 'HDFC', '5511', 'HDFC0000123', 'current')", (bank, EN, ledger_id))
+    line = {"external_id": "XF-1", "txn_date": str(TODAY), "amount": "41150.00", "description": "INWARD REMITTANCE ACME INC USD 500.00 SWIFT", "utr": "SWIFT-77", "counterparty_name": "ACME INC"}
+    r = client.post(url(f"/bank-accounts/{bank}/transactions"), headers=o, json={"transactions": [line]})
+    assert r.status_code == 201 and r.json()["suggested"] == 1
+    t = client.get(url(f"/bank-transactions?bank_account_id={bank}"), headers=o).json()["data"][0]
+    assert t["match_status"] == "suggested"
+    sug = next(s for s in t["suggestions"] if s["target_id"] == sb)
+    assert sug["target_kind"] == "shipping_bill" and sug["rule"] == "export_proceeds" and sug["confidence"] == 0.95 and "Acme Inc" in sug["label"]
+    assert sug["export"]["proposed_foreign"] == "500.00" and sug["export"]["expected_inr"] == "41500.00" and sug["export"]["difference_inr"] == "-350.00" and sug["export"]["currency"] == "USD"
+    assert client.post(url(f"/bank-matches/{sug['id']}/accept"), headers={**o, **key()}).status_code == 409           # the dollars are needed, so the plain accept refuses
+    body = {"shipping_bill_id": sb, "amount_foreign": "500.00", "bank_charges": "350.00", "firc_no": "FIRC-77"}
+    assert client.post(url(f"/bank-transactions/{t['id']}/export-proceeds"), headers={**v, **key()}, json=body).status_code == 403
+    assert client.post(url(f"/bank-transactions/{t['id']}/export-proceeds"), headers=o, json=body).status_code == 400    # money needs an idempotency key
+    k = key()
+    r = client.post(url(f"/bank-transactions/{t['id']}/export-proceeds"), headers={**o, **k}, json=body)
+    assert r.status_code == 200, r.text
+    got = r.json()
+    assert got["match_status"] == "matched" and [(s["status"], s["target_kind"]) for s in got["suggestions"] if s["id"] == sug["id"]] == [("accepted", "receipt")]
+    assert client.post(url(f"/bank-transactions/{t['id']}/export-proceeds"), headers={**o, **k}, json=body).status_code == 200                   # a replay
+    assert client.post(url(f"/bank-transactions/{t['id']}/export-proceeds"), headers={**o, **key()}, json=body).status_code == 409                # already matched
+    assert client.get(url(f"/sales-documents/{inv}"), headers=o).json()["balance_due"] == "0.00"
+    real = next(x for x in next(b for b in client.get(url("/shipping-bills"), headers=o).json()["data"] if b["id"] == sb)["realisations"])
+    assert real["amount_inr"] == "41150.00" and real["bank_charges"] == "350.00" and real["booked_inr"] == "41500.00" and real["forex_gain"] == "0.00" and real["firc_no"] == "FIRC-77"
+    row = db.execute("SELECT bank_transaction_id, bank_account_id, utr FROM receipts WHERE id = %s", (real["receipt_id"],)).fetchone()
+    assert str(row["bank_transaction_id"]) == t["id"] and str(row["bank_account_id"]) == bank and row["utr"] == "SWIFT-77"
+    assert client.post(url(f"/bank-transactions/{uuid.uuid4()}/export-proceeds"), headers={**o, **key()}, json=body).status_code == 404
+
+
+def test_a_refused_suggestion_is_not_offered_again_and_a_debit_is_never_proceeds(client, db):
+    o = login(client, OWNER)
+    bank = str(db.execute("SELECT id FROM bank_accounts WHERE entity_id = %s", (EN,)).fetchone()["id"])
+    credit = {"external_id": "XF-2", "txn_date": str(TODAY), "amount": "20000.00", "description": "IRM FCY INWARD REMITTANCE ACME INC", "counterparty_name": "ACME INC"}
+    assert client.post(url(f"/bank-accounts/{bank}/transactions"), headers=o, json={"transactions": [credit]}).json()["suggested"] >= 1
+    txns = {x["external_id"] if "external_id" in x else x["description"]: x for x in client.get(url(f"/bank-transactions?bank_account_id={bank}"), headers=o).json()["data"]}
+    t = txns["IRM FCY INWARD REMITTANCE ACME INC"]
+    first = t["suggestions"][0]
+    refused = [s["target_id"] for s in t["suggestions"]]
+    for s in t["suggestions"]:
+        assert client.post(url(f"/bank-matches/{s['id']}/reject"), headers=o).status_code == 200
+    debit = {"external_id": "XF-3", "txn_date": str(TODAY), "amount": "-500.00", "description": "INWARD REMITTANCE CHARGES ACME INC"}
+    assert client.post(url(f"/bank-accounts/{bank}/transactions"), headers=o, json={"transactions": [debit]}).status_code == 201           # imports re-run the matcher
+    again = next(x for x in client.get(url(f"/bank-transactions?bank_account_id={bank}"), headers=o).json()["data"] if x["id"] == t["id"])
+    assert not set(refused) & {s["target_id"] for s in again["suggestions"] if s["status"] == "suggested"}
+    d = next(x for x in client.get(url(f"/bank-transactions?bank_account_id={bank}"), headers=o).json()["data"] if x["description"].startswith("INWARD REMITTANCE CHARGES"))
+    assert d["suggestions"] == []
+    r = client.post(url(f"/bank-transactions/{d['id']}/export-proceeds"), headers={**o, **key()}, json={"shipping_bill_id": first["target_id"], "amount_foreign": "10.00"})
+    assert r.status_code == 400
 
 
 def test_a_note_to_a_customer_abroad_must_correct_an_export_invoice(client):

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ledger
+from . import ledger, trade
 from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, money, require, tx
 from .routes_orders import js, offset_of, page
 
@@ -430,6 +430,34 @@ def suggest_matches(cur, entity_id) -> int:
                        VALUES (%s, 'receipt', %s, %s, %s, %s)""", (t["id"], rid, t["amount"], conf, f"{rule}:{doc['id']}"))
         cur.execute("UPDATE bank_transactions SET match_status = 'suggested' WHERE id = %s", (t["id"],))
         made += 1
+    return made + suggest_export_proceeds(cur, entity_id)
+
+
+def suggest_export_proceeds(cur, entity_id) -> int:
+    """Propose a shipping bill for each credit that no invoice claimed and that reads like money from abroad. The statement shows rupees after the bank's
+    charges and its own rate, usually as an inward remittance, so the amount only has to be about right (`trade.rank_proceeds`). Nothing is posted: a person
+    accepts with the dollars and the charges. Candidates the person already rejected for the line are not offered again."""
+    cur.execute("SELECT * FROM bank_transactions WHERE entity_id = %s AND match_status = 'unmatched' AND amount > 0 ORDER BY txn_date, id", (entity_id,))
+    credits = cur.fetchall()
+    if not credits:
+        return 0
+    cur.execute("""SELECT sb.id AS sb_id, sb.sb_number, sb.currency, d.number, d.exchange_rate AS rate, d.balance_due, p.legal_name,
+                          sb.fob_foreign - coalesce((SELECT sum(r.amount_foreign) FROM export_realisations r WHERE r.shipping_bill_id = sb.id), 0) AS remaining
+                     FROM shipping_bills sb JOIN sales_documents d ON d.id = sb.sales_document_id JOIN parties p ON p.id = d.party_id
+                    WHERE sb.entity_id = %s AND sb.status <> 'closed' AND d.status = 'issued' AND d.balance_due > 0 AND d.exchange_rate IS NOT NULL""", (entity_id,))
+    cands = cur.fetchall()
+    made = 0
+    for t in credits:
+        cur.execute("SELECT target_id FROM bank_matches WHERE bank_transaction_id = %s AND status = 'rejected'", (t["id"],))
+        refused = {r["target_id"] for r in cur.fetchall()}
+        hits = trade.rank_proceeds(t["amount"], t["description"], t["counterparty_name"], [c for c in cands if c["sb_id"] not in refused])
+        for h in hits:
+            cur.execute("""INSERT INTO bank_matches (bank_transaction_id, target_kind, target_id, amount, confidence, rule)
+                           VALUES (%s, 'shipping_bill', %s, %s, %s, %s)""",
+                        (t["id"], h["shipping_bill_id"], t["amount"], h["confidence"], f"export_proceeds:{h['shipping_bill_id']}:{h['proposed_foreign']}:{h['expected_inr']}"))
+        if hits:
+            cur.execute("UPDATE bank_transactions SET match_status = 'suggested' WHERE id = %s", (t["id"],))
+            made += 1
     return made
 
 
@@ -483,12 +511,31 @@ def txn_out(cur, tid) -> dict:
     t = cur.fetchone()
     cur.execute("""SELECT m.id, m.target_kind, m.target_id, m.amount, m.confidence, m.rule, m.status,
                           CASE WHEN m.target_kind = 'receipt' THEN 'Receipt ' || coalesce((SELECT receipt_no FROM receipts WHERE id = m.target_id), '')
+                               WHEN m.target_kind = 'shipping_bill' THEN 'Export proceeds · ' || coalesce((SELECT concat_ws(' · ', p.legal_name, coalesce('SB ' || sb.sb_number, 'draft shipping bill'))
+                                      FROM shipping_bills sb LEFT JOIN sales_documents d ON d.id = sb.sales_document_id
+                                      LEFT JOIN parties p ON p.id = coalesce(sb.buyer_party_id, d.party_id) WHERE sb.id = m.target_id), 'shipping bill')
                                ELSE m.target_kind END AS label
                      FROM bank_matches m WHERE m.bank_transaction_id = %s ORDER BY m.status = 'rejected', m.confidence DESC NULLS LAST""", (tid,))
-    t["suggestions"] = [{**m, "rule": m["rule"].split(":")[0] if m["rule"] else None, "amount": money(m["amount"]), "confidence": float(m["confidence"] or 0)}
-                        for m in cur.fetchall()]
+    t["suggestions"] = []
+    for m in cur.fetchall():
+        s = {**m, "rule": m["rule"].split(":")[0] if m["rule"] else None, "amount": money(m["amount"]), "confidence": float(m["confidence"] or 0)}
+        if m["target_kind"] == "shipping_bill":
+            s["export"] = _export_hint(cur, m, t["amount"])
+        t["suggestions"].append(s)
     t["amount"] = money(t["amount"])
     return js(t)
+
+
+def _export_hint(cur, m, credit) -> dict:
+    """What a person needs to accept a credit as export proceeds: the shipping bill, the dollars the matcher guessed, and what that is worth at the invoice's rate."""
+    parts = (m["rule"] or "").split(":")
+    cur.execute("SELECT sb_number, currency FROM shipping_bills WHERE id = %s", (m["target_id"],))
+    sb = cur.fetchone() or {}
+    foreign = Decimal(parts[2]) if len(parts) > 2 else None
+    expected = Decimal(parts[3]) if len(parts) > 3 else None
+    return {"shipping_bill_id": m["target_id"], "sb_number": sb.get("sb_number"), "currency": sb.get("currency"),
+            "proposed_foreign": money(foreign) if foreign is not None else None, "expected_inr": money(expected) if expected is not None else None,
+            "difference_inr": money(credit - expected) if expected is not None else None}
 
 
 @router.get(E + "/bank-transactions", tags=["Finance & books"])
@@ -525,6 +572,8 @@ def accept_match(entity_id: uuid.UUID, match_id: uuid.UUID, p: Principal = Auth,
         if replay:
             return JSONResponse(replay["body"], status_code=replay["status"])
         m = _match_for_update(cur, entity_id, match_id)
+        if m["target_kind"] == "shipping_bill":
+            raise ApiError(409, "conflict", "Export proceeds need the foreign amount", "Accept this line with its dollars and bank charges at /bank-transactions/{id}/export-proceeds.")
         if m["target_kind"] != "receipt":
             raise ApiError(409, "conflict", "Only receipt matches can be accepted here")
         doc_id = uuid.UUID(m["rule"].split(":", 1)[1])

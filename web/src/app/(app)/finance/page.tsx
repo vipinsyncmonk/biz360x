@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { api, newIdempotencyKey, unwrap } from "@/lib/api";
-import { CloseTask, Period, Report, BankTxn, closeCounts, confidenceLabel, currentPeriod, isTotalRow, lakh, periodName, returnPeriod } from "@/lib/finance";
+import { CloseTask, Period, Report, BankTxn, closeCounts, confidenceLabel, currentPeriod, exportHintText, isTotalRow, lakh, periodName, returnPeriod } from "@/lib/finance";
 import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { ProceedsRow } from "@/components/BankProceeds";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
 interface Summary { revenue: string; gross_margin_pct: number; ebitda: string; cash_in_bank: string; cash_change: string; receivables: string; receivables_overdue: string; runway_months: number | null; net_burn: string | null }
@@ -15,6 +16,7 @@ export default function Finance() {
   const id = entity?.id ?? null;
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
+  const [taking, setTaking] = useState<string | null>(null);
 
   const summary = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/finance/summary", { params: { path: { entityId: id! } } })) as unknown as Summary, id);
   const periods = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/periods", { params: { path: { entityId: id! } } })) as unknown as Period[], id);
@@ -79,15 +81,19 @@ export default function Finance() {
                     {rows.map((t) => {
                       const sug = t.suggestions.find((x) => x.status === "suggested");
                       return (
-                        <tr key={t.id}>
+                        <Fragment key={t.id}>
+                        <tr>
                           <td><span style={{ fontWeight: 500 }}>{t.counterparty_name ?? t.description}</span><span className="t13" style={{ display: "block" }}>{shortDate(t.txn_date)} · {t.description}</span></td>
                           <td className="mono" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{formatInr(t.amount)}</td>
-                          <td>{t.match_status === "matched" ? <Pill tone="ok">Matched</Pill> : sug ? <><span>{sug.label}</span><span className="t13" style={{ display: "block" }}>{confidenceLabel(sug.confidence)}</span></> : <span className="t13">No suggestion</span>}</td>
+                          <td>{t.match_status === "matched" ? <Pill tone="ok">Matched</Pill> : sug ? <><span>{sug.label}</span><span className="t13" style={{ display: "block" }}>{confidenceLabel(sug.confidence)}</span>{sug.export && <span className="t13" style={{ display: "block", maxWidth: 360 }}>{exportHintText(sug.export)}</span>}</> : <span className="t13">No suggestion</span>}</td>
                           <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                            {sug?.export && t.match_status !== "matched" && <button type="button" className="btn primary" style={{ height: 36, fontSize: 13 }} onClick={() => setTaking(taking === t.id ? null : t.id)}>Record as export proceeds</button>}
                             {sug && t.match_status !== "matched" && sug.target_kind === "receipt" && <button type="button" className="btn" style={{ height: 36, fontSize: 13 }} disabled={busy === sug.id} onClick={() => void decide(sug.id, "accept")}>Accept</button>}
                             {sug && t.match_status !== "matched" && <button type="button" className="btn" style={{ height: 36, fontSize: 13, marginLeft: 6 }} disabled={busy === sug.id} onClick={() => void decide(sug.id, "reject")}>Reject</button>}
                           </td>
                         </tr>
+                        {taking === t.id && sug?.export && id && <ProceedsRow entityId={id} txn={t} hint={sug.export} onCancel={() => setTaking(null)} onDone={() => { setTaking(null); txns.reload(); summary.reload(); }} />}
+                        </Fragment>
                       );
                     })}
                   </tbody>

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn, watch } from "./helpers";
+import { OWNER, apiGet, apiPost, apiToken, signIn, watch } from "./helpers";
 
 // Runs after trade.e2e.ts, which expects no LUT and an empty list. Priya (a maker) can record all of this.
 const MAKER = "priya@example.in";
@@ -97,6 +97,37 @@ test.describe.serial("the export flow", () => {
     await page.goto(invoiceUrl);
     await expect(page.getByText("Balance due")).toBeVisible();
     await expect(page.getByText("₹0.00").first()).toBeVisible();
+    expect(problems()).toEqual([]);
+  });
+
+  test("a bank credit that reads like an inward remittance is taken as proceeds although the bank charged for it", async () => {
+    const token = await apiToken(page, OWNER);
+    const eid = (await apiGet<{ entities: Array<{ id: string }> }>(page, token, "/me")).entities[0]!.id;
+    const reg = (await apiGet<{ data: Array<{ id: string }> }>(page, token, `/entities/${eid}/registrations?kind=gstin`)).data[0]!;
+    const customer = (await apiGet<{ data: Array<{ id: string; legal_name: string }> }>(page, token, `/entities/${eid}/parties?role=customer&q=Fjord`)).data.find((p) => p.legal_name === "Fjord Imports Inc")!;
+    const bank = (await apiGet<{ data: Array<{ id: string }> }>(page, token, `/entities/${eid}/bank-accounts`)).data[0]!;
+    const inv = await apiPost<{ id: string }>(page, token, `/entities/${eid}/sales-documents`, {
+      doc_type: "tax_invoice", doc_date: daysAgo(0), registration_id: reg.id, party_id: customer.id, currency: "USD", exchange_rate: "83",
+      lines: [{ description: "Control valves", hsn_sac: "8481", qty: "5", rate: "8300", gst_rate: "18" }],
+    });
+    await apiPost(page, token, `/entities/${eid}/sales-documents/${inv.id}/issue`, {});                       // USD 500 at 83 = ₹41,500
+    await apiPost(page, token, `/entities/${eid}/bank-accounts/${bank.id}/transactions`, {
+      transactions: [{ external_id: `e2e-fx-${Date.now()}`, txn_date: daysAgo(0), amount: "41150.00", description: "INWARD REMITTANCE FJORD IMPORTS INC USD 500.00 SWIFT", utr: "SWIFT9912" }],
+    });                                                                                                         // the bank took ₹350 and showed only what was left
+
+    await page.goto("/finance");
+    const row = page.getByRole("row").filter({ hasText: "INWARD REMITTANCE FJORD IMPORTS INC" });
+    await expect(row.getByText(/Export proceeds · Fjord Imports Inc/)).toBeVisible();
+    await expect(row.getByText(/Looks like USD 500\.00 .*41,500\.00 at the invoice rate\)\. The credit is .*350\.00 less/)).toBeVisible();
+    await row.getByRole("button", { name: "Record as export proceeds" }).click();
+    const form = page.getByRole("form", { name: "Record as export proceeds" });
+    await expect(form.getByLabel("Amount received (USD)")).toHaveValue("500.00");                              // the dollars named in the narration
+    await form.getByLabel("Bank charges deducted (₹)").fill("350.00");
+    await form.getByLabel("FIRC no. (optional)").fill("FIRC-E2E-1");
+    await form.getByRole("button", { name: "Record as export proceeds" }).click();
+    await expect(row.getByText("Matched")).toBeVisible();
+    const doc = await apiGet<{ balance_due: string }>(page, token, `/entities/${eid}/sales-documents/${inv.id}`);
+    expect(doc.balance_due).toBe("0.00");
     expect(problems()).toEqual([]);
   });
 });

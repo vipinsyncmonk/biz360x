@@ -2451,7 +2451,7 @@ export interface paths {
         put?: never;
         /**
          * Import bank lines from a feed (Account Aggregator, bank API or parsed statement)
-         * @description Duplicates (same `external_id`) are ignored. Credits paid into an invoice virtual account, or naming an invoice number, get a suggested receipt to accept or reject.
+         * @description Duplicates (same `external_id`) are ignored. Credits paid into an invoice virtual account, or naming an invoice number, get a suggested receipt to accept or reject. A credit that reads like money from abroad gets a suggested shipping bill instead (accept it with bankCreditAsExportProceeds).
          */
         post: operations["importBankTransactions"];
         delete?: never;
@@ -2488,6 +2488,26 @@ export interface paths {
         put?: never;
         /** Accept a suggested match */
         post: operations["acceptBankMatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/bank-transactions/{id}/export-proceeds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take a bank credit as the proceeds of an export
+         * @description A credit that reads like an inward remittance gets a suggested shipping bill (rule export_proceeds), tolerant of the bank's charges and rate. The line is the rupees after those charges, so the person gives the foreign amount and the charges: a receipt is created, the export invoice is settled at its own rate and the difference is posted as foreign exchange gain or loss. Needs finance:write too. 409 if the line is already matched or the shipping bill has no issued export invoice (proceeds_need_invoice).
+         */
+        post: operations["bankCreditAsExportProceeds"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6000,6 +6020,16 @@ export interface components {
             duplicates?: number;
             suggested?: number;
         };
+        /** @description For a suggestion that names a shipping bill: the foreign amount the matcher guessed, what that is worth at the invoice's rate, and how far the credit is from it. The statement shows rupees after the bank's charges and its own rate, so the credit is rarely exact. */
+        ExportMatchHint: {
+            /** Format: uuid */
+            shipping_bill_id?: string;
+            sb_number?: string | null;
+            currency?: string | null;
+            proposed_foreign?: components["schemas"]["Money"] | null;
+            expected_inr?: components["schemas"]["Money"] | null;
+            difference_inr?: components["schemas"]["Money"] | null;
+        };
         BankMatchSuggestion: {
             /** Format: uuid */
             readonly id?: string;
@@ -6013,6 +6043,7 @@ export interface components {
             rule?: string;
             /** @enum {string} */
             status?: "suggested" | "accepted" | "rejected";
+            export?: components["schemas"]["ExportMatchHint"] | null;
         };
         BankTransaction: {
             /** Format: uuid */
@@ -6032,6 +6063,13 @@ export interface components {
         BankTransactionPage: {
             data: components["schemas"]["BankTransaction"][];
             next_cursor: string | null;
+        };
+        ProceedsFromBank: {
+            /** Format: uuid */
+            shipping_bill_id: string;
+            amount_foreign: components["schemas"]["Money"];
+            bank_charges?: components["schemas"]["Money"];
+            firc_no?: string;
         };
         MatchTarget: {
             target_kind: string;
@@ -13450,6 +13488,44 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankTransaction"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    bankCreditAsExportProceeds: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProceedsFromBank"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

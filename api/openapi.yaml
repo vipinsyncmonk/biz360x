@@ -6479,7 +6479,8 @@ paths:
       operationId: importBankTransactions
       summary: Import bank lines from a feed (Account Aggregator, bank API or parsed statement)
       description: Duplicates (same `external_id`) are ignored. Credits paid into an invoice virtual account, or naming an
-        invoice number, get a suggested receipt to accept or reject.
+        invoice number, get a suggested receipt to accept or reject. A credit that reads like money from abroad gets a suggested
+        shipping bill instead (accept it with bankCreditAsExportProceeds).
       parameters:
       - $ref: '#/components/parameters/EntityId'
       - $ref: '#/components/parameters/Id'
@@ -6584,6 +6585,50 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: finance:write
+  /entities/{entityId}/bank-transactions/{id}/export-proceeds:
+    post:
+      tags:
+      - Export & import
+      operationId: bankCreditAsExportProceeds
+      summary: Take a bank credit as the proceeds of an export
+      description: 'A credit that reads like an inward remittance gets a suggested shipping bill (rule export_proceeds), tolerant
+        of the bank''s charges and rate. The line is the rupees after those charges, so the person gives the foreign amount
+        and the charges: a receipt is created, the export invoice is settled at its own rate and the difference is posted
+        as foreign exchange gain or loss. Needs finance:write too. 409 if the line is already matched or the shipping bill
+        has no issued export invoice (proceeds_need_invoice).'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProceedsFromBank'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankTransaction'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: trade:write
   /entities/{entityId}/bank-matches/{id}/reject:
     post:
       tags:
@@ -15891,6 +15936,35 @@ components:
           type: integer
         suggested:
           type: integer
+    ExportMatchHint:
+      type: object
+      properties:
+        shipping_bill_id:
+          type: string
+          format: uuid
+        sb_number:
+          oneOf:
+          - type: string
+          - type: 'null'
+        currency:
+          oneOf:
+          - type: string
+          - type: 'null'
+        proposed_foreign:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        expected_inr:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        difference_inr:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+      description: 'For a suggestion that names a shipping bill: the foreign amount the matcher guessed, what that is worth
+        at the invoice''s rate, and how far the credit is from it. The statement shows rupees after the bank''s charges and
+        its own rate, so the credit is rarely exact.'
     BankMatchSuggestion:
       type: object
       properties:
@@ -15919,6 +15993,10 @@ components:
           - suggested
           - accepted
           - rejected
+        export:
+          oneOf:
+          - $ref: '#/components/schemas/ExportMatchHint'
+          - type: 'null'
     BankTransaction:
       type: object
       properties:
@@ -15970,6 +16048,21 @@ components:
       required:
       - data
       - next_cursor
+    ProceedsFromBank:
+      type: object
+      properties:
+        shipping_bill_id:
+          type: string
+          format: uuid
+        amount_foreign:
+          $ref: '#/components/schemas/Money'
+        bank_charges:
+          $ref: '#/components/schemas/Money'
+        firc_no:
+          type: string
+      required:
+      - shipping_bill_id
+      - amount_foreign
     MatchTarget:
       type: object
       properties:
