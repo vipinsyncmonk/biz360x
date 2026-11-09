@@ -75,7 +75,7 @@ export function byTrouble(rows: Standing[]): Standing[] {
 // ---- write actions: invite, advisors, certificates, API keys. The server decides who may do what; these only stop useless calls.
 export const MODULES: Array<[string, string]> = [
   ["sales", "Sales & billing"], ["purchases", "Purchases"], ["finance", "Finance & books"], ["gst", "GST"], ["tds", "TDS"],
-  ["payroll", "Payroll & HR"], ["legal", "Legal & contracts"], ["documents", "Documents"], ["compliance", "Compliance"],
+  ["payroll", "Payroll & HR"], ["trade", "Exports & imports"], ["legal", "Legal & contracts"], ["documents", "Documents"], ["compliance", "Compliance"],
 ];
 export const ROLES: Array<[string, string, string]> = [
   ["owner", "Owner", "Everything, including people and settings"],

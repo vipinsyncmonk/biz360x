@@ -15,6 +15,7 @@ const I = {
   rocket: "M5 15c-1 1-2 5-2 5s4-1 5-2M9 15l-3-3c1-4 5-9 12-9 0 7-5 11-9 12zM14 10h.01",
   factory: "M3 21V10l6 4V10l6 4V6h6v15z",
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  ship: "M3 17l2 3h14l2-3M5 17l-1-6h16l-1 6M12 11V4l5 4M12 4L7 8",
   group: "M3 21V9l6-4 6 4v12M15 21V13h6v8M7 13h4M7 17h4",
   cog: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L10 21h4l.5-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z",
 };
@@ -32,7 +33,7 @@ export const NAV: NavGroup[] = [
   { h: "RUN", items: [
     { t: "Sales & Billing", href: "/billing", icon: I.bill, built: true },
     { t: "Finance & Books", href: "/finance", icon: I.book, built: true }, { t: "GST & Tax", href: "/gst", icon: I.gst, built: true }, { t: "TDS & Advance tax", href: "/tds", icon: I.gst, built: true },
-    { t: "Payroll & HR", href: "/payroll", icon: I.people, built: true }, { t: "Legal & Contracts", href: "/legal", icon: I.legal, built: true }, { t: "Board & resolutions", href: "/board", icon: I.book, built: true },
+    { t: "Payroll & HR", href: "/payroll", icon: I.people, built: true }, { t: "Exports & imports", href: "/trade", icon: I.ship, built: true }, { t: "Legal & Contracts", href: "/legal", icon: I.legal, built: true }, { t: "Board & resolutions", href: "/board", icon: I.book, built: true },
   ] },
   { h: "TRACKS", items: [{ t: "Startup", href: "/startup", icon: I.rocket, built: true }, { t: "MSME", href: "/msme", icon: I.factory, built: true }, { t: "All modules", href: "/modules", icon: I.grid, built: true }] },
   { h: "ADMIN", items: [{ t: "Group view", href: "/group", icon: I.group, built: true }, { t: "Settings", href: "/settings", icon: I.cog, built: true }] },

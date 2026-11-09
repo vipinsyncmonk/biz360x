@@ -3522,6 +3522,117 @@ export interface paths {
         patch: operations["updateDataRoom"];
         trace?: never;
     };
+    "/entities/{entityId}/shipping-bills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List shipping bills */
+        get: operations["listShippingBills"];
+        put?: never;
+        /** Create shipping bill */
+        post: operations["createShippingBill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/shipping-bills/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a shipping bill with its realisations */
+        get: operations["getShippingBill"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Record progress, the date of export, claims and the e-BRC */
+        patch: operations["updateShippingBill"];
+        trace?: never;
+    };
+    "/entities/{entityId}/shipping-bills/{id}/realisations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record export proceeds received against a shipping bill
+         * @description Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409).
+         */
+        post: operations["recordRealisation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/bills-of-entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List bills of entry */
+        get: operations["listBillsOfEntry"];
+        put?: never;
+        /** Create bill of entry */
+        post: operations["createBillOfEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/bills-of-entry/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Record assessment, duty paid and the purchase bill it belongs to */
+        patch: operations["updateBillOfEntry"];
+        trace?: never;
+    };
+    "/entities/{entityId}/trade/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where exports and imports stand this financial year
+         * @description Exports and imports are counted from 1 April. The LUT is read from the company's LUT registration.
+         */
+        get: operations["getTradeSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/portal-connections": {
         parameters: {
             query?: never;
@@ -6577,6 +6688,148 @@ export interface components {
         DataRoomPage: {
             data: components["schemas"]["DataRoom"][];
             next_cursor: string | null;
+        };
+        Realisation: {
+            /** Format: uuid */
+            readonly id?: string;
+            /** Format: date */
+            received_on: string;
+            amount_foreign: components["schemas"]["Money"];
+            bank_ref?: string | null;
+            firc_no?: string | null;
+        };
+        /** @description Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases). */
+        ShippingBill: {
+            /** Format: uuid */
+            readonly id?: string;
+            sb_number: string;
+            /** Format: date */
+            sb_date: string;
+            /** @example INMAA1 */
+            port_code: string;
+            /** @example USD */
+            currency: string;
+            fob_foreign: components["schemas"]["Money"];
+            /** @description Customs notified rate, up to four decimals */
+            exchange_rate: string;
+            readonly fob_inr?: components["schemas"]["Money"];
+            /** @enum {string} */
+            status?: "filed" | "let_export" | "shipped" | "closed";
+            exported_on?: string | null;
+            sales_document_id?: string | null;
+            invoice_number?: string | null;
+            buyer_party_id?: string | null;
+            buyer_name?: string | null;
+            rodtep_claimed?: components["schemas"]["Money"];
+            rodtep_credited?: components["schemas"]["Money"];
+            drawback_claimed?: components["schemas"]["Money"];
+            drawback_received?: components["schemas"]["Money"];
+            brc_ref?: string | null;
+            readonly realised_foreign?: components["schemas"]["Money"];
+            readonly realisations?: components["schemas"]["Realisation"][];
+            /** @enum {string} */
+            readonly realisation_state?: "awaiting_export" | "pending" | "overdue" | "realised";
+            realisation_due_on?: string | null;
+            days_left?: number | null;
+            readonly outstanding_foreign?: components["schemas"]["Money"];
+            readonly outstanding_inr?: components["schemas"]["Money"];
+        };
+        ShippingBillPage: {
+            data: components["schemas"]["ShippingBill"][];
+            next_cursor: string | null;
+        };
+        /** @description The date of export starts the realisation clock and cannot be changed once recorded. */
+        ShippingBillUpdate: {
+            /** @enum {string} */
+            status?: "filed" | "let_export" | "shipped" | "closed";
+            /** Format: date */
+            exported_on?: string;
+            rodtep_claimed?: components["schemas"]["Money"];
+            rodtep_credited?: components["schemas"]["Money"];
+            drawback_claimed?: components["schemas"]["Money"];
+            drawback_received?: components["schemas"]["Money"];
+            brc_ref?: string;
+        };
+        BillOfEntry: {
+            /** Format: uuid */
+            readonly id?: string;
+            boe_number: string;
+            /** Format: date */
+            boe_date: string;
+            /** @example INMAA1 */
+            port_code: string;
+            /** @example USD */
+            currency: string;
+            cif_foreign: components["schemas"]["Money"];
+            exchange_rate: string;
+            readonly cif_inr?: components["schemas"]["Money"];
+            bcd?: components["schemas"]["Money"];
+            sws?: components["schemas"]["Money"];
+            igst?: components["schemas"]["Money"];
+            other_duty?: components["schemas"]["Money"];
+            readonly duty_total?: components["schemas"]["Money"];
+            /** @enum {string} */
+            status?: "filed" | "assessed" | "duty_paid" | "cleared";
+            duty_paid_on?: string | null;
+            supplier_party_id?: string | null;
+            supplier_name?: string | null;
+            purchase_bill_id?: string | null;
+            /** @description IGST paid on the import, available as input tax credit once the duty is paid */
+            readonly igst_credit?: components["schemas"]["Money"];
+        };
+        BillOfEntryPage: {
+            data: components["schemas"]["BillOfEntry"][];
+            next_cursor: string | null;
+        };
+        BillOfEntryUpdate: {
+            /** @enum {string} */
+            status?: "filed" | "assessed" | "duty_paid" | "cleared";
+            /** Format: date */
+            duty_paid_on?: string;
+            bcd?: components["schemas"]["Money"];
+            sws?: components["schemas"]["Money"];
+            igst?: components["schemas"]["Money"];
+            other_duty?: components["schemas"]["Money"];
+            /** Format: uuid */
+            purchase_bill_id?: string;
+        };
+        LutState: {
+            /** @enum {string} */
+            state?: "valid" | "expiring" | "expired" | "none";
+            valid_until?: string | null;
+            days_left?: number | null;
+        };
+        ExportTotals: {
+            bills?: number;
+            value_inr?: components["schemas"]["Money"];
+        };
+        RealisationTotals: {
+            outstanding_bills?: number;
+            outstanding_inr?: components["schemas"]["Money"];
+            overdue_bills?: number;
+            overdue_inr?: components["schemas"]["Money"];
+            awaiting_export?: number;
+        };
+        ClaimTotals: {
+            rodtep_pending?: components["schemas"]["Money"];
+            drawback_pending?: components["schemas"]["Money"];
+        };
+        ImportTotals: {
+            bills?: number;
+            duty_inr?: components["schemas"]["Money"];
+            igst_credit_inr?: components["schemas"]["Money"];
+        };
+        TradeSummary: {
+            /** Format: date */
+            as_of?: string;
+            /** Format: date */
+            financial_year_from?: string;
+            iec?: string | null;
+            lut?: components["schemas"]["LutState"];
+            exports?: components["schemas"]["ExportTotals"];
+            realisation?: components["schemas"]["RealisationTotals"];
+            claims?: components["schemas"]["ClaimTotals"];
+            imports?: components["schemas"]["ImportTotals"];
         };
         PortalConnection: {
             /** Format: uuid */
@@ -15971,6 +16224,307 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             412: components["responses"]["PreconditionFailed"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listShippingBills: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor from `next_cursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Field name; prefix `-` for descending */
+                sort?: components["parameters"]["Sort"];
+                state?: "awaiting_export" | "pending" | "overdue" | "realised";
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShippingBillPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    createShippingBill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShippingBill"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShippingBill"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getShippingBill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShippingBill"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    updateShippingBill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShippingBillUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShippingBill"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    recordRealisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Realisation"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShippingBill"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listBillsOfEntry: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor from `next_cursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Field name; prefix `-` for descending */
+                sort?: components["parameters"]["Sort"];
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillOfEntryPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    createBillOfEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillOfEntry"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillOfEntry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    updateBillOfEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillOfEntryUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillOfEntry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getTradeSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradeSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };
