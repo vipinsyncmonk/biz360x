@@ -164,10 +164,15 @@ class SandboxMca:
         "gstins": [{"gstin": "27AAKCO5678M1Z2", "state_code": "27", "status": "active", "filing_frequency": "monthly", "label": "Maharashtra principal place"}],
         "udyam": None}}
 
+    def __init__(self):
+        # your own company, from the file named by BIZ_COMPANY_PROFILES (development only; see company_profiles.py)
+        from . import company_profiles
+        self.registry = {**type(self).registry, **company_profiles.configured()}
+
     def lookup(self, identifier, kind):
         if identifier == "U99999KA2020PTC000000":
             raise PortalUnavailable("MCA is down for maintenance (sandbox rule)")
-        if kind == "cin":
+        if kind in ("cin", "llpin"):
             return self.registry.get(identifier)
         for entry in self.registry.values():                       # a GSTIN or PAN resolves to the company that holds it
             for g in entry["gstins"]:
