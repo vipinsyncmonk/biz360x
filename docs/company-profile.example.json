@@ -1,0 +1,25 @@
+{
+  "companies": [
+    {
+      "cin": "U74999DL2018PTC987654",
+      "legal_name": "Example Traders Private Limited",
+      "constitution": "private_limited",
+      "incorporated_on": "2018-04-12",
+      "registered_state": "07",
+      "registered_address": "Nehru Place, New Delhi, Delhi",
+      "paid_up_capital": "2500000.00",
+      "nic_code": "46909",
+      "last_agm_on": "2025-09-30",
+      "pan": "AABCE1234F",
+      "tan": "DELE12345A",
+      "directors": [
+        {"name": "Asha Verma", "din": "01234567"},
+        {"name": "Rahul Verma", "din": "07654321"}
+      ],
+      "gstins": [
+        {"gstin": "07AABCE1234F1Z5", "status": "active", "filing_frequency": "monthly", "label": "Delhi principal place"}
+      ],
+      "udyam": {"number": "UDYAM-DL-09-0012345", "class": "micro"}
+    }
+  ]
+}

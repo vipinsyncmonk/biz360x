@@ -13,6 +13,7 @@ Read `docs/API_GUIDE.md` before changing anything structural.
 | `api/openapi.yaml` | **Generated** OpenAPI 3.1 contract (270 operations). Do not hand-edit. |
 | `api/build_openapi.py` | Source of truth for the contract. Edit this, then regenerate. |
 | `server/` | FastAPI reference server + job worker (`app/worker.py`) + end-to-end tests (`tests/test_flows.py`). |
+| `docs/company-profile.example.json` | Template for registering your own company in the development registry (`BIZ_COMPANY_PROFILES`, `scripts/check_profile.py`, `server/app/company_profiles.py`). Keep the real file under `var/` |
 | `docs/API_GUIDE.md` | Architecture, conventions, permissions, flows, screen → endpoint map. |
 | `web/` | Next.js front end (`web/README.md`): shell, sign-in/sign-up, onboarding, Today, Compliance so far. Types are generated from the contract. |
 | `design/screens/*.dc.html` | Exported screen designs (26 artboards). Use them for layout, copy and data shapes; the live canvas is the source of truth. |
