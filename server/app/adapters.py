@@ -249,6 +249,14 @@ class SandboxBank:
         return {"batch_ref": "SAL" + uuid.uuid5(uuid.NAMESPACE_URL, payload["run_id"]).hex[:10].upper(), "status": "accepted"}
 
 
+class SandboxSamadhaan:
+    """MSME Samadhaan, where a micro or small supplier files a claim for delayed payment. A real adapter calls the portal."""
+    def file_claim(self, payload):
+        if not payload.get("invoices"):
+            raise PortalRejected("A claim needs at least one invoice", "SAM001")
+        return {"case_no": "SAM/" + _h("samadhaan", payload["claim_id"])[:10].upper(), "forum": "msme_samadhaan"}
+
+
 # ================================================================== copilot
 def _inr(v) -> str:
     """Rupees in the Indian grouping, no decimals unless there are paise: 1234567.5 -> Rs 12,34,567.50"""
@@ -353,7 +361,7 @@ class SandboxCopilot:
 IMPLEMENTATIONS: dict[str, dict[str, type]] = {
     "irp": {"sandbox": SandboxIrp}, "gsp": {"sandbox": SandboxGsp}, "eway": {"sandbox": SandboxEway}, "mca": {"sandbox": SandboxMca},
     "traces": {"sandbox": SandboxTraces}, "labour": {"sandbox": SandboxLabour}, "sessions": {"sandbox": SandboxSessions},
-    "aa": {"sandbox": SandboxAa}, "bank": {"sandbox": SandboxBank}, "copilot": {"sandbox": SandboxCopilot},
+    "aa": {"sandbox": SandboxAa}, "bank": {"sandbox": SandboxBank}, "copilot": {"sandbox": SandboxCopilot}, "samadhaan": {"sandbox": SandboxSamadhaan},
 }
 _active: dict[str, Any] = {}
 
