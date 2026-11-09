@@ -75,36 +75,42 @@ def _context(cur, entity_id, body: SalesDocIn):
     f = cur.fetchone()
     cur.execute("SELECT udyam_class::text FROM entities WHERE id = %s", (entity_id,))
     cls = cur.fetchone()["udyam_class"]
-    original_date = None
+    original_date = original = None
     if body.original_document_id:
-        cur.execute("SELECT doc_date FROM sales_documents WHERE id = %s AND entity_id = %s", (body.original_document_id, entity_id))
-        o = cur.fetchone()
-        if not o:
+        cur.execute("""SELECT doc_date, doc_type::text AS doc_type, party_id, supply_type::text AS supply_type, currency, exchange_rate
+                         FROM sales_documents WHERE id = %s AND entity_id = %s""", (body.original_document_id, entity_id))
+        original = cur.fetchone()
+        if not original:
             raise ApiError(400, "validation_failed", "original_document_id not found")
-        original_date = o["doc_date"]
-    if party["country"] != "IN" and body.doc_type in ("credit_note", "debit_note"):
-        raise ApiError(400, "export_notes_unsupported", "Credit and debit notes for exports are not supported yet",
-                       "Their tax treatment depends on how the export was supplied. Raise it with your CA and record it in the books directly.")
-    ex = export_terms(cur, entity_id, body, party)
+        original_date = original["doc_date"]
+    if party["country"] != "IN" and body.doc_type in ("credit_note", "debit_note") and (
+            not original or original["doc_type"] != "export_invoice" or original["party_id"] != body.party_id):
+        raise ApiError(400, "export_note_needs_invoice", "Raise this note against the export invoice it corrects",
+                       "A credit or debit note to a customer abroad follows the export invoice it corrects: same currency, exchange rate and tax treatment. Choose that invoice as the original.")
+    ex = export_terms(cur, entity_id, body, party, original)
     pos = "96" if ex["is_export"] else body.place_of_supply or (gst["state_code"] if gst else reg["state_code"])
     terms = body.payment_terms_days if body.payment_terms_days is not None else party["payment_terms_days"]
     ctx = tax.Context(doc_type=ex["doc_type"], supplier_state=reg["state_code"], place_of_supply=pos, doc_date=body.doc_date,
                       buyer_gstin=gst["gstin"] if gst else None, aato=f["value_num"] if f else None,
                       deducts_194q=party["deducts_tds_194q"], payment_terms_days=terms,
                       supplier_is_mse=cls in ("micro", "small"), original_doc_date=original_date, gst_adjusted=body.gst_adjusted,
-                      is_export=ex["is_export"], zero_rated=ex["supply_type"] == "export_under_lut" and ex["lut"] in ("valid", "expiring"), lut=ex["lut"],
+                      is_export=ex["is_export"], zero_rated=ex["zero_rated"], lut=ex["lut"],
                       currency=ex["currency"], exchange_rate=ex["exchange_rate"], country=party["country"], supply_type=ex["supply_type"])
     lines = [tax.Line(l.description, l.hsn_sac, l.qty, l.rate, l.gst_rate, l.discount, is_service=l.hsn_sac.startswith("99"))
              for l in body.lines]
     return ctx, lines, party, gst, reg
 
 
-def export_terms(cur, entity_id, body: SalesDocIn, party) -> dict:
-    """Whether this invoice is an export, decided by where the customer is: a customer outside India turns a tax invoice into an export invoice,
-    supplied under LUT when a valid one covers the date and with payment of IGST when not. Credit and debit notes follow the invoice they correct."""
+def export_terms(cur, entity_id, body: SalesDocIn, party, original=None) -> dict:
+    """Whether this document is an export, decided by where the customer is: a customer outside India turns a tax invoice into an export invoice,
+    supplied under LUT when a valid one covers the date and with payment of IGST when not. A credit or debit note to a customer abroad follows
+    the export invoice it corrects: its currency, its rate and its tax treatment, whatever the LUT says today."""
+    if party["country"] != "IN" and body.doc_type in ("credit_note", "debit_note") and original:
+        return {"is_export": True, "doc_type": body.doc_type, "supply_type": original["supply_type"], "lut": "none", "zero_rated": original["supply_type"] == "export_under_lut",
+                "currency": original["currency"], "exchange_rate": original["exchange_rate"]}
     is_export = party["country"] != "IN" and body.doc_type in ("tax_invoice", "export_invoice")
     if not is_export:
-        return {"is_export": False, "doc_type": body.doc_type, "supply_type": body.supply_type, "lut": "none", "currency": "INR", "exchange_rate": None}
+        return {"is_export": False, "doc_type": body.doc_type, "supply_type": body.supply_type, "lut": "none", "zero_rated": False, "currency": "INR", "exchange_rate": None}
     cur.execute("""SELECT valid_until FROM entity_registrations WHERE entity_id = %s AND kind = 'lut' AND status = 'active'
                       AND (valid_from IS NULL OR valid_from <= %s) ORDER BY valid_until DESC NULLS FIRST LIMIT 1""", (entity_id, body.doc_date))
     lut_row = cur.fetchone()
@@ -115,7 +121,8 @@ def export_terms(cur, entity_id, body: SalesDocIn, party) -> dict:
         supply = "export_under_lut" if lut in ("valid", "expiring") else "export_with_tax"
     currency = body.currency or (party["currency"] if party["currency"] != "INR" else "INR")
     rate = body.exchange_rate if currency != "INR" else None
-    return {"is_export": True, "doc_type": "export_invoice", "supply_type": supply, "lut": lut, "currency": currency, "exchange_rate": rate}
+    return {"is_export": True, "doc_type": "export_invoice", "supply_type": supply, "lut": lut, "zero_rated": supply == "export_under_lut" and lut in ("valid", "expiring"),
+            "currency": currency, "exchange_rate": rate}
 
 
 def ensure_export_series(cur, entity_id, registration_id, fy) -> None:
@@ -181,7 +188,7 @@ def create_draft(cur, entity_id, body: SalesDocIn) -> uuid.UUID:
     blocks = [c for c in res.checks if c["level"] == "block"]
     if blocks and (body.doc_type == "credit_note" or ctx.is_export):
         raise ApiError(400, blocks[0]["code"], blocks[0]["title"], blocks[0]["detail"])
-    if ctx.is_export:
+    if ctx.doc_type == "export_invoice":
         cur.execute("SELECT app.fy_of(%s) AS fy", (body.doc_date,))
         ensure_export_series(cur, entity_id, body.registration_id, cur.fetchone()["fy"])
     cur.execute("""

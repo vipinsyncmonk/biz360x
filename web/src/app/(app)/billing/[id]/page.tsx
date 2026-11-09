@@ -80,21 +80,21 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
             <aside className="col-side">
               <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <h2>{d.buyer_legal_name}</h2>
-                <span className="mono t13">{d.doc_type === "export_invoice" ? "Customer outside India · place of supply outside India" : <>{d.buyer_gstin ?? "Unregistered buyer"} · place of supply {d.place_of_supply}</>}</span>
+                <span className="mono t13">{d.doc_type === "export_invoice" || d.currency !== "INR" ? "Customer outside India · place of supply outside India" : <>{d.buyer_gstin ?? "Unregistered buyer"} · place of supply {d.place_of_supply}</>}</span>
                 <Row k="Taxable value" v={formatInr(d.taxable_total)} />
                 {inter ? <Row k="IGST" v={formatInr(d.igst_total)} /> : <><Row k="CGST" v={formatInr(d.cgst_total)} /><Row k="SGST" v={formatInr(d.sgst_total)} /></>}
                 {d.round_off !== "0.00" && <Row k="Round off" v={formatInr(d.round_off)} />}
                 <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 10, borderTop: "1px solid var(--line)", fontWeight: 700, fontSize: 18 }}><span>Total</span><span className="mono">{formatInr(d.grand_total)}</span></div>
-                {d.foreign_total && <Row k={`Customer pays (${d.currency})`} v={`${d.currency} ${Number(d.foreign_total).toLocaleString("en-US", { minimumFractionDigits: 2 })}`} />}
+                {d.foreign_total && <Row k={d.doc_type === "credit_note" ? `Customer is credited (${d.currency})` : `Customer pays (${d.currency})`} v={`${d.currency} ${Number(d.foreign_total).toLocaleString("en-US", { minimumFractionDigits: 2 })}`} />}
                 {d.status === "issued" && <><Row k="Settled" v={formatInr(d.amount_settled)} /><Row k="Balance due" v={formatInr(d.balance_due)} /></>}
                 <span className="t13">Due {shortDate(d.due_date)}{d.payment_terms_days != null ? ` · ${d.payment_terms_days} day terms` : ""}</span>
               </section>
-              {d.doc_type === "export_invoice" && (
+              {(d.doc_type === "export_invoice" || d.currency !== "INR") && (
                 <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }} aria-label="Export">
-                  <h2>Export</h2>
+                  <h2>{d.doc_type === "export_invoice" ? "Export" : "On an export invoice"}</h2>
                   <span style={{ fontSize: 14 }}>{d.supply_type === "export_under_lut" ? "Supplied under LUT: no GST charged." : "Exported with payment of IGST, claimed back as a refund."}</span>
                   {d.exchange_rate && <span className="t13">Converted at ₹{d.exchange_rate} per {d.currency}.</span>}
-                  {d.status === "issued" && <Link href="/trade" style={{ fontSize: 14 }}>Shipping bill and proceeds on Exports &amp; imports →</Link>}
+                  {d.status === "issued" && d.doc_type === "export_invoice" && <Link href="/trade" style={{ fontSize: 14 }}>Shipping bill and proceeds on Exports &amp; imports →</Link>}
                 </section>
               )}
               <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>

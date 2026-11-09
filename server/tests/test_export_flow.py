@@ -53,6 +53,18 @@ def test_an_export_needs_a_currency_and_a_rate_and_a_claimed_lut_must_exist():
     assert codes(tax.compute(SERVICE, ctx(lut="expiring")))["lut_expiring"] == "warn"
 
 
+def test_a_note_on_an_export_invoice_follows_the_invoice_and_needs_no_buyer_gstin():
+    credit = tax.compute(GOODS, ctx(doc_type="credit_note", original_doc_date=dt.date(2020, 4, 1)))                  # far past the Sec 34 limit, but no GST was charged to reduce
+    assert credit.igst_total == 0 and credit.grand_total == D("10000")
+    c = codes(credit)
+    assert c["export_note"] == "ok" and c["export_foreign_value"] == "info"
+    assert not {"b2b_needs_gstin", "sec34_time_limit", "shipping_bill_follows", "export_under_lut"} & set(c)
+    taxed = tax.compute(GOODS, ctx(doc_type="debit_note", zero_rated=False, lut="none", supply_type="export_with_tax"))
+    assert taxed.igst_total == D("1800.00") and codes(taxed)["export_note"] == "ok" and "export_no_lut" not in codes(taxed)
+    late = codes(tax.compute(GOODS, ctx(doc_type="credit_note", zero_rated=False, lut="none", supply_type="export_with_tax", original_doc_date=dt.date(2020, 4, 1))))
+    assert late["sec34_time_limit"] == "block"                                                                        # IGST was charged, so the time limit still applies
+
+
 def test_an_export_is_einvoiced_without_a_buyer_gstin_above_the_turnover_limit():
     assert codes(tax.compute(GOODS, ctx(aato=D("60000000"))))["einvoice_required"] == "ok"
     assert "einvoice_required" not in codes(tax.compute(GOODS, ctx(aato=D("1000000"))))
@@ -93,6 +105,7 @@ def seed(db):
     db.execute("INSERT INTO entity_registrations (id, entity_id, kind, number, state_code, label, gst_filing_frequency) VALUES (%s, %s, 'gstin', '29AAACX7001A1Z5', '29', 'Karnataka', 'monthly')", (REG, EN))
     for fy in {tax_fy(TODAY)}:
         db.execute("INSERT INTO document_series (entity_id, registration_id, doc_type, fy, prefix) VALUES (%s, %s, 'tax_invoice', %s, 'XF/')", (EN, REG, fy))
+        db.execute("INSERT INTO document_series (entity_id, registration_id, doc_type, fy, prefix) VALUES (%s, %s, 'credit_note', %s, 'XC/')", (EN, REG, fy))
     db.execute("INSERT INTO users (id, email, full_name) VALUES (%s, %s, 'Xf Owner'), (%s, %s, 'Xf Viewer')", (U_OWNER, OWNER, U_VIEWER, VIEWER))
     db.execute("INSERT INTO memberships (entity_id, user_id, role, accepted_at) VALUES (%s, %s, 'owner', now()), (%s, %s, 'viewer', now())", (EN, U_OWNER, EN, U_VIEWER))
     yield
@@ -226,15 +239,53 @@ def test_recording_a_shipping_bill_against_the_invoice_fills_its_draft_instead_o
     assert s["exports"]["drafts"] == 0 and s["lut"]["state"] == "valid"
 
 
-def test_an_export_of_services_needs_no_shipping_bill_and_notes_for_exports_are_refused(client, db):
+def test_an_export_of_services_needs_no_shipping_bill(client, db):
     o = login(client, OWNER)
     before = len(client.get(url("/shipping-bills"), headers=o).json()["data"])
     d = client.post(url("/sales-documents"), headers=o, json=doc(S["abroad"], [SERVICE_LINE], currency="USD", exchange_rate="83")).json()
     assert d["doc_type"] == "export_invoice" and d["grand_total"] == "83000.00"
     assert client.post(url(f"/sales-documents/{d['id']}/issue"), headers={**o, **key()}, json={}).status_code == 202
     assert len(client.get(url("/shipping-bills"), headers=o).json()["data"]) == before
-    r = client.post(url("/sales-documents"), headers=o, json={**doc(S["abroad"], [GOODS_LINE]), "doc_type": "credit_note", "original_document_id": S["inv"], "cn_reason": "sales_return"})
-    assert r.status_code == 400 and r.json()["code"] == "export_notes_unsupported"
+
+
+CN_LINE = {"description": "Valve", "hsn_sac": "8481", "qty": "2", "rate": "8300", "gst_rate": "18"}
+
+
+def test_a_credit_note_on_an_export_invoice_under_lut_credits_in_the_invoice_currency_with_no_tax(client, db):
+    o = login(client, OWNER)
+    bills = len(client.get(url("/shipping-bills"), headers=o).json()["data"])
+    r = client.post(url(f"/sales-documents/{S['inv']}/credit-notes"), headers=o, json={"cn_reason": "sales_return", "lines": [CN_LINE]})
+    assert r.status_code == 201, r.text
+    cn = r.json()
+    assert cn["doc_type"] == "credit_note" and cn["supply_type"] == "export_under_lut" and cn["place_of_supply"] == "96"
+    assert cn["currency"] == "USD" and cn["exchange_rate"] == "83.0000" and cn["igst_total"] == "0.00" and cn["grand_total"] == "16600.00" and cn["foreign_total"] == "200.00"
+    assert client.post(url(f"/sales-documents/{cn['id']}/issue"), headers={**o, **key()}, json={}).status_code == 202
+    issued = client.get(url(f"/sales-documents/{cn['id']}"), headers=o).json()
+    assert issued["status"] == "issued" and issued["number"].startswith("XC/")
+    assert client.get(url(f"/sales-documents/{S['inv']}"), headers=o).json()["balance_due"] == "66400.00"          # ₹83,000 less ₹16,600
+    assert len(client.get(url("/shipping-bills"), headers=o).json()["data"]) == bills                              # a credit note opens no shipping bill
+
+
+def test_a_credit_note_on_an_export_invoice_with_igst_credits_the_igst(client):
+    o = login(client, OWNER)
+    d = client.post(url("/sales-documents"), headers=o, json=doc(S["abroad"], [GOODS_LINE], currency="USD", exchange_rate="83", supply_type="export_with_tax")).json()
+    assert d["supply_type"] == "export_with_tax" and d["igst_total"] == "14940.00"
+    assert client.post(url(f"/sales-documents/{d['id']}/issue"), headers={**o, **key()}, json={}).status_code == 202
+    body = {"doc_type": "credit_note", "doc_date": str(TODAY), "registration_id": REG, "party_id": S["abroad"], "original_document_id": d["id"], "cn_reason": "sales_return",
+            "payment_terms_days": 0, "lines": [{**CN_LINE, "qty": "1"}]}
+    p = client.post(url("/sales-documents/preview"), headers=o, json=body).json()
+    assert p["is_export"] and p["doc_type"] == "credit_note" and p["igst_total"] == "1494.00" and p["grand_total"] == "9794.00" and p["foreign_total"] == "118.00"
+    assert {c["code"] for c in p["checks"]} >= {"export_note", "export_foreign_value"} and not any(c["level"] == "block" for c in p["checks"])
+    r = client.post(url("/sales-documents"), headers=o, json=body)
+    assert r.status_code == 201 and r.json()["supply_type"] == "export_with_tax" and r.json()["igst_total"] == "1494.00"
+
+
+def test_a_note_to_a_customer_abroad_must_correct_an_export_invoice(client):
+    o = login(client, OWNER)
+    r = client.post(url("/sales-documents"), headers=o, json={**doc(S["abroad"], [GOODS_LINE]), "doc_type": "credit_note", "cn_reason": "sales_return"})
+    assert r.status_code == 400 and r.json()["code"] == "export_note_needs_invoice"
+    r = client.post(url("/sales-documents"), headers=o, json={**doc(S["local"], [GOODS_LINE]), "doc_type": "credit_note", "original_document_id": S["inv"], "cn_reason": "sales_return"})
+    assert r.status_code == 400                                                                                   # a domestic customer cannot be credited against another's export invoice
 
 
 def test_the_audit_chain_is_intact(db):

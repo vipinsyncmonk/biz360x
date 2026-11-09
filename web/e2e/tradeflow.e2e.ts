@@ -9,6 +9,7 @@ const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString
 test.describe.serial("the export flow", () => {
   let page: Page;
   let problems: () => string[];
+  let invoiceUrl = "";
 
   test.beforeAll(async ({ browser, baseURL }) => {
     page = await (await browser.newContext({ baseURL })).newPage();
@@ -48,6 +49,7 @@ test.describe.serial("the export flow", () => {
     await page.getByRole("button", { name: "Issue invoice" }).click();
     await page.waitForURL(/\/billing\/[0-9a-f-]{36}/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("EXP/");
+    invoiceUrl = page.url();
     await expect(page.getByText("Supplied under LUT: no GST charged.")).toBeVisible();
     await expect(page.getByText("Customer pays (USD)")).toBeVisible();
   });
@@ -65,6 +67,20 @@ test.describe.serial("the export flow", () => {
     await expect(page.getByText("SB 7790001")).toBeVisible();
     await expect(page.getByText("USD 1000.00 · ₹83,400")).toBeVisible();                                  // the customs rate, not the invoice's
     await expect(page.getByText("Shipping bill to complete")).toHaveCount(0);
+    expect(problems()).toEqual([]);
+  });
+
+  test("a credit note on the export invoice credits the customer in dollars with no tax", async () => {
+    await page.goto(invoiceUrl);
+    await page.getByRole("link", { name: "Issue credit note" }).click();
+    await page.getByLabel("Quantity to credit, item 1").fill("2");
+    await expect(page.getByText("Customer is credited (USD)")).toBeVisible();
+    await expect(page.getByText("-USD 200.00")).toBeVisible();                                             // ₹16,600 at 83
+    await expect(page.getByText("Credit note on an export invoice.")).toBeVisible();
+    await page.getByRole("button", { name: "Issue credit note" }).click();
+    await page.waitForURL(/\/billing\/[0-9a-f-]{36}$/);
+    await expect(page.getByText("Customer is credited (USD)")).toBeVisible();
+    await expect(page.getByLabel("Export", { exact: true })).toContainText("Supplied under LUT");
     expect(problems()).toEqual([]);
   });
 });

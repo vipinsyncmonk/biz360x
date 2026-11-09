@@ -106,7 +106,7 @@ def checks(lines: list[Line], ctx: Context, res: Result) -> list[dict]:
     out.append(check("supply_type", "ok", "Inter-state supply." if res.is_inter_state else "Intra-state supply.",
                      ("IGST" if res.is_inter_state else "CGST + SGST") +
                      f" — supplier state {ctx.supplier_state}, place of supply {ctx.place_of_supply}."))
-    if ctx.doc_type in ("tax_invoice", "credit_note", "debit_note") and not ctx.buyer_gstin:
+    if ctx.doc_type in ("tax_invoice", "credit_note", "debit_note") and not ctx.buyer_gstin and not ctx.is_export:
         out.append(check("b2b_needs_gstin", "block", "Buyer GSTIN missing.", "Choose a registered GSTIN or issue a B2C invoice."))
     if ctx.is_export:
         out.extend(export_checks(lines, ctx, res))
@@ -124,7 +124,7 @@ def checks(lines: list[Line], ctx: Context, res: Result) -> list[dict]:
     if ctx.supplier_is_mse and ctx.payment_terms_days > MSME_MAX_DAYS:
         out.append(check("msme_terms_exceeded", "warn", "Longer than 45 days.",
                          "As a Udyam-registered micro/small supplier you are owed payment within 45 days whatever the invoice says."))
-    if ctx.doc_type == "credit_note" and ctx.original_doc_date and ctx.gst_adjusted:
+    if ctx.doc_type == "credit_note" and ctx.original_doc_date and ctx.gst_adjusted and not ctx.zero_rated:   # nothing to reduce when no GST was charged
         deadline = sec34_deadline(ctx.original_doc_date)
         if ctx.doc_date > deadline:
             out.append(check("sec34_time_limit", "block", "Too late to reduce GST.",
@@ -140,6 +140,14 @@ def foreign_amount(grand_total: Decimal, rate: Decimal | None) -> Decimal | None
 
 def export_checks(lines: list[Line], ctx: Context, res: Result) -> list[dict]:
     """What an export invoice needs: where it goes, the currency and rate, the LUT, and whether a shipping bill follows."""
+    if ctx.doc_type in ("credit_note", "debit_note"):
+        word = "Credit note" if ctx.doc_type == "credit_note" else "Debit note"
+        how = "no GST, as the invoice was supplied under LUT" if ctx.zero_rated else "IGST, as the invoice was exported with payment of tax"
+        out = [check("export_note", "ok", f"{word} on an export invoice.", f"It follows the invoice: same currency and exchange rate, {how}.")]
+        if ctx.exchange_rate:
+            out.append(check("export_foreign_value", "info", f"{ctx.currency} {foreign_amount(res.grand_total, ctx.exchange_rate):,.2f}",
+                             f"What your customer is {'credited' if ctx.doc_type == 'credit_note' else 'charged'}; ₹{res.grand_total:,.2f} at ₹{ctx.exchange_rate:f} per {ctx.currency} is what the books and GST show."))
+        return out
     out = [check("export_detected", "ok", "Export invoice.", f"The customer is in {ctx.country or 'another country'}; the place of supply is outside India.")]
     if ctx.currency == "INR" or not ctx.exchange_rate:
         out.append(check("export_needs_rate", "block", "Choose the currency and exchange rate.",
