@@ -45,3 +45,9 @@ export async function apiPost<T>(page: Page, token: string, path: string, data?:
   expect(r.ok(), `${path} -> ${r.status()}`).toBeTruthy();
   return (await r.json()) as T;
 }
+
+export async function apiPatch<T>(page: Page, token: string, path: string, data: unknown): Promise<T> {
+  const r = await page.request.patch(`/api/v1${path}`, { headers: { Authorization: `Bearer ${token}`, "If-Match": "*" }, data });
+  expect(r.ok(), `${path} -> ${r.status()}`).toBeTruthy();
+  return (await r.json()) as T;
+}

@@ -164,10 +164,15 @@ class SandboxMca:
         "gstins": [{"gstin": "27AAKCO5678M1Z2", "state_code": "27", "status": "active", "filing_frequency": "monthly", "label": "Maharashtra principal place"}],
         "udyam": None}}
 
+    def __init__(self):
+        # your own company, from the file named by BIZ_COMPANY_PROFILES (development only; see company_profiles.py)
+        from . import company_profiles
+        self.registry = {**type(self).registry, **company_profiles.configured()}
+
     def lookup(self, identifier, kind):
         if identifier == "U99999KA2020PTC000000":
             raise PortalUnavailable("MCA is down for maintenance (sandbox rule)")
-        if kind == "cin":
+        if kind in ("cin", "llpin"):
             return self.registry.get(identifier)
         for entry in self.registry.values():                       # a GSTIN or PAN resolves to the company that holds it
             for g in entry["gstins"]:
@@ -242,6 +247,14 @@ class SandboxBank:
 
     def send_salaries(self, payload):
         return {"batch_ref": "SAL" + uuid.uuid5(uuid.NAMESPACE_URL, payload["run_id"]).hex[:10].upper(), "status": "accepted"}
+
+
+class SandboxSamadhaan:
+    """MSME Samadhaan, where a micro or small supplier files a claim for delayed payment. A real adapter calls the portal."""
+    def file_claim(self, payload):
+        if not payload.get("invoices"):
+            raise PortalRejected("A claim needs at least one invoice", "SAM001")
+        return {"case_no": "SAM/" + _h("samadhaan", payload["claim_id"])[:10].upper(), "forum": "msme_samadhaan"}
 
 
 # ================================================================== copilot
@@ -348,7 +361,7 @@ class SandboxCopilot:
 IMPLEMENTATIONS: dict[str, dict[str, type]] = {
     "irp": {"sandbox": SandboxIrp}, "gsp": {"sandbox": SandboxGsp}, "eway": {"sandbox": SandboxEway}, "mca": {"sandbox": SandboxMca},
     "traces": {"sandbox": SandboxTraces}, "labour": {"sandbox": SandboxLabour}, "sessions": {"sandbox": SandboxSessions},
-    "aa": {"sandbox": SandboxAa}, "bank": {"sandbox": SandboxBank}, "copilot": {"sandbox": SandboxCopilot},
+    "aa": {"sandbox": SandboxAa}, "bank": {"sandbox": SandboxBank}, "copilot": {"sandbox": SandboxCopilot}, "samadhaan": {"sandbox": SandboxSamadhaan},
 }
 _active: dict[str, Any] = {}
 

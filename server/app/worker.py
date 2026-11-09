@@ -137,9 +137,14 @@ def _m3_handlers() -> dict:
             "bank.release_payment": pu.handle_release_payment, "legal.extract_terms": __import__("app.routes_legal", fromlist=["x"]).handle_extract_terms, "legal.draft_notice": __import__("app.routes_legal", fromlist=["x"]).handle_draft_notice, "notice.draft_reply": __import__("app.routes_legal", fromlist=["x"]).handle_draft_reply, "payroll.bank_file": __import__("app.routes_payroll", fromlist=["x"]).handle_bank_file, "purchases.msme_alerts": pu.handle_msme_alerts}
 
 
+def _m10_handlers() -> dict:
+    from . import routes_msme as ms
+    return {"msme.file_claim": ms.handle_file_claim}
+
+
 HANDLERS = {"einvoice.generate_irn": handle_generate_irn, "compliance.run_engine": handle_run_engine,
             "collections.dunning": handle_dunning, "collections.recurring": handle_recurring, "audit.verify": handle_audit_verify,
-            "system.housekeeping": handle_housekeeping, **_m3_handlers(), **_m6_handlers()}
+            "system.housekeeping": handle_housekeeping, **_m3_handlers(), **_m6_handlers(), **_m10_handlers()}
 
 
 FAILURE_HOOKS: dict = {}          # job kind -> fn(cur, job, exc): put the world back when a job ends without succeeding

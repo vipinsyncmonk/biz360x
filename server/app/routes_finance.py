@@ -451,6 +451,22 @@ def import_lines(cur, entity_id, bank_account_id, lines) -> tuple[int, int]:
     return imported, suggested
 
 
+@router.post(E + "/bank-accounts/{bank_account_id}/transactions/preview", tags=["Finance & books"])
+def preview_bank_transactions(entity_id: uuid.UUID, bank_account_id: uuid.UUID, body: BankFeedIn, p: Principal = Auth):
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "finance:read")
+        cur.execute("SELECT 1 FROM bank_accounts WHERE id = %s AND entity_id = %s", (bank_account_id, entity_id))
+        if not cur.fetchone():
+            raise ApiError(404, "not_found", "Not found")
+        ids = list({t.external_id for t in body.transactions})
+        cur.execute("SELECT external_id FROM bank_transactions WHERE bank_account_id = %s AND external_id = ANY(%s)", (bank_account_id, ids))
+        dup = sorted(r["external_id"] for r in cur.fetchall())
+        cur.execute("SELECT min(txn_date) AS a, max(txn_date) AS b FROM bank_transactions WHERE bank_account_id = %s", (bank_account_id,))
+        span = cur.fetchone()
+        return js({"total": len(body.transactions), "new": len(ids) - len(dup), "duplicates": len(body.transactions) - (len(ids) - len(dup)),
+                   "duplicate_ids": dup, "earliest_existing": span["a"], "latest_existing": span["b"]})
+
+
 @router.post(E + "/bank-accounts/{bank_account_id}/transactions", status_code=201, tags=["Finance & books"])
 def import_bank_transactions(entity_id: uuid.UUID, bank_account_id: uuid.UUID, body: BankFeedIn, p: Principal = Auth):
     with tx(p.user_id) as cur:

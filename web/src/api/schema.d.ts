@@ -2363,6 +2363,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/bank-accounts/{id}/transactions/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check bank lines before importing them
+         * @description Changes nothing. Tells which lines are already on the account (same `external_id`), so a statement that overlaps an earlier import can be checked first.
+         */
+        post: operations["previewBankTransactions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/history/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check or save the opening position from earlier books
+         * @description `opening_balances` rows: account_code, account_name, type, subtype?, debit, credit (the trial balance must tie). `open_invoices` rows: number, date, customer_name, customer_gstin?, place_of_supply?, taxable, cgst, sgst, igst, total, outstanding?, due_date?. `open_bills` rows: bill_no, date, supplier_name, supplier_gstin?, supplier_state?, taxable, cgst, sgst, igst, total, tds?, outstanding?, due_date?. Dry run is the default and returns every problem by row; a real import is all or nothing (422 `import_rejected`). Invoices and bills are records of the position on the cut-off date: nothing is e-invoiced, filed or posted to the ledger, and bills are marked as already claimed in their month's return.
+         */
+        post: operations["importHistory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/history/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List earlier-books imports */
+        get: operations["listHistoryBatches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/history/batches/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo an earlier-books import
+         * @description Removes the invoices or bills of the batch, or reverses its opening journal. Refused (409) once money has been received or paid against them.
+         */
+        post: operations["undoHistoryBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/bank-accounts/{id}/transactions": {
         parameters: {
             query?: never;
@@ -3192,6 +3269,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/treds-invoices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Record progress at the TReDS platform */
+        patch: operations["updateTredsInvoice"];
+        trace?: never;
+    };
     "/entities/{entityId}/delayed-payment-claims": {
         parameters: {
             query?: never;
@@ -3210,6 +3304,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/delayed-payment-claims/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get delayed payment claim */
+        get: operations["getDelayedPaymentClaim"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/delayed-payment-claims/{id}/file": {
         parameters: {
             query?: never;
@@ -3219,8 +3330,51 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** File on MSME Samadhaan */
+        /**
+         * File on MSME Samadhaan
+         * @description A background job files the claim and records the case number; follow it at `/jobs/{id}`.
+         */
         post: operations["fileDelayedPaymentClaim"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/msme/late-buyers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Buyers who have not paid by the day the MSMED Act requires, with the interest owed
+         * @description The appointed day is the invoice date plus the agreed terms, at most 45 days (15 with no agreement). Interest is compound with monthly rests at three times the RBI bank rate, and is worked out only for micro and small suppliers. A starter library for a CA or CS to review.
+         */
+        get: operations["listLateBuyers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/msme/classification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How close the company is to the limits of its Udyam class
+         * @description Reads the facts `investment_plant_machinery` and `aato` (or `turnover_max_any_year`). Both limits must stay within the class.
+         */
+        get: operations["getUdyamClassification"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5714,6 +5868,71 @@ export interface components {
             /** Format: uuid */
             document_id: string;
         };
+        BankFeedPreviewRequest: {
+            transactions: components["schemas"]["BankFeedLine"][];
+        };
+        BankFeedPreview: {
+            total?: number;
+            new?: number;
+            duplicates?: number;
+            /** @description The `external_id`s already on this account */
+            duplicate_ids?: string[];
+            earliest_existing?: string | null;
+            latest_existing?: string | null;
+        };
+        HistoryProblem: {
+            /** @description 1-based row in the upload; 0 for a problem with the whole file */
+            row: number;
+            field?: string | null;
+            message: string;
+        };
+        HistoryBatch: {
+            /** Format: uuid */
+            readonly id?: string;
+            /** @enum {string} */
+            kind?: "opening_balances" | "open_invoices" | "open_bills";
+            label?: string | null;
+            /** Format: date */
+            as_of?: string;
+            row_count?: number;
+            summary?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            readonly created_at?: string;
+            undone_at?: string | null;
+        };
+        HistoryImport: {
+            /** @enum {string} */
+            kind: "opening_balances" | "open_invoices" | "open_bills";
+            /** Format: date */
+            as_of: string;
+            label?: string | null;
+            /**
+             * @description Check only; nothing is saved
+             * @default true
+             */
+            dry_run: boolean;
+            rows: {
+                [key: string]: unknown;
+            }[];
+        };
+        HistoryImportResult: {
+            kind?: string;
+            dry_run?: boolean;
+            accepted?: number;
+            problem_count?: number;
+            problems?: components["schemas"]["HistoryProblem"][];
+            warnings?: string[];
+            summary?: {
+                [key: string]: unknown;
+            };
+            batch_id?: string | null;
+        };
+        HistoryBatchList: {
+            data?: components["schemas"]["HistoryBatch"][];
+            next_cursor?: string | null;
+        };
         BankFeedLine: {
             /** @description Dedupe key from the feed */
             external_id: string;
@@ -6267,38 +6486,132 @@ export interface components {
             granted_on?: string | null;
             valid_until?: string | null;
         };
+        /** @description A person records an upload and then how it is getting on at the platform. Only registered MSMEs can use TReDS (409), and only issued invoices with an amount still due. */
         TredsInvoice: {
             /** Format: uuid */
             readonly id?: string;
             /** Format: uuid */
             sales_document_id: string;
-            platform: string;
+            readonly invoice_number?: string;
+            readonly buyer_name?: string;
+            readonly invoice_total?: components["schemas"]["Money"];
+            /** @enum {string} */
+            platform: "RXIL" | "M1xchange" | "Invoicemart" | "C2FO";
             /** Format: date */
-            uploaded_on?: string;
-            readonly status?: string;
-            discount_rate_pct?: number | null;
+            readonly uploaded_on?: string;
+            buyer_accepted_on?: string | null;
+            financed_on?: string | null;
+            /** @enum {string} */
+            readonly status?: "uploaded" | "accepted" | "auctioned" | "financed" | "settled" | "rejected";
+            discount_rate_pct?: string | null;
             amount_received?: components["schemas"]["Money"] | null;
         };
         TredsInvoicePage: {
             data: components["schemas"]["TredsInvoice"][];
             next_cursor: string | null;
         };
+        /** @description Moves forward only: uploaded, accepted, auctioned, financed, settled. `financed` needs the discount rate and the amount received. */
+        TredsProgress: {
+            /** @enum {string} */
+            status: "accepted" | "auctioned" | "financed" | "settled" | "rejected";
+            discount_rate_pct?: number | null;
+            amount_received?: components["schemas"]["Money"] | null;
+        };
+        ClaimInvoice: {
+            number?: string;
+            /** Format: date */
+            doc_date?: string;
+            balance_due?: components["schemas"]["Money"];
+        };
+        /** @description Principal and interest are worked out by the server from the invoices (MSMED Act Sec 16). Only micro and small suppliers can claim (409). */
         DelayedPaymentClaim: {
             /** Format: uuid */
             readonly id?: string;
             /** Format: uuid */
             buyer_party_id: string;
+            readonly buyer_name?: string;
             invoice_ids: string[];
+            readonly invoices?: components["schemas"]["ClaimInvoice"][];
             readonly principal?: components["schemas"]["Money"];
             readonly interest_claimed?: components["schemas"]["Money"];
             /** @enum {string} */
-            forum?: "msme_samadhaan" | "msefc" | "court";
-            readonly status?: string;
+            readonly forum?: "msme_samadhaan" | "msefc" | "court";
+            /** @enum {string} */
+            readonly status?: "draft" | "filed" | "conciliation" | "arbitration" | "settled" | "closed";
             case_no?: string | null;
+            filed_on?: string | null;
+        };
+        ClaimCreate: {
+            /** Format: uuid */
+            buyer_party_id: string;
+            invoice_ids: string[];
         };
         DelayedPaymentClaimPage: {
             data: components["schemas"]["DelayedPaymentClaim"][];
             next_cursor: string | null;
+        };
+        LateInvoice: {
+            /** Format: uuid */
+            document_id?: string;
+            number?: string;
+            balance_due?: components["schemas"]["Money"];
+            /** Format: date */
+            appointed_on?: string;
+            days_late?: number;
+            interest?: components["schemas"]["Money"] | null;
+            on_treds?: boolean;
+        };
+        BuyerClaim: {
+            /** Format: uuid */
+            id?: string;
+            status?: string;
+        };
+        LateBuyer: {
+            /** Format: uuid */
+            party_id?: string;
+            name?: string;
+            invoices?: components["schemas"]["LateInvoice"][];
+            principal?: components["schemas"]["Money"];
+            interest?: components["schemas"]["Money"] | null;
+            days_late?: number;
+            on_treds?: boolean;
+            claim?: components["schemas"]["BuyerClaim"] | null;
+        };
+        InterestRate: {
+            bank_rate_pct?: string;
+            /** Format: date */
+            effective_from?: string;
+            annual_pct?: string;
+        };
+        LateTotals: {
+            buyers?: number;
+            invoices?: number;
+            principal?: components["schemas"]["Money"];
+            interest?: components["schemas"]["Money"] | null;
+        };
+        LateBuyers: {
+            /** Format: date */
+            as_of?: string;
+            supplier_class?: ("micro" | "small" | "medium") | null;
+            interest_applies?: boolean;
+            rate?: components["schemas"]["InterestRate"] | null;
+            buyers?: components["schemas"]["LateBuyer"][];
+            totals?: components["schemas"]["LateTotals"];
+        };
+        UdyamTest: {
+            key?: string;
+            label?: string;
+            value?: components["schemas"]["Money"] | null;
+            limit?: components["schemas"]["Money"];
+            pct?: number | null;
+        };
+        UdyamClassification: {
+            declared?: ("micro" | "small" | "medium") | null;
+            udyam_number?: string | null;
+            computed?: string | null;
+            investment?: components["schemas"]["Money"] | null;
+            turnover?: components["schemas"]["Money"] | null;
+            tests?: components["schemas"]["UdyamTest"][];
         };
         DocumentLink: {
             subject?: string;
@@ -12855,6 +13168,141 @@ export interface operations {
             429: components["responses"]["TooMany"];
         };
     };
+    previewBankTransactions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BankFeedPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankFeedPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    importHistory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HistoryImport"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryImportResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listHistoryBatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryBatchList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    undoHistoryBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryBatch"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
     importBankTransactions: {
         parameters: {
             query?: never;
@@ -15090,6 +15538,41 @@ export interface operations {
             429: components["responses"]["TooMany"];
         };
     };
+    updateTredsInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TredsProgress"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TredsInvoice"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
     listDelayedPaymentClaims: {
         parameters: {
             query?: {
@@ -15136,7 +15619,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DelayedPaymentClaim"];
+                "application/json": components["schemas"]["ClaimCreate"];
             };
         };
         responses: {
@@ -15155,6 +15638,36 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getDelayedPaymentClaim: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DelayedPaymentClaim"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };
@@ -15190,6 +15703,66 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listLateBuyers: {
+        parameters: {
+            query?: {
+                as_of?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateBuyers"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getUdyamClassification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UdyamClassification"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };
