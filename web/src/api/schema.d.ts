@@ -2363,6 +2363,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/bank-accounts/{id}/transactions/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check bank lines before importing them
+         * @description Changes nothing. Tells which lines are already on the account (same `external_id`), so a statement that overlaps an earlier import can be checked first.
+         */
+        post: operations["previewBankTransactions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/bank-accounts/{id}/transactions": {
         parameters: {
             query?: never;
@@ -5602,6 +5622,18 @@ export interface components {
         StatementImport: {
             /** Format: uuid */
             document_id: string;
+        };
+        BankFeedPreviewRequest: {
+            transactions: components["schemas"]["BankFeedLine"][];
+        };
+        BankFeedPreview: {
+            total?: number;
+            new?: number;
+            duplicates?: number;
+            /** @description The `external_id`s already on this account */
+            duplicate_ids?: string[];
+            earliest_existing?: string | null;
+            latest_existing?: string | null;
         };
         BankFeedLine: {
             /** @description Dedupe key from the feed */
@@ -12592,6 +12624,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    previewBankTransactions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BankFeedPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankFeedPreview"];
                 };
             };
             400: components["responses"]["BadRequest"];

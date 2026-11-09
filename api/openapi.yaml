@@ -6319,6 +6319,46 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: finance:write
+  /entities/{entityId}/bank-accounts/{id}/transactions/preview:
+    post:
+      tags:
+      - Finance & books
+      operationId: previewBankTransactions
+      summary: Check bank lines before importing them
+      description: Changes nothing. Tells which lines are already on the account (same `external_id`), so a statement that
+        overlaps an earlier import can be checked first.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankFeedPreviewRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankFeedPreview'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:read
   /entities/{entityId}/bank-accounts/{id}/transactions:
     post:
       tags:
@@ -14967,6 +15007,41 @@ components:
           format: uuid
       required:
       - document_id
+    BankFeedPreviewRequest:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/BankFeedLine'
+          minItems: 1
+          maxItems: 1000
+      required:
+      - transactions
+    BankFeedPreview:
+      type: object
+      properties:
+        total:
+          type: integer
+        new:
+          type: integer
+        duplicates:
+          type: integer
+        duplicate_ids:
+          type: array
+          items:
+            type: string
+          description: The `external_id`s already on this account
+        earliest_existing:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        latest_existing:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
     BankFeedLine:
       type: object
       properties:
