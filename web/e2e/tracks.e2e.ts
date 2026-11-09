@@ -195,7 +195,7 @@ test.describe.serial("startup and MSME tracks", () => {
 
   test("the module map filters by track and opens the screens that exist", async () => {
     await page.goto("/modules");
-    await expect(page.getByRole("status")).toContainText("26 modules across 4 layers");
+    await expect(page.getByRole("status")).toContainText("27 modules across 4 layers");
     await page.getByRole("button", { name: "Startup", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("switch on for Startup");
     await expect(page.getByRole("link", { name: /Funding & Cap Table/ })).toBeVisible();
