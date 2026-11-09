@@ -193,14 +193,28 @@ test.describe.serial("startup and MSME tracks", () => {
     expect(problems()).toEqual([]);
   });
 
+  test("the module map filters by track and opens the screens that exist", async () => {
+    await page.goto("/modules");
+    await expect(page.getByRole("status")).toContainText("26 modules across 4 layers");
+    await page.getByRole("button", { name: "Startup", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("switch on for Startup");
+    await expect(page.getByRole("link", { name: /Funding & Cap Table/ })).toBeVisible();
+    await expect(page.getByLabel(/Licenses & Registrations, planned/)).toBeVisible();              // a planned module is not a link
+    await expect(page.getByRole("link", { name: /Licenses & Registrations/ })).toHaveCount(0);
+    await expect(page.getByLabel("Government and financial rails").getByText("PLANNED").first()).toBeVisible();
+    await page.getByRole("link", { name: /Funding & Cap Table/ }).click();
+    await page.waitForURL("**/startup");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  });
+
   // Reuses this tab's sign-in: a person can ask for only 5 sign-in codes an hour, and the suite already signs in as the demo owner several times.
   test("the screens fit a phone and a desktop", async () => {
     for (const [name, size] of [["desktop", { width: 1440, height: 1000 }], ["phone", { width: 375, height: 812 }]] as const) {
-      for (const path of ["/startup", "/msme"]) {
+      for (const path of ["/startup", "/msme", "/modules"]) {
         await page.setViewportSize(size);
         await page.goto(path);
         await page.waitForLoadState("networkidle");
-        await expect(page.getByRole("table").first()).toBeVisible();
+        await expect(page.locator("main h1").first()).toBeVisible();
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         expect(overflow, `${path} on a ${name} has no sideways scroll`).toBeLessThanOrEqual(0);
         await page.screenshot({ path: `test-results/${path.slice(1)}-${name}.png`, fullPage: true });
