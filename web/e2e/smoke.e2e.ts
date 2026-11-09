@@ -19,6 +19,7 @@ const SCREENS: Array<[path: string, heading: RegExp]> = [
   ["/documents/rooms", /Data rooms/],
   ["/startup", /.+/],
   ["/msme", /.+/],
+  ["/modules", /Four layers/],
   ["/copilot", /New conversation/],
   ["/settings", /Who can see, prepare, approve and sign/],
 ];
