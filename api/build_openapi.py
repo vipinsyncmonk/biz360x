@@ -744,6 +744,23 @@ collection(E + "/bank-accounts", "Finance & books", "BankAccount", "finance")
 item(E + "/bank-accounts", "Finance & books", "BankAccount", "finance")
 action(E + "/bank-accounts/{id}/statements", "Finance & books", "uploadStatement", "Import a statement file (CSV / MT940 / PDF)", "finance:write",
        body=schema("StatementImport", {"document_id": UUID}, required=("document_id",)), status="202")
+action(E + "/bank-accounts/{id}/transactions/preview", "Finance & books", "previewBankTransactions", "Check bank lines before importing them", "finance:read",
+       body=schema("BankFeedPreviewRequest", {"transactions": ARR(ref("BankFeedLine"), minItems=1, maxItems=1000)}, required=("transactions",)),
+       resp=schema("BankFeedPreview", {"total": I(), "new": I(), "duplicates": I(), "duplicate_ids": ARR(S(), description="The `external_id`s already on this account"), "earliest_existing": NULLABLE(DATE), "latest_existing": NULLABLE(DATE)}), status="200",
+       desc="Changes nothing. Tells which lines are already on the account (same `external_id`), so a statement that overlaps an earlier import can be checked first.")
+schema("HistoryProblem", {"row": I(description="1-based row in the upload; 0 for a problem with the whole file"), "field": NULLABLE(S()), "message": S()}, required=("row", "message"))
+schema("HistoryBatch", {"id": RO_UUID, "kind": ENUM("opening_balances", "open_invoices", "open_bills"), "label": NULLABLE(S()), "as_of": DATE, "row_count": I(),
+                        "summary": {"type": "object", "additionalProperties": True}, "created_at": RO_TS, "undone_at": NULLABLE(RO_TS)})
+action(E + "/history/imports", "Finance & books", "importHistory", "Check or save the opening position from earlier books", "finance:write", idem=True,
+       body=schema("HistoryImport", {"kind": ENUM("opening_balances", "open_invoices", "open_bills"), "as_of": DATE, "label": NULLABLE(S()),
+                                     "dry_run": {"type": "boolean", "default": True, "description": "Check only; nothing is saved"},
+                                     "rows": ARR({"type": "object", "additionalProperties": True}, minItems=1, maxItems=5000)}, required=("kind", "as_of", "rows")),
+       resp=schema("HistoryImportResult", {"kind": S(), "dry_run": {"type": "boolean"}, "accepted": I(), "problem_count": I(), "problems": ARR(ref("HistoryProblem")),
+                                           "warnings": ARR(S()), "summary": {"type": "object", "additionalProperties": True}, "batch_id": NULLABLE(UUID)}),
+       desc="`opening_balances` rows: account_code, account_name, type, subtype?, debit, credit (the trial balance must tie). `open_invoices` rows: number, date, customer_name, customer_gstin?, place_of_supply?, taxable, cgst, sgst, igst, total, outstanding?, due_date?. `open_bills` rows: bill_no, date, supplier_name, supplier_gstin?, supplier_state?, taxable, cgst, sgst, igst, total, tds?, outstanding?, due_date?. Dry run is the default and returns every problem by row; a real import is all or nothing (422 `import_rejected`). Invoices and bills are records of the position on the cut-off date: nothing is e-invoiced, filed or posted to the ledger, and bills are marked as already claimed in their month's return.")
+_op("get", E + "/history/batches", "Finance & books", "listHistoryBatches", "List earlier-books imports", "finance:read", resp=schema("HistoryBatchList", {"data": ARR(ref("HistoryBatch")), "next_cursor": NULLABLE(S())}))
+action(E + "/history/batches/{id}/undo", "Finance & books", "undoHistoryBatch", "Undo an earlier-books import", "finance:write", idem=True, resp=ref("HistoryBatch"),
+       desc="Removes the invoices or bills of the batch, or reverses its opening journal. Refused (409) once money has been received or paid against them.")
 schema("BankFeedLine", {"external_id": S(description="Dedupe key from the feed"), "txn_date": DATE, "amount": {**MONEY, "description": "+ credit to us, - debit"}, "description": S(), "utr": NULLABLE(S()), "counterparty_name": NULLABLE(S()), "counterparty_va": NULLABLE(S(description="Virtual account the money was paid into")), "balance_after": NULLABLE(MONEY)}, required=("external_id", "txn_date", "amount", "description"))
 action(E + "/bank-accounts/{id}/transactions", "Finance & books", "importBankTransactions", "Import bank lines from a feed (Account Aggregator, bank API or parsed statement)", "finance:write",
        body=schema("BankFeedImport", {"transactions": ARR(ref("BankFeedLine"), minItems=1, maxItems=1000)}, required=("transactions",)),
