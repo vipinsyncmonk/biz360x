@@ -535,7 +535,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Registration'
+              $ref: '#/components/schemas/RegistrationCreate'
       responses:
         '201':
           description: Created
@@ -2384,7 +2384,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Party'
+              $ref: '#/components/schemas/PartyCreate'
       responses:
         '201':
           description: Created
@@ -12138,6 +12138,30 @@ components:
       required:
       - kind
       - number
+    RegistrationCreate:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - lut
+          - iec
+        number:
+          type: string
+          pattern: ^[A-Z0-9]{10,20}$
+        valid_from:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        valid_until:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        label:
+          type: string
+      description: Records the Letter of Undertaking (dates required) or the Importer-Exporter Code. GSTINs come from onboarding.
     RegistrationPage:
       type: object
       properties:
@@ -13173,6 +13197,16 @@ components:
           type: boolean
         default_tds_section:
           type: string
+        country:
+          type: string
+          pattern: ^[A-Z]{2}$
+          description: Two-letter country code. A customer outside India turns its invoices into export invoices.
+          default: IN
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          description: What an overseas customer is invoiced in
+          default: INR
         status:
           type: string
           enum:
@@ -13200,6 +13234,40 @@ components:
           readOnly: true
       required:
       - legal_name
+    PartyCreate:
+      type: object
+      properties:
+        legal_name:
+          type: string
+        is_customer:
+          type: boolean
+          default: true
+        is_vendor:
+          type: boolean
+          default: false
+        country:
+          type: string
+          pattern: ^[A-Z]{2}$
+          default: IN
+        currency:
+          oneOf:
+          - type: string
+            pattern: ^[A-Z]{3}$
+          - type: 'null'
+        gstin:
+          oneOf:
+          - $ref: '#/components/schemas/Gstin'
+          - type: 'null'
+        pan:
+          oneOf:
+          - $ref: '#/components/schemas/Pan'
+          - type: 'null'
+        payment_terms_days:
+          oneOf:
+          - type: integer
+          - type: 'null'
+      description: A party outside India has no GSTIN and needs the currency it is invoiced in (409 for a name already in
+        use).
     PartyPage:
       type: object
       properties:
@@ -13620,6 +13688,18 @@ components:
         gst_adjusted:
           type: boolean
           default: true
+        supply_type:
+          type: string
+        currency:
+          oneOf:
+          - type: string
+            pattern: ^[A-Z]{3}$
+          - type: 'null'
+        exchange_rate:
+          oneOf:
+          - type: string
+            description: Rupees per unit of the currency, up to four decimals
+          - type: 'null'
       required:
       - doc_type
       - registration_id
@@ -13628,8 +13708,23 @@ components:
     TaxPreview:
       type: object
       properties:
+        doc_type:
+          type: string
+          description: An invoice to a customer outside India comes back as export_invoice
         supply_type:
           type: string
+        is_export:
+          type: boolean
+        currency:
+          type: string
+        exchange_rate:
+          oneOf:
+          - type: string
+          - type: 'null'
+        foreign_total:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
         is_inter_state:
           type: boolean
         place_of_supply:
@@ -13763,6 +13858,19 @@ components:
           - sez_with_tax
           - sez_under_lut
           - deemed_export
+        currency:
+          type: string
+          description: INR unless this is an export invoice, which states the foreign currency the customer pays in
+        exchange_rate:
+          oneOf:
+          - type: string
+            description: Rupees per unit of that currency
+          - type: 'null'
+        foreign_total:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+            readOnly: true
+          - type: 'null'
         reverse_charge:
           type: boolean
         quote_id:
@@ -17848,16 +17956,22 @@ components:
           format: uuid
           readOnly: true
         sb_number:
-          type: string
-          pattern: ^[0-9A-Z/-]{1,20}$
+          oneOf:
+          - type: string
+            pattern: ^[0-9A-Z/-]{1,20}$
+          - type: 'null'
         sb_date:
-          type: string
-          format: date
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
         port_code:
-          type: string
-          pattern: ^[A-Z]{2}[A-Z0-9]{4}$
-          examples:
-          - INMAA1
+          oneOf:
+          - type: string
+            pattern: ^[A-Z]{2}[A-Z0-9]{4}$
+            examples:
+            - INMAA1
+          - type: 'null'
         currency:
           type: string
           pattern: ^[A-Z]{3}$
@@ -17874,6 +17988,7 @@ components:
         status:
           type: string
           enum:
+          - draft
           - filed
           - let_export
           - shipped
@@ -17889,6 +18004,11 @@ components:
             format: uuid
           - type: 'null'
         invoice_number:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
+        invoice_status:
           oneOf:
           - type: string
             readOnly: true
@@ -17955,8 +18075,10 @@ components:
       - currency
       - fob_foreign
       - exchange_rate
-      description: 'Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar
-        months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases).'
+      description: 'A draft is opened when an export invoice with goods is issued; the number, port and date customs issues
+        turn it into a filed shipping bill. Rupee values are worked out from the foreign amount and the exchange rate. Proceeds
+        are due nine calendar months after the date of export (a starter rule: FEMA allows longer periods and extensions in
+        some cases).'
     ShippingBillPage:
       type: object
       properties:
@@ -17974,9 +18096,25 @@ components:
     ShippingBillUpdate:
       type: object
       properties:
+        sb_number:
+          type: string
+          pattern: ^[0-9A-Z/-]{1,20}$
+        sb_date:
+          type: string
+          format: date
+        port_code:
+          type: string
+          pattern: ^[A-Z]{2}[A-Z0-9]{4}$
+          examples:
+          - INMAA1
+        fob_foreign:
+          $ref: '#/components/schemas/Money'
+        exchange_rate:
+          type: string
         status:
           type: string
           enum:
+          - draft
           - filed
           - let_export
           - shipped
@@ -17994,7 +18132,9 @@ components:
           $ref: '#/components/schemas/Money'
         brc_ref:
           type: string
-      description: The date of export starts the realisation clock and cannot be changed once recorded.
+      description: The customs details (number, date, port, value, rate) can be added only while the shipping bill is a draft;
+        adding all three of number, date and port files it. The date of export starts the realisation clock and cannot be
+        changed once recorded.
     BillOfEntry:
       type: object
       properties:
@@ -18138,6 +18278,9 @@ components:
           type: integer
         value_inr:
           $ref: '#/components/schemas/Money'
+        drafts:
+          type: integer
+          description: Shipping bills opened from export invoices that still need the customs details
     RealisationTotals:
       type: object
       properties:

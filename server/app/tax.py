@@ -49,6 +49,13 @@ class Context:
     supplier_is_mse: bool = False
     original_doc_date: dt.date | None = None
     gst_adjusted: bool = True
+    is_export: bool = False             # the customer is outside India
+    zero_rated: bool = False            # supplied under a Letter of Undertaking: no tax is charged
+    lut: str = "none"                   # the LUT today: valid, expiring, expired or none
+    currency: str = "INR"
+    exchange_rate: Decimal | None = None
+    country: str | None = None
+    supply_type: str = ""               # b2b, export_under_lut, export_with_tax ...
 
 
 @dataclass
@@ -70,7 +77,7 @@ def compute(lines: list[Line], ctx: Context) -> Result:
     res = Result(is_inter_state=ctx.supplier_state != ctx.place_of_supply)
     for i, ln in enumerate(lines, start=1):
         taxable = ln.taxable
-        tax = r2(taxable * ln.gst_rate / 100) if ctx.gst_adjusted else Decimal("0")
+        tax = r2(taxable * ln.gst_rate / 100) if ctx.gst_adjusted and not ctx.zero_rated else Decimal("0")
         if res.is_inter_state:
             cg = sg = Decimal("0"); ig = tax
         else:
@@ -101,7 +108,9 @@ def checks(lines: list[Line], ctx: Context, res: Result) -> list[dict]:
                      f" — supplier state {ctx.supplier_state}, place of supply {ctx.place_of_supply}."))
     if ctx.doc_type in ("tax_invoice", "credit_note", "debit_note") and not ctx.buyer_gstin:
         out.append(check("b2b_needs_gstin", "block", "Buyer GSTIN missing.", "Choose a registered GSTIN or issue a B2C invoice."))
-    if ctx.aato is not None and ctx.aato > EINVOICE_AATO and ctx.buyer_gstin and ctx.gst_adjusted:
+    if ctx.is_export:
+        out.extend(export_checks(lines, ctx, res))
+    if ctx.aato is not None and ctx.aato > EINVOICE_AATO and (ctx.buyer_gstin or ctx.is_export) and ctx.gst_adjusted:
         out.append(check("einvoice_required", "ok", "E-invoice required.", "Turnover is above ₹5 Cr — the IRN is generated on issue."))
     goods = sum((r2(ln.taxable * (1 + ln.gst_rate / 100)) for ln in lines if not ln.is_service), Decimal("0"))
     if ctx.doc_type == "tax_invoice":
@@ -122,6 +131,38 @@ def checks(lines: list[Line], ctx: Context, res: Result) -> list[dict]:
                              f"Credit notes for this supply had to be issued by {deadline:%d %b %Y}. Issue a commercial credit note instead."))
         else:
             out.append(check("sec34_time_limit", "ok", "Within the time limit.", f"Can be issued until {deadline:%d %b %Y} (or the annual return date, if earlier)."))
+    return out
+
+
+def foreign_amount(grand_total: Decimal, rate: Decimal | None) -> Decimal | None:
+    return r2(grand_total / rate) if rate else None
+
+
+def export_checks(lines: list[Line], ctx: Context, res: Result) -> list[dict]:
+    """What an export invoice needs: where it goes, the currency and rate, the LUT, and whether a shipping bill follows."""
+    out = [check("export_detected", "ok", "Export invoice.", f"The customer is in {ctx.country or 'another country'}; the place of supply is outside India.")]
+    if ctx.currency == "INR" or not ctx.exchange_rate:
+        out.append(check("export_needs_rate", "block", "Choose the currency and exchange rate.",
+                         "An export invoice states the foreign currency and the rate used to convert it. Enter both."))
+    else:
+        out.append(check("export_foreign_value", "info", f"{ctx.currency} {foreign_amount(res.grand_total, ctx.exchange_rate):,.2f}",
+                         f"The customer pays this amount; ₹{res.grand_total:,.2f} at ₹{ctx.exchange_rate:f} per {ctx.currency} is what the books and GST show."))
+    if ctx.supply_type == "export_under_lut" and not ctx.zero_rated:
+        out.append(check("lut_not_valid", "block", "No valid LUT for this date.", "A supply under LUT needs a Letter of Undertaking that covers the invoice date. Record one under Settings, or export with payment of IGST."))
+    elif ctx.zero_rated:
+        out.append(check("export_under_lut", "ok", "Supplied under LUT.", "No GST is charged. Your Letter of Undertaking covers this date."))
+    elif ctx.lut in ("none", "expired"):
+        out.append(check("export_no_lut", "warn", "No valid LUT: IGST is charged.",
+                         "Without a Letter of Undertaking you pay IGST and claim it back as a refund. File a LUT on the GST portal and record it under Settings to export without tax."))
+    else:
+        out.append(check("export_with_tax", "info", "Exported with payment of IGST.", "IGST is charged and claimed back as a refund."))
+    if ctx.lut == "expiring" and ctx.zero_rated:
+        out.append(check("lut_expiring", "warn", "Your LUT is about to expire.", "Renew it before the next financial year's exports."))
+    if any(not ln.is_service for ln in lines):
+        out.append(check("shipping_bill_follows", "info", "A draft shipping bill opens when you issue this.",
+                         "Add the number, port and date customs gives you. The date of export starts the nine-month clock to bring the money home."))
+    else:
+        out.append(check("export_services", "info", "Export of services: no shipping bill.", "Keep the foreign inward remittance certificate (FIRC) from your bank as proof of receipt."))
     return out
 
 

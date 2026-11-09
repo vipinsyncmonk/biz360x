@@ -4624,6 +4624,15 @@ export interface components {
             /** @enum {string} */
             status?: "active" | "suspended" | "cancelled" | "applied";
         };
+        /** @description Records the Letter of Undertaking (dates required) or the Importer-Exporter Code. GSTINs come from onboarding. */
+        RegistrationCreate: {
+            /** @enum {string} */
+            kind?: "lut" | "iec";
+            number?: string;
+            valid_from?: string | null;
+            valid_until?: string | null;
+            label?: string;
+        };
         RegistrationPage: {
             data: components["schemas"]["Registration"][];
             next_cursor: string | null;
@@ -5004,6 +5013,16 @@ export interface components {
             credit_limit?: components["schemas"]["Money"] | null;
             deducts_tds_194q?: boolean;
             default_tds_section?: string;
+            /**
+             * @description Two-letter country code. A customer outside India turns its invoices into export invoices.
+             * @default IN
+             */
+            country: string;
+            /**
+             * @description What an overseas customer is invoiced in
+             * @default INR
+             */
+            currency: string;
             /** @enum {string} */
             status?: "active" | "on_hold" | "blocked" | "archived";
             gstins?: components["schemas"]["PartyGstin"][];
@@ -5011,6 +5030,20 @@ export interface components {
             contacts?: components["schemas"]["Contact"][];
             readonly balance_receivable?: components["schemas"]["Money"];
             readonly balance_payable?: components["schemas"]["Money"];
+        };
+        /** @description A party outside India has no GSTIN and needs the currency it is invoiced in (409 for a name already in use). */
+        PartyCreate: {
+            legal_name?: string;
+            /** @default true */
+            is_customer: boolean;
+            /** @default false */
+            is_vendor: boolean;
+            /** @default IN */
+            country: string;
+            currency?: string | null;
+            gstin?: components["schemas"]["Gstin"] | null;
+            pan?: components["schemas"]["Pan"] | null;
+            payment_terms_days?: number | null;
         };
         PartyPage: {
             data: components["schemas"]["Party"][];
@@ -5171,9 +5204,18 @@ export interface components {
             cn_reason?: string | null;
             /** @default true */
             gst_adjusted: boolean;
+            supply_type?: string;
+            currency?: string | null;
+            exchange_rate?: string | null;
         };
         TaxPreview: {
+            /** @description An invoice to a customer outside India comes back as export_invoice */
+            doc_type?: string;
             supply_type?: string;
+            is_export?: boolean;
+            currency?: string;
+            exchange_rate?: string | null;
+            foreign_total?: components["schemas"]["Money"] | null;
             is_inter_state?: boolean;
             place_of_supply?: components["schemas"]["StateCode"];
             lines?: components["schemas"]["DocumentLine"][];
@@ -5221,6 +5263,10 @@ export interface components {
             readonly is_inter_state?: boolean;
             /** @enum {string} */
             supply_type?: "b2b" | "b2c_small" | "b2c_large" | "export_with_tax" | "export_under_lut" | "sez_with_tax" | "sez_under_lut" | "deemed_export";
+            /** @description INR unless this is an export invoice, which states the foreign currency the customer pays in */
+            currency?: string;
+            exchange_rate?: string | null;
+            foreign_total?: components["schemas"]["Money"] | null;
             reverse_charge?: boolean;
             quote_id?: string | null;
             sales_order_id?: string | null;
@@ -6698,15 +6744,13 @@ export interface components {
             bank_ref?: string | null;
             firc_no?: string | null;
         };
-        /** @description Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases). */
+        /** @description A draft is opened when an export invoice with goods is issued; the number, port and date customs issues turn it into a filed shipping bill. Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases). */
         ShippingBill: {
             /** Format: uuid */
             readonly id?: string;
-            sb_number: string;
-            /** Format: date */
-            sb_date: string;
-            /** @example INMAA1 */
-            port_code: string;
+            sb_number: string | null;
+            sb_date: string | null;
+            port_code: string | null;
             /** @example USD */
             currency: string;
             fob_foreign: components["schemas"]["Money"];
@@ -6714,10 +6758,11 @@ export interface components {
             exchange_rate: string;
             readonly fob_inr?: components["schemas"]["Money"];
             /** @enum {string} */
-            status?: "filed" | "let_export" | "shipped" | "closed";
+            status?: "draft" | "filed" | "let_export" | "shipped" | "closed";
             exported_on?: string | null;
             sales_document_id?: string | null;
             invoice_number?: string | null;
+            invoice_status?: string | null;
             buyer_party_id?: string | null;
             buyer_name?: string | null;
             rodtep_claimed?: components["schemas"]["Money"];
@@ -6738,10 +6783,17 @@ export interface components {
             data: components["schemas"]["ShippingBill"][];
             next_cursor: string | null;
         };
-        /** @description The date of export starts the realisation clock and cannot be changed once recorded. */
+        /** @description The customs details (number, date, port, value, rate) can be added only while the shipping bill is a draft; adding all three of number, date and port files it. The date of export starts the realisation clock and cannot be changed once recorded. */
         ShippingBillUpdate: {
+            sb_number?: string;
+            /** Format: date */
+            sb_date?: string;
+            /** @example INMAA1 */
+            port_code?: string;
+            fob_foreign?: components["schemas"]["Money"];
+            exchange_rate?: string;
             /** @enum {string} */
-            status?: "filed" | "let_export" | "shipped" | "closed";
+            status?: "draft" | "filed" | "let_export" | "shipped" | "closed";
             /** Format: date */
             exported_on?: string;
             rodtep_claimed?: components["schemas"]["Money"];
@@ -6802,6 +6854,8 @@ export interface components {
         ExportTotals: {
             bills?: number;
             value_inr?: components["schemas"]["Money"];
+            /** @description Shipping bills opened from export invoices that still need the customs details */
+            drafts?: number;
         };
         RealisationTotals: {
             outstanding_bills?: number;
@@ -7611,7 +7665,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Registration"];
+                "application/json": components["schemas"]["RegistrationCreate"];
             };
         };
         responses: {
@@ -9386,7 +9440,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Party"];
+                "application/json": components["schemas"]["PartyCreate"];
             };
         };
         responses: {

@@ -310,7 +310,9 @@ schema("Registration", {"id": RO_UUID, "kind": ENUM("gstin", "tan", "epf", "esic
                         "number": S(), "state_code": STATE, "label": S(), "gst_filing_frequency": NULLABLE(ENUM("monthly", "qrmp", "composition")),
                         "valid_from": DATE, "valid_until": NULLABLE(DATE), "status": ENUM("active", "suspended", "cancelled", "applied")},
        required=("kind", "number"))
-collection(E + "/registrations", "Entities", "Registration", "settings", filters=[q("kind", S())])
+collection(E + "/registrations", "Entities", "Registration", "settings", filters=[q("kind", S())],
+           create_schema=schema("RegistrationCreate", {"kind": ENUM("lut", "iec"), "number": S(pattern="^[A-Z0-9]{10,20}$"), "valid_from": NULLABLE(DATE), "valid_until": NULLABLE(DATE), "label": S()},
+                                desc="Records the Letter of Undertaking (dates required) or the Importer-Exporter Code. GSTINs come from onboarding."))
 item(E + "/registrations", "Entities", "Registration", "settings")
 schema("Member", {"id": RO_UUID, "user_id": UUID, "email": S(format="email"), "full_name": S(readOnly=True),
                   "role": ENUM("owner", "approver", "maker", "viewer"), "modules": ARR(S(), examples=[["gst", "finance"]]),
@@ -448,12 +450,17 @@ schema("Contact", {"name": S(), "email": S(format="email"), "mobile_e164": S(), 
 schema("Party", {"id": RO_UUID, "legal_name": S(), "display_name": S(), "is_customer": B(), "is_vendor": B(), "pan": PAN,
                  "msme_class": NULLABLE(ENUM("micro", "small", "medium")), "udyam_number": S(), "payment_terms_days": I(),
                  "credit_limit": NULLABLE(MONEY), "deducts_tds_194q": B(), "default_tds_section": S(),
+                 "country": S(pattern="^[A-Z]{2}$", description="Two-letter country code. A customer outside India turns its invoices into export invoices.", default="IN"),
+                 "currency": S(pattern="^[A-Z]{3}$", description="What an overseas customer is invoiced in", default="INR"),
                  "status": ENUM("active", "on_hold", "blocked", "archived"), "gstins": ARR(ref("PartyGstin")),
                  "addresses": ARR(ref("Address")), "contacts": ARR(ref("Contact")),
                  "balance_receivable": {**MONEY, "readOnly": True}, "balance_payable": {**MONEY, "readOnly": True}},
        required=("legal_name",))
 collection(E + "/parties", "Parties & items", "Party", "parties", filters=[q("role", ENUM("customer", "vendor")), P("Q"), q("msme", B())],
-           summary_plural="Parties")
+           summary_plural="Parties",
+           create_schema=schema("PartyCreate", {"legal_name": S(), "is_customer": B(default=True), "is_vendor": B(default=False), "country": S(pattern="^[A-Z]{2}$", default="IN"),
+                                                "currency": NULLABLE(S(pattern="^[A-Z]{3}$")), "gstin": NULLABLE(GSTIN), "pan": NULLABLE(PAN), "payment_terms_days": NULLABLE(I())},
+                                desc="A party outside India has no GSTIN and needs the currency it is invoiced in (409 for a name already in use)."))
 item(E + "/parties", "Parties & items", "Party", "parties")
 action(E + "/parties/{id}/verify-gstin", "Parties & items", "verifyPartyGstin", "Check the party's GSTIN status on GSTN", "parties:write", resp=ref("Party"))
 schema("StatementLine", {"date": DATE, "kind": S(), "reference": S(), "debit": MONEY, "credit": MONEY, "balance": MONEY})
@@ -500,8 +507,11 @@ schema("TaxCheck", {"code": S(examples=["eway_bill_required"]), "level": ENUM("o
 schema("TaxPreviewRequest", {"doc_type": ENUM("tax_invoice", "credit_note", "debit_note", "export_invoice", "bill_of_supply"),
                              "registration_id": UUID, "party_id": UUID, "party_gst_id": NULLABLE(UUID), "place_of_supply": NULLABLE(STATE),
                              "doc_date": DATE, "payment_terms_days": I(), "lines": ARR(LINE_IN), "original_document_id": NULLABLE(UUID),
-                             "cn_reason": NULLABLE(S()), "gst_adjusted": B(default=True)}, required=("doc_type", "registration_id", "party_id", "lines"))
-schema("TaxPreview", {"supply_type": S(), "is_inter_state": B(), "place_of_supply": STATE, "lines": ARR(ref("DocumentLine")),
+                             "cn_reason": NULLABLE(S()), "gst_adjusted": B(default=True),
+                             "supply_type": S(), "currency": NULLABLE(S(pattern="^[A-Z]{3}$")), "exchange_rate": NULLABLE(S(description="Rupees per unit of the currency, up to four decimals"))},
+                             required=("doc_type", "registration_id", "party_id", "lines"))
+schema("TaxPreview", {"doc_type": S(description="An invoice to a customer outside India comes back as export_invoice"), "supply_type": S(), "is_export": B(),
+                      "currency": S(), "exchange_rate": NULLABLE(S()), "foreign_total": NULLABLE(MONEY), "is_inter_state": B(), "place_of_supply": STATE, "lines": ARR(ref("DocumentLine")),
                       "taxable_total": MONEY, "cgst_total": MONEY, "sgst_total": MONEY, "igst_total": MONEY, "cess_total": MONEY,
                       "round_off": MONEY, "grand_total": MONEY, "amount_in_words": S(), "due_date": DATE,
                       "tds_expected": MONEY, "expected_receipt": MONEY, "next_number": S(examples=["NI/KA/213"]),
@@ -515,6 +525,8 @@ schema("SalesDocument", {
     "registration_id": UUID, "party_id": UUID, "party_gst_id": NULLABLE(UUID), "buyer_gstin": NULLABLE(S(readOnly=True)),
     "place_of_supply": STATE, "is_inter_state": B(readOnly=True),
     "supply_type": ENUM("b2b", "b2c_small", "b2c_large", "export_with_tax", "export_under_lut", "sez_with_tax", "sez_under_lut", "deemed_export"),
+    "currency": S(description="INR unless this is an export invoice, which states the foreign currency the customer pays in"),
+    "exchange_rate": NULLABLE(S(description="Rupees per unit of that currency")), "foreign_total": NULLABLE({**MONEY, "readOnly": True}),
     "reverse_charge": B(), "quote_id": NULLABLE(UUID), "sales_order_id": NULLABLE(UUID), "customer_po_ref": S(),
     "original_document_id": NULLABLE(UUID), "cn_reason": NULLABLE(ENUM("sales_return", "rate_revision", "post_sale_discount", "deficiency_in_service", "correction", "other")),
     "gst_adjusted": B(default=True, description="false = commercial credit note"),
@@ -1003,21 +1015,22 @@ PORT_CODE = S(pattern="^[A-Z]{2}[A-Z0-9]{4}$", examples=["INMAA1"])
 CCY = S(pattern="^[A-Z]{3}$", examples=["USD"])
 schema("Realisation", {"id": RO_UUID, "received_on": DATE, "amount_foreign": MONEY, "bank_ref": NULLABLE(S()), "firc_no": NULLABLE(S())}, required=("received_on", "amount_foreign"))
 schema("ShippingBill", {
-    "id": RO_UUID, "sb_number": CODE20, "sb_date": DATE, "port_code": PORT_CODE, "currency": CCY, "fob_foreign": MONEY, "exchange_rate": S(description="Customs notified rate, up to four decimals"),
-    "fob_inr": {**MONEY, "readOnly": True}, "status": ENUM("filed", "let_export", "shipped", "closed"), "exported_on": NULLABLE(DATE),
-    "sales_document_id": NULLABLE(UUID), "invoice_number": NULLABLE(S(readOnly=True)), "buyer_party_id": NULLABLE(UUID), "buyer_name": NULLABLE(S(readOnly=True)),
+    "id": RO_UUID, "sb_number": NULLABLE(CODE20), "sb_date": NULLABLE(DATE), "port_code": NULLABLE(PORT_CODE), "currency": CCY, "fob_foreign": MONEY, "exchange_rate": S(description="Customs notified rate, up to four decimals"),
+    "fob_inr": {**MONEY, "readOnly": True}, "status": ENUM("draft", "filed", "let_export", "shipped", "closed"), "exported_on": NULLABLE(DATE),
+    "sales_document_id": NULLABLE(UUID), "invoice_number": NULLABLE(S(readOnly=True)), "invoice_status": NULLABLE(S(readOnly=True)), "buyer_party_id": NULLABLE(UUID), "buyer_name": NULLABLE(S(readOnly=True)),
     "rodtep_claimed": MONEY, "rodtep_credited": MONEY, "drawback_claimed": MONEY, "drawback_received": MONEY, "brc_ref": NULLABLE(S()),
     "realised_foreign": {**MONEY, "readOnly": True}, "realisations": ARR(ref("Realisation"), readOnly=True),
     "realisation_state": ENUM("awaiting_export", "pending", "overdue", "realised", readOnly=True), "realisation_due_on": NULLABLE(DATE_RO), "days_left": NULLABLE(I(readOnly=True)),
     "outstanding_foreign": {**MONEY, "readOnly": True}, "outstanding_inr": {**MONEY, "readOnly": True}},
        required=("sb_number", "sb_date", "port_code", "currency", "fob_foreign", "exchange_rate"),
-       desc="Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases).")
+       desc="A draft is opened when an export invoice with goods is issued; the number, port and date customs issues turn it into a filed shipping bill. Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases).")
 collection(E + "/shipping-bills", "Export & import", "ShippingBill", "trade", filters=[q("state", ENUM("awaiting_export", "pending", "overdue", "realised"))])
 _op("get", E + "/shipping-bills/{id}", "Export & import", "getShippingBill", "Get a shipping bill with its realisations", "trade:read", resp=ref("ShippingBill"))
 _op("patch", E + "/shipping-bills/{id}", "Export & import", "updateShippingBill", "Record progress, the date of export, claims and the e-BRC", "trade:write",
-    body=schema("ShippingBillUpdate", {"status": ENUM("filed", "let_export", "shipped", "closed"), "exported_on": DATE, "rodtep_claimed": MONEY, "rodtep_credited": MONEY,
+    body=schema("ShippingBillUpdate", {"sb_number": CODE20, "sb_date": DATE, "port_code": PORT_CODE, "fob_foreign": MONEY, "exchange_rate": S(),
+                                       "status": ENUM("draft", "filed", "let_export", "shipped", "closed"), "exported_on": DATE, "rodtep_claimed": MONEY, "rodtep_credited": MONEY,
                                        "drawback_claimed": MONEY, "drawback_received": MONEY, "brc_ref": S()},
-                desc="The date of export starts the realisation clock and cannot be changed once recorded."), resp=ref("ShippingBill"))
+                desc="The customs details (number, date, port, value, rate) can be added only while the shipping bill is a draft; adding all three of number, date and port files it. The date of export starts the realisation clock and cannot be changed once recorded."), resp=ref("ShippingBill"))
 action(E + "/shipping-bills/{id}/realisations", "Export & import", "recordRealisation", "Record export proceeds received against a shipping bill", "trade:write",
        body=ref("Realisation"), resp=ref("ShippingBill"), status="201", desc="Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409).")
 schema("BillOfEntry", {
@@ -1033,7 +1046,7 @@ _op("patch", E + "/bills-of-entry/{id}", "Export & import", "updateBillOfEntry",
 schema("TradeSummary", {
     "as_of": DATE, "financial_year_from": DATE, "iec": NULLABLE(S()),
     "lut": schema("LutState", {"state": ENUM("valid", "expiring", "expired", "none"), "valid_until": NULLABLE(DATE), "days_left": NULLABLE(I())}),
-    "exports": schema("ExportTotals", {"bills": I(), "value_inr": MONEY}),
+    "exports": schema("ExportTotals", {"bills": I(), "value_inr": MONEY, "drafts": I(description="Shipping bills opened from export invoices that still need the customs details")}),
     "realisation": schema("RealisationTotals", {"outstanding_bills": I(), "outstanding_inr": MONEY, "overdue_bills": I(), "overdue_inr": MONEY, "awaiting_export": I()}),
     "claims": schema("ClaimTotals", {"rodtep_pending": MONEY, "drawback_pending": MONEY}),
     "imports": schema("ImportTotals", {"bills": I(), "duty_inr": MONEY, "igst_credit_inr": MONEY})})

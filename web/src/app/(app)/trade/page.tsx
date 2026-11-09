@@ -6,9 +6,11 @@ import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { BOE_STATUS, BillOfEntry, ExportInvoice, LUT_STATE, REALISATION, ShippingBill, Summary, claimsPending, clockText, lutText } from "@/lib/trade";
 import { AddBoe, AddShippingBill, EditClaims, MarkExported, PayDuty, RecordMoney, money } from "@/components/TradeForms";
+import { FileDraft, RecordRegistration } from "@/components/ExportForms";
+import { draftText } from "@/lib/export";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
-type Open = { kind: "money" | "exported" | "claims" | "duty"; id: string } | null;
+type Open = { kind: "money" | "exported" | "claims" | "duty" | "customs"; id: string } | null;
 
 export default function Trade() {
   const { entity } = useSession();
@@ -16,6 +18,7 @@ export default function Trade() {
   const [tab, setTab] = useState<"exports" | "imports">("exports");
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<Open>(null);
+  const [registering, setRegistering] = useState<"lut" | "iec" | null>(null);
 
   const p = { path: { entityId: id! } };
   const summary = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/trade/summary", { params: p })) as unknown as Summary, id);
@@ -23,7 +26,7 @@ export default function Trade() {
   const boes = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/bills-of-entry", { params: { ...p, query: { limit: 200 } } })).data as unknown as BillOfEntry[], id);
   const invoices = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/sales-documents", { params: { ...p, query: { doc_type: "export_invoice", status: "issued", limit: 100 } } })).data as unknown as ExportInvoice[], id);
 
-  const reload = () => { summary.reload(); bills.reload(); boes.reload(); setOpen(null); setAdding(false); };
+  const reload = () => { summary.reload(); bills.reload(); boes.reload(); setOpen(null); setAdding(false); setRegistering(null); };
   const s = summary.data;
   const lut = s ? (LUT_STATE[s.lut.state] ?? LUT_STATE.none!) : null;
   const toggle = (kind: NonNullable<Open>["kind"], rowId: string) => setOpen(open && open.kind === kind && open.id === rowId ? null : { kind, id: rowId });
@@ -40,7 +43,7 @@ export default function Trade() {
       <span className="t13">You record what customs and your bank issued. Nothing here connects to ICEGATE, DGFT or a bank, and nothing is posted to your books from this screen yet.</span>
 
       <section aria-label="Key numbers" className="kpis">
-        <Tile label="Exports this year" value={s ? money(s.exports.value_inr) : "…"} note={s ? `${s.exports.bills} shipping ${s.exports.bills === 1 ? "bill" : "bills"} since ${shortDate(s.financial_year_from)}` : ""} />
+        <Tile label="Exports this year" value={s ? money(s.exports.value_inr) : "…"} note={s ? `${s.exports.bills} shipping ${s.exports.bills === 1 ? "bill" : "bills"} since ${shortDate(s.financial_year_from)}${s.exports.drafts ? ` · ${s.exports.drafts} draft${s.exports.drafts === 1 ? "" : "s"} to complete` : ""}` : ""} />
         <Tile label="Proceeds still to come home" value={s ? money(s.realisation.outstanding_inr) : "…"} note={s ? `${s.realisation.outstanding_bills} ${s.realisation.outstanding_bills === 1 ? "bill" : "bills"}${s.realisation.awaiting_export ? ` · ${s.realisation.awaiting_export} awaiting export` : ""}` : ""} />
         <Tile label="Overdue (past nine months)" value={s ? money(s.realisation.overdue_inr) : "…"} note={s ? `${s.realisation.overdue_bills} ${s.realisation.overdue_bills === 1 ? "bill" : "bills"}` : ""} warn={!!s && s.realisation.overdue_bills > 0} />
         <Tile label="RoDTEP and drawback pending" value={s ? money(String(Number(s.claims.rodtep_pending) + Number(s.claims.drawback_pending))) : "…"} note={s ? `RoDTEP ${money(s.claims.rodtep_pending)} · drawback ${money(s.claims.drawback_pending)}` : ""} />
@@ -51,9 +54,14 @@ export default function Trade() {
       {s && lut && (
         <section className="card card-pad" aria-label="Letter of Undertaking" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
           <span><b>Letter of Undertaking (LUT)</b><span className="t13" style={{ display: "block" }}>{lutText(s.lut)}</span></span>
-          <Pill tone={lut.tone}>{lut.label}</Pill>
+          <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <Pill tone={lut.tone}>{lut.label}</Pill>
+            <button type="button" className="btn" aria-expanded={registering === "lut"} onClick={() => setRegistering(registering === "lut" ? null : "lut")}>{s.lut.state === "none" ? "Record your LUT" : "Record a new LUT"}</button>
+            {!s.iec && <button type="button" className="btn" aria-expanded={registering === "iec"} onClick={() => setRegistering(registering === "iec" ? null : "iec")}>Record your IEC</button>}
+          </span>
         </section>
       )}
+      {id && registering && <RecordRegistration entityId={id} kind={registering} onDone={reload} onCancel={() => setRegistering(null)} />}
 
       <div className="seg" role="tablist" aria-label="Exports or imports" style={{ alignSelf: "flex-start" }}>
         <button type="button" role="tab" aria-selected={tab === "exports"} onClick={() => { setTab("exports"); setAdding(false); setOpen(null); }}>Exports</button>
@@ -66,23 +74,26 @@ export default function Trade() {
           <section className="card" style={{ overflow: "hidden" }}>
             <div style={{ padding: "18px 20px" }}><h2 style={{ margin: 0 }}>Shipping bills</h2></div>
             <div style={{ padding: "0 20px" }}><ErrorNote error={bills.error} /></div>
-            {bills.loading && !bills.data ? <Loading what="shipping bills" /> : (bills.data ?? []).length === 0 ? <div className="empty">No shipping bills yet. Record one when customs issues it.</div> : (bills.data ?? []).map((b) => {
-              const st = REALISATION[b.realisation_state] ?? { label: b.realisation_state, tone: "prep" as const };
+            {bills.loading && !bills.data ? <Loading what="shipping bills" /> : (bills.data ?? []).length === 0 ? <div className="empty">No shipping bills yet. Issue an export invoice with goods and a draft opens here, or record one when customs issues it.</div> : (bills.data ?? []).map((b) => {
+              const draft = b.status === "draft";
+              const st = draft ? { label: "Draft", tone: "wait" as const } : REALISATION[b.realisation_state] ?? { label: b.realisation_state, tone: "prep" as const };
               const here = open?.id === b.id ? open.kind : null;
               return (
                 <div key={b.id} style={{ borderTop: "1px solid var(--line-2)" }}>
                   <div style={{ padding: "14px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, alignItems: "start" }}>
-                    <span style={{ fontWeight: 600 }}>SB {b.sb_number}<span className="t13" style={{ display: "block", fontWeight: 400 }}>{shortDate(b.sb_date)} · {b.port_code}{b.invoice_number ? ` · invoice ${b.invoice_number}` : ""}</span></span>
+                    <span style={{ fontWeight: 600 }}>{draft ? "Shipping bill to complete" : `SB ${b.sb_number}`}<span className="t13" style={{ display: "block", fontWeight: 400 }}>{draft ? draftText(b.invoice_number, b.invoice_status) : `${shortDate(b.sb_date)} · ${b.port_code}${b.invoice_number ? ` · invoice ${b.invoice_number}` : ""}`}</span></span>
                     <span>{b.buyer_name ?? "–"}<span className="t13 mono" style={{ display: "block" }}>{b.currency} {b.fob_foreign} · {money(b.fob_inr)}</span></span>
-                    <span><Pill tone={st.tone}>{st.label}</Pill><span className="t13" style={{ display: "block" }}>{clockText(b)}</span>{Number(b.outstanding_foreign) > 0 && b.realisation_state !== "awaiting_export" && <span className="t13 mono" style={{ display: "block" }}>{b.currency} {b.outstanding_foreign} to come · {money(b.outstanding_inr)}</span>}</span>
+                    <span><Pill tone={st.tone}>{st.label}</Pill><span className="t13" style={{ display: "block" }}>{draft ? "The nine-month clock starts from the date of export, after filing" : clockText(b)}</span>{Number(b.outstanding_foreign) > 0 && b.realisation_state !== "awaiting_export" && <span className="t13 mono" style={{ display: "block" }}>{b.currency} {b.outstanding_foreign} to come · {money(b.outstanding_inr)}</span>}</span>
                     <span className="t13">{claimsPending(b) ? `RoDTEP ${formatInr(b.rodtep_claimed)}, drawback ${formatInr(b.drawback_claimed)} claimed` : Number(b.rodtep_claimed) + Number(b.drawback_claimed) > 0 ? "Claims received" : "No claims recorded"}{b.brc_ref ? ` · e-BRC ${b.brc_ref}` : ""}</span>
                   </div>
                   <div style={{ padding: "0 20px 14px", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {!b.exported_on && <button type="button" className="btn" aria-expanded={here === "exported"} onClick={() => toggle("exported", b.id)}>Record date of export</button>}
-                    {b.realisation_state !== "realised" && <button type="button" className="btn" aria-expanded={here === "money"} onClick={() => toggle("money", b.id)}>Record money received</button>}
-                    <button type="button" className="btn" aria-expanded={here === "claims"} onClick={() => toggle("claims", b.id)}>Claims and e-BRC</button>
+                    {draft && <button type="button" className="btn primary" aria-expanded={here === "customs"} onClick={() => toggle("customs", b.id)}>Add the customs details</button>}
+                    {!draft && !b.exported_on && <button type="button" className="btn" aria-expanded={here === "exported"} onClick={() => toggle("exported", b.id)}>Record date of export</button>}
+                    {!draft && b.realisation_state !== "realised" && <button type="button" className="btn" aria-expanded={here === "money"} onClick={() => toggle("money", b.id)}>Record money received</button>}
+                    {!draft && <button type="button" className="btn" aria-expanded={here === "claims"} onClick={() => toggle("claims", b.id)}>Claims and e-BRC</button>}
                   </div>
                   {(b.realisations ?? []).length > 0 && <div className="t13" style={{ padding: "0 20px 12px" }}>Received: {b.realisations.map((r) => `${b.currency} ${r.amount_foreign} on ${shortDate(r.received_on)}${r.firc_no ? ` (FIRC ${r.firc_no})` : ""}`).join("; ")}</div>}
+                  {id && here === "customs" && <FileDraft entityId={id} bill={b} onDone={reload} onCancel={() => setOpen(null)} />}
                   {id && here === "money" && <RecordMoney entityId={id} bill={b} onDone={reload} onCancel={() => setOpen(null)} />}
                   {id && here === "exported" && <MarkExported entityId={id} bill={b} onDone={reload} onCancel={() => setOpen(null)} />}
                   {id && here === "claims" && <EditClaims entityId={id} bill={b} onDone={reload} onCancel={() => setOpen(null)} />}

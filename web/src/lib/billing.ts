@@ -72,7 +72,7 @@ export function linesBody(ls: LineDraft[]) {
                           uqc: "NOS" }));
 }
 
-export interface DocForm { registrationId: string; partyId: string; partyGstId: string; docDate: string; terms: string; po: string; lines: LineDraft[] }
+export interface DocForm { registrationId: string; partyId: string; partyGstId: string; docDate: string; terms: string; po: string; lines: LineDraft[]; currency?: string; rate?: string }
 
 export function docBody(f: DocForm) {
   return {
@@ -80,6 +80,8 @@ export function docBody(f: DocForm) {
     ...(f.partyGstId ? { party_gst_id: f.partyGstId } : {}),
     ...(f.terms !== "" ? { payment_terms_days: Number(f.terms) } : {}),
     ...(f.po.trim() ? { customer_po_ref: f.po.trim() } : {}),
+    ...(f.currency?.trim() ? { currency: f.currency.trim().toUpperCase() } : {}),          // an invoice to a customer outside India: what they pay in, and the rate
+    ...(f.rate?.trim() ? { exchange_rate: f.rate.trim() } : {}),
     lines: linesBody(f.lines),
   };
 }

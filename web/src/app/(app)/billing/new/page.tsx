@@ -8,22 +8,27 @@ import { formatInr, isoDate, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { LineEditor } from "@/components/LineEditor";
+import { NewCustomer } from "@/components/ExportForms";
+import { countryName, rateProblem } from "@/lib/export";
 import { ErrorNote, Loading } from "@/components/ui";
 
-interface Party { id: string; legal_name: string; payment_terms_days: number; gstins: Array<{ id: string; gstin: string | null; state_code: string; is_default: boolean }> }
+interface Party { id: string; legal_name: string; payment_terms_days: number; country: string; currency: string; gstins: Array<{ id: string; gstin: string | null; state_code: string; is_default: boolean }> }
 interface Reg { id: string; number: string; state_code: string; label: string | null }
 interface Check { code: string; level: string; title: string; detail: string }
 interface Preview {
   lines: Array<{ taxable_value: string; cgst_amount: string; sgst_amount: string; igst_amount: string }>;
   taxable_total: string; cgst_total: string; sgst_total: string; igst_total: string; round_off: string; grand_total: string; amount_in_words: string;
   due_date: string; tds_expected: string; expected_receipt: string; next_number: string | null; is_inter_state: boolean; place_of_supply: string; checks: Check[];
+  doc_type: string; is_export: boolean; currency: string; exchange_rate: string | null; foreign_total: string | null; supply_type: string;
 }
 
 export default function NewInvoice() {
   const { entity } = useSession();
   const id = entity?.id ?? null;
   const router = useRouter();
-  const [form, setForm] = useState<DocForm>({ registrationId: "", partyId: "", partyGstId: "", docDate: isoDate(new Date()), terms: "", po: "", lines: [blankLine()] });
+  const [form, setForm] = useState<DocForm>({ registrationId: "", partyId: "", partyGstId: "", docDate: isoDate(new Date()), terms: "", po: "", lines: [blankLine()], currency: "", rate: "" });
+  const [newCustomer, setNewCustomer] = useState(false);
+  const [pendingParty, setPendingParty] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [previewError, setPreviewError] = useState<unknown>(null);
@@ -35,17 +40,24 @@ export default function NewInvoice() {
   const regs = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/registrations", { params: { path: { entityId: id! }, query: { kind: "gstin" } } })).data as unknown as Reg[], id);
 
   const party = (parties.data ?? []).find((p) => p.id === form.partyId);
+  const overseas = !!party && party.country !== "IN";                         // the server decides what is an export; this only shows the currency and rate it needs
   const set = (patch: Partial<DocForm>) => setForm((f) => ({ ...f, ...patch }));
 
   // sensible defaults once the lists arrive: the only GSTIN, and a customer's default GSTIN and terms
   useEffect(() => { if (!form.registrationId && (regs.data ?? []).length === 1) set({ registrationId: regs.data![0]!.id }); }, [regs.data, form.registrationId]);
   function pickParty(partyId: string) {
     const p = (parties.data ?? []).find((x) => x.id === partyId);
-    set({ partyId, partyGstId: p?.gstins.find((g) => g.is_default)?.id ?? p?.gstins[0]?.id ?? "", terms: "" });
+    const abroad = !!p && p.country !== "IN";
+    set({ partyId, partyGstId: abroad ? "" : p?.gstins.find((g) => g.is_default)?.id ?? p?.gstins[0]?.id ?? "", terms: "", currency: abroad ? p!.currency : "", rate: "" });
   }
+  // a customer added from this screen is picked as soon as the list has it
+  useEffect(() => {
+    if (pendingParty && (parties.data ?? []).some((p) => p.id === pendingParty)) { pickParty(pendingParty); setPendingParty(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parties.data, pendingParty]);
 
-  const ready = formReady(form);
-  const body = useMemo(() => (ready ? docBody(form) : null), [ready, form]);
+  const ready = formReady(form) && (!overseas || !rateProblem(form.currency ?? "", form.rate ?? ""));
+  const body = useMemo(() => (ready ? docBody(overseas ? form : { ...form, currency: "", rate: "" }) : null), [ready, form, overseas]);
   const bodyJson = body ? JSON.stringify(body) : null;
 
   // live preview: the server does all the tax maths, so the screen and the saved document cannot disagree
@@ -90,7 +102,7 @@ export default function NewInvoice() {
     <main className="page">
       <div>
         <Link href="/billing" style={{ fontSize: 14 }}>← Sales &amp; Billing</Link>
-        <h1 className="disp" style={{ margin: "8px 0 0", fontSize: 36 }}>New tax invoice</h1>
+        <h1 className="disp" style={{ margin: "8px 0 0", fontSize: 36 }}>{overseas || preview?.is_export ? "New export invoice" : "New tax invoice"}</h1>
       </div>
       <ErrorNote error={parties.error ?? regs.error} />
       <div className="cols">
@@ -104,19 +116,26 @@ export default function NewInvoice() {
             <div className="field"><label htmlFor="party">Customer</label>
               <select id="party" className="input" value={form.partyId} onChange={(e) => pickParty(e.target.value)}>
                 <option value="">Choose…</option>
-                {(parties.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.legal_name}</option>)}
-              </select></div>
-            <div className="field"><label htmlFor="pg">Customer GSTIN</label>
-              <select id="pg" className="input" value={form.partyGstId} onChange={(e) => set({ partyGstId: e.target.value })} disabled={!party}>
-                <option value="">{party && party.gstins.length === 0 ? "Unregistered" : "Choose…"}</option>
-                {(party?.gstins ?? []).map((g) => <option key={g.id} value={g.id}>{g.gstin ?? "Unregistered"}</option>)}
-              </select></div>
+                {(parties.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.legal_name}{p.country !== "IN" ? ` · ${countryName(p.country)}` : ""}</option>)}
+              </select>
+              <button type="button" className="linkbtn" style={{ color: "var(--cobalt)", alignSelf: "flex-start" }} aria-expanded={newCustomer} onClick={() => setNewCustomer(!newCustomer)}>+ New customer</button></div>
+            {overseas
+              ? <div className="field"><label htmlFor="pc">Customer's country</label><input id="pc" className="input" readOnly value={countryName(party!.country)} /></div>
+              : <div className="field"><label htmlFor="pg">Customer GSTIN</label>
+                  <select id="pg" className="input" value={form.partyGstId} onChange={(e) => set({ partyGstId: e.target.value })} disabled={!party}>
+                    <option value="">{party && party.gstins.length === 0 ? "Unregistered" : "Choose…"}</option>
+                    {(party?.gstins ?? []).map((g) => <option key={g.id} value={g.id}>{g.gstin ?? "Unregistered"}</option>)}
+                  </select></div>}
+            {overseas && <div className="field"><label htmlFor="ccy">Customer pays in</label><input id="ccy" className="input mono" maxLength={3} value={form.currency ?? ""} onChange={(e) => set({ currency: e.target.value.toUpperCase() })} /></div>}
+            {overseas && <div className="field"><label htmlFor="rate">Exchange rate (₹ per {form.currency || "unit"})</label><input id="rate" className="input mono" inputMode="decimal" placeholder="83.2150" value={form.rate ?? ""} onChange={(e) => set({ rate: e.target.value })} /></div>}
             <div className="field"><label htmlFor="dt">Invoice date</label><input id="dt" type="date" className="input" value={form.docDate} onChange={(e) => set({ docDate: e.target.value })} /></div>
             <div className="field"><label htmlFor="terms">Payment terms (days)</label>
               <input id="terms" className="input mono" inputMode="numeric" value={form.terms} placeholder={party ? String(party.payment_terms_days) : "30"} onChange={(e) => set({ terms: e.target.value.replace(/\D/g, "") })} /></div>
             <div className="field"><label htmlFor="po">Customer PO reference</label><input id="po" className="input" value={form.po} onChange={(e) => set({ po: e.target.value })} /></div>
           </section>
 
+          {newCustomer && id && <NewCustomer entityId={id} onCancel={() => setNewCustomer(false)} onDone={(pid) => { setNewCustomer(false); setPendingParty(pid); parties.reload(); }} />}
+          {overseas && <span className="t13">Enter prices in rupees: the amount your customer pays in {form.currency || "their currency"} is worked out from the rate above and shown beside the total. Rupees are what the books and GST use.</span>}
           <LineEditor lines={form.lines} onChange={(lines) => set({ lines })} touched={touched} />
           <ErrorNote error={error instanceof ApiProblem ? new Error(error.fieldErrors.length ? `${error.title}: ${error.fieldErrors.map((f) => f.message).join("; ")}` : error.message) : error} />
         </div>
@@ -127,7 +146,7 @@ export default function NewInvoice() {
               <h2>Summary</h2>
               <span className="mono t13">{preview?.next_number ? `Next no. ${preview.next_number}` : ""}</span>
             </div>
-            {!ready && <span className="t13">Choose a GSTIN and a customer and complete every item to see the tax.</span>}
+            {!ready && <span className="t13">{overseas && formReady(form) ? "Enter the currency and exchange rate to see the invoice." : "Choose a GSTIN and a customer and complete every item to see the tax."}</span>}
             {ready && previewing && !preview && <Loading what="the tax" />}
             <ErrorNote error={previewError} />
             {preview && (
@@ -138,6 +157,7 @@ export default function NewInvoice() {
                 <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid var(--line)", fontWeight: 700, fontSize: 18 }}>
                   <span>Total</span><span className="mono">{formatInr(preview.grand_total)}</span>
                 </div>
+                {preview.is_export && preview.foreign_total && <Row k={`Customer pays (${preview.currency})`} v={`${preview.currency} ${Number(preview.foreign_total).toLocaleString("en-US", { minimumFractionDigits: 2 })}`} />}
                 <span className="t13">{preview.amount_in_words}</span>
                 <span className="t13">Due {shortDate(preview.due_date)}{preview.tds_expected !== "0.00" ? ` · expect ${formatInr(preview.expected_receipt)} after 0.1% TDS` : ""}</span>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 8, borderTop: "1px solid var(--line-2)" }}>
@@ -155,7 +175,7 @@ export default function NewInvoice() {
               <button type="button" className="btn primary" disabled={!!saving || !ready || blocked} onClick={() => void save(true)}>{saving === "issue" ? "Issuing…" : "Issue invoice"}</button>
             </div>
             {!ready && <button type="button" className="linkbtn" style={{ color: "var(--cobalt)" }} onClick={() => setTouched(true)}>What is missing?</button>}
-            <span className="t13">Issuing takes the next number, posts the books and sends the invoice for its IRN. It cannot be edited afterwards; use a credit note.</span>
+            <span className="t13">Issuing takes the next number, posts the books and sends the invoice for its IRN. It cannot be edited afterwards; use a credit note.{preview?.is_export ? " An export invoice with goods also opens a draft shipping bill on Exports & imports." : ""}</span>
           </section>
         </aside>
       </div>

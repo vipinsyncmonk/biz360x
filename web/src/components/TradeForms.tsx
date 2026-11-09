@@ -81,12 +81,12 @@ export function RecordMoney({ entityId, bill, onDone, onCancel }: { entityId: st
 export function MarkExported({ entityId, bill, onDone, onCancel }: { entityId: string; bill: ShippingBill; onDone: () => void; onCancel: () => void }) {
   const [date, setDate] = useState("");
   const today = isoDate(new Date());
-  const problem = !date ? "Choose the date of export" : date > today ? "The date of export cannot be in the future" : date < bill.sb_date ? "The date of export cannot be before the shipping bill date" : null;
+  const problem = !date ? "Choose the date of export" : date > today ? "The date of export cannot be in the future" : bill.sb_date && date < bill.sb_date ? "The date of export cannot be before the shipping bill date" : null;
   return (
     <Shell compact label="Start the clock" problem={problem} started={!!date} onCancel={onCancel} onSubmit={async () => {
       unwrap(await api.PATCH("/entities/{entityId}/shipping-bills/{id}", { params: { path: { entityId, id: bill.id } }, body: { exported_on: date, status: "let_export" } as never })); onDone();
     }}>
-      <Field id={`ex-${bill.id}`} label="Date of export"><input id={`ex-${bill.id}`} type="date" className="input" style={{ height: 40, maxWidth: 220 }} max={today} min={bill.sb_date} value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+      <Field id={`ex-${bill.id}`} label="Date of export"><input id={`ex-${bill.id}`} type="date" className="input" style={{ height: 40, maxWidth: 220 }} max={today} min={bill.sb_date ?? undefined} value={date} onChange={(e) => setDate(e.target.value)} /></Field>
       <span className="t13">Proceeds must come home within nine months of this date. Once saved, the date is fixed.</span>
     </Shell>
   );

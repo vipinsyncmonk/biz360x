@@ -4,8 +4,8 @@ import { formatInr, shortDate } from "./format";
 
 export interface Realisation { id: string; received_on: string; amount_foreign: string; bank_ref: string | null; firc_no: string | null }
 export interface ShippingBill {
-  id: string; sb_number: string; sb_date: string; port_code: string; currency: string; fob_foreign: string; exchange_rate: string; fob_inr: string; status: string; exported_on: string | null;
-  invoice_number: string | null; buyer_name: string | null; rodtep_claimed: string; rodtep_credited: string; drawback_claimed: string; drawback_received: string; brc_ref: string | null;
+  id: string; sb_number: string | null; sb_date: string | null; port_code: string | null; currency: string; fob_foreign: string; exchange_rate: string; fob_inr: string; status: string; exported_on: string | null;
+  invoice_number: string | null; invoice_status: string | null; buyer_name: string | null; rodtep_claimed: string; rodtep_credited: string; drawback_claimed: string; drawback_received: string; brc_ref: string | null;
   realised_foreign: string; realisations: Realisation[]; realisation_state: string; realisation_due_on: string | null; days_left: number | null; outstanding_foreign: string; outstanding_inr: string;
 }
 export interface BillOfEntry {
@@ -14,7 +14,7 @@ export interface BillOfEntry {
 }
 export interface Summary {
   as_of: string; financial_year_from: string; iec: string | null; lut: { state: string; valid_until: string | null; days_left: number | null };
-  exports: { bills: number; value_inr: string }; realisation: { outstanding_bills: number; outstanding_inr: string; overdue_bills: number; overdue_inr: string; awaiting_export: number };
+  exports: { bills: number; value_inr: string; drafts: number }; realisation: { outstanding_bills: number; outstanding_inr: string; overdue_bills: number; overdue_inr: string; awaiting_export: number };
   claims: { rodtep_pending: string; drawback_pending: string }; imports: { bills: number; duty_inr: string; igst_credit_inr: string };
 }
 export interface ExportInvoice { id: string; number: string | null; doc_date: string; buyer_legal_name: string | null; grand_total: string }
@@ -32,7 +32,7 @@ export function clockText(b: Pick<ShippingBill, "realisation_state" | "realisati
     default: return `Due ${shortDate(b.realisation_due_on)}, ${b.days_left} ${b.days_left === 1 ? "day" : "days"} left`;
   }
 }
-export const SB_STATUS: Array<[string, string]> = [["filed", "Filed"], ["let_export", "Let export order"], ["shipped", "Shipped"], ["closed", "Closed"]];
+export const SB_STATUS: Array<[string, string]> = [["draft", "Draft"], ["filed", "Filed"], ["let_export", "Let export order"], ["shipped", "Shipped"], ["closed", "Closed"]];
 export const BOE_STATUS: Record<string, { label: string; tone: Tone }> = {
   filed: { label: "Filed", tone: "prep" }, assessed: { label: "Assessed", tone: "wait" }, duty_paid: { label: "Duty paid", tone: "ok" }, cleared: { label: "Cleared", tone: "ok" },
 };

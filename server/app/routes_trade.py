@@ -27,7 +27,7 @@ CENT = Decimal("0.01")
 
 
 # ================================================================== shipping bills
-SB_STATUS = Literal["filed", "let_export", "shipped", "closed"]
+SB_STATUS = Literal["draft", "filed", "let_export", "shipped", "closed"]
 
 
 class ShippingBillIn(BaseModel):
@@ -47,6 +47,11 @@ class ShippingBillIn(BaseModel):
 
 
 class ShippingBillPatch(BaseModel):
+    sb_number: str | None = Field(default=None, pattern=CODE)          # customs details: only while the shipping bill is still a draft
+    sb_date: dt.date | None = None
+    port_code: str | None = Field(default=None, pattern=PORT)
+    fob_foreign: Money | None = Field(default=None, gt=0, max_digits=15, decimal_places=2)
+    exchange_rate: Money | None = Field(default=None, gt=0, max_digits=12, decimal_places=4)
     status: SB_STATUS | None = None
     exported_on: dt.date | None = None
     rodtep_claimed: Money | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
@@ -57,7 +62,7 @@ class ShippingBillPatch(BaseModel):
 
 
 SB_SQL = """SELECT s.id, s.sb_number, s.sb_date, s.port_code, s.currency, s.fob_foreign, s.exchange_rate::text AS exchange_rate, s.fob_inr, s.status, s.exported_on,
-                   s.sales_document_id, d.number AS invoice_number, s.buyer_party_id, p.legal_name AS buyer_name,
+                   s.sales_document_id, d.number AS invoice_number, d.status AS invoice_status, s.buyer_party_id, p.legal_name AS buyer_name,
                    s.rodtep_claimed, s.rodtep_credited, s.drawback_claimed, s.drawback_received, s.brc_ref,
                    coalesce((SELECT sum(r.amount_foreign) FROM export_realisations r WHERE r.shipping_bill_id = s.id), 0) AS realised_foreign
               FROM shipping_bills s LEFT JOIN sales_documents d ON d.id = s.sales_document_id LEFT JOIN parties p ON p.id = s.buyer_party_id"""
@@ -111,6 +116,19 @@ def create_shipping_bill(entity_id: uuid.UUID, body: ShippingBillIn, p: Principa
         if body.exported_on and body.exported_on > today:
             raise ApiError(400, "validation_failed", "The date of export cannot be in the future", errors=[{"field": "exported_on", "message": "record it once the goods have left"}])
         buyer = _check_links(cur, entity_id, body.sales_document_id, body.buyer_party_id)
+        if body.sales_document_id:                      # the invoice already opened a draft: fill that one in instead of adding a second
+            cur.execute("SELECT id FROM shipping_bills WHERE entity_id = %s AND sales_document_id = %s AND status = 'draft' ORDER BY created_at LIMIT 1 FOR UPDATE",
+                        (entity_id, body.sales_document_id))
+            draft = cur.fetchone()
+            if draft:
+                cur.execute("""UPDATE shipping_bills SET sb_number = %s, sb_date = %s, port_code = %s, currency = %s, fob_foreign = %s, exchange_rate = %s, status = %s,
+                                      exported_on = %s, rodtep_claimed = %s, drawback_claimed = %s, brc_ref = %s WHERE id = %s""",
+                            (body.sb_number, body.sb_date, body.port_code, body.currency, body.fob_foreign, body.exchange_rate, body.status, body.exported_on,
+                             body.rodtep_claimed, body.drawback_claimed, body.brc_ref, draft["id"]))
+                if body.exported_on:
+                    _realisation_task(cur, entity_id, body.sb_number, body.exported_on, body.fob_foreign, body.currency)
+                audit(cur, entity_id, "shipping_bill.recorded", "shipping_bills", draft["id"], after={"sb_number": body.sb_number, "fob_foreign": body.fob_foreign, "currency": body.currency})
+                return _sb_out(cur, entity_id, draft["id"])
         cur.execute("""INSERT INTO shipping_bills (entity_id, sales_document_id, buyer_party_id, sb_number, sb_date, port_code, currency, fob_foreign, exchange_rate, status, exported_on,
                                                    rodtep_claimed, drawback_claimed, brc_ref)
                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
@@ -148,14 +166,30 @@ def get_shipping_bill(entity_id: uuid.UUID, sb_id: uuid.UUID, p: Principal = Aut
 def update_shipping_bill(entity_id: uuid.UUID, sb_id: uuid.UUID, body: ShippingBillPatch, p: Principal = Auth):
     with tx(p.user_id) as cur:
         require(cur, entity_id, "trade:write")
-        cur.execute("SELECT sb_number, sb_date, currency, fob_foreign, exported_on, status FROM shipping_bills WHERE id = %s AND entity_id = %s FOR UPDATE", (sb_id, entity_id))
+        cur.execute("SELECT sb_number, sb_date, port_code, currency, fob_foreign, exported_on, status FROM shipping_bills WHERE id = %s AND entity_id = %s FOR UPDATE", (sb_id, entity_id))
         s = cur.fetchone()
         if not s:
             raise ApiError(404, "not_found", "Not found")
         changes = body.model_dump(exclude_unset=True)
         if not changes:
             raise ApiError(400, "validation_failed", "Nothing to change")
+        customs = [k for k in ("sb_number", "sb_date", "port_code", "fob_foreign", "exchange_rate") if k in changes]
+        if customs and s["status"] != "draft":
+            raise ApiError(409, "conflict", "The customs details are already recorded", "They are fixed once the shipping bill is filed.")
+        if s["status"] == "draft":
+            merged = {k: changes.get(k, s[k]) for k in ("sb_number", "sb_date", "port_code")}
+            if merged["sb_date"] and merged["sb_date"] > dt.date.today():
+                raise ApiError(400, "validation_failed", "A shipping bill cannot be dated in the future", errors=[{"field": "sb_date", "message": "record it once customs has issued it"}])
+            complete = all(merged.values())
+            if "status" in changes and changes["status"] != "draft" and not complete:
+                raise ApiError(400, "validation_failed", "Add the customs number, port and date first",
+                               errors=[{"field": k, "message": "required once the shipping bill is filed"} for k, v in merged.items() if not v])
+            if complete and "status" not in changes:
+                changes["status"] = "filed"                 # the customs details are what turn a draft into a filed shipping bill
         if changes.get("exported_on"):
+            if s["status"] == "draft" and not all((changes.get("sb_number", s["sb_number"]), changes.get("sb_date", s["sb_date"]), changes.get("port_code", s["port_code"]))):
+                raise ApiError(400, "validation_failed", "Add the customs number, port and date first",
+                               errors=[{"field": "exported_on", "message": "the date of export follows the shipping bill"}])
             if changes["exported_on"] > dt.date.today():
                 raise ApiError(400, "validation_failed", "The date of export cannot be in the future", errors=[{"field": "exported_on", "message": "record it once the goods have left"}])
             if s["exported_on"] and changes["exported_on"] != s["exported_on"]:
@@ -321,7 +355,7 @@ def trade_summary(entity_id: uuid.UUID, p: Principal = Auth):
         lut = cur.fetchone()
         cur.execute("SELECT number FROM entity_registrations WHERE entity_id = %s AND kind = 'iec' AND status = 'active' LIMIT 1", (entity_id,))
         iec = cur.fetchone()
-    this_year = [b for b in bills if b["sb_date"] >= start.isoformat()]
+    this_year = [b for b in bills if b["sb_date"] and b["sb_date"] >= start.isoformat()]
     owed = [b for b in bills if b["realisation_state"] in ("pending", "overdue")]
     overdue = [b for b in bills if b["realisation_state"] == "overdue"]
     claims_rodtep = sum((Decimal(b["rodtep_claimed"]) - Decimal(b["rodtep_credited"]) for b in bills), Decimal(0))
@@ -329,7 +363,7 @@ def trade_summary(entity_id: uuid.UUID, p: Principal = Auth):
     return js({
         "as_of": today, "financial_year_from": start, "iec": iec["number"] if iec else None,
         "lut": trade.lut_state(lut["valid_until"] if lut else None, today, lut is not None),
-        "exports": {"bills": len(this_year), "value_inr": sum((Decimal(b["fob_inr"]) for b in this_year), Decimal(0))},
+        "exports": {"bills": len(this_year), "value_inr": sum((Decimal(b["fob_inr"]) for b in this_year), Decimal(0)), "drafts": sum(1 for b in bills if b["status"] == "draft")},
         "realisation": {"outstanding_bills": len(owed), "outstanding_inr": sum((Decimal(b["outstanding_inr"]) for b in owed), Decimal(0)), "overdue_bills": len(overdue),
                         "overdue_inr": sum((Decimal(b["outstanding_inr"]) for b in overdue), Decimal(0)), "awaiting_export": sum(1 for b in bills if b["realisation_state"] == "awaiting_export")},
         "claims": {"rodtep_pending": claims_rodtep, "drawback_pending": claims_drawback},
