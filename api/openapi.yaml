@@ -6359,6 +6359,115 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: finance:read
+  /entities/{entityId}/history/imports:
+    post:
+      tags:
+      - Finance & books
+      operationId: importHistory
+      summary: Check or save the opening position from earlier books
+      description: '`opening_balances` rows: account_code, account_name, type, subtype?, debit, credit (the trial balance
+        must tie). `open_invoices` rows: number, date, customer_name, customer_gstin?, place_of_supply?, taxable, cgst, sgst,
+        igst, total, outstanding?, due_date?. `open_bills` rows: bill_no, date, supplier_name, supplier_gstin?, supplier_state?,
+        taxable, cgst, sgst, igst, total, tds?, outstanding?, due_date?. Dry run is the default and returns every problem
+        by row; a real import is all or nothing (422 `import_rejected`). Invoices and bills are records of the position on
+        the cut-off date: nothing is e-invoiced, filed or posted to the ledger, and bills are marked as already claimed in
+        their month''s return.'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoryImport'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryImportResult'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/history/batches:
+    get:
+      tags:
+      - Finance & books
+      operationId: listHistoryBatches
+      summary: List earlier-books imports
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryBatchList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+  /entities/{entityId}/history/batches/{id}/undo:
+    post:
+      tags:
+      - Finance & books
+      operationId: undoHistoryBatch
+      summary: Undo an earlier-books import
+      description: Removes the invoices or bills of the batch, or reverses its opening journal. Refused (409) once money has
+        been received or paid against them.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryBatch'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
   /entities/{entityId}/bank-accounts/{id}/transactions:
     post:
       tags:
@@ -15041,6 +15150,125 @@ components:
           oneOf:
           - type: string
             format: date
+          - type: 'null'
+    HistoryProblem:
+      type: object
+      properties:
+        row:
+          type: integer
+          description: 1-based row in the upload; 0 for a problem with the whole file
+        field:
+          oneOf:
+          - type: string
+          - type: 'null'
+        message:
+          type: string
+      required:
+      - row
+      - message
+    HistoryBatch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        kind:
+          type: string
+          enum:
+          - opening_balances
+          - open_invoices
+          - open_bills
+        label:
+          oneOf:
+          - type: string
+          - type: 'null'
+        as_of:
+          type: string
+          format: date
+        row_count:
+          type: integer
+        summary:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        undone_at:
+          oneOf:
+          - type: string
+            format: date-time
+            readOnly: true
+          - type: 'null'
+    HistoryImport:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - opening_balances
+          - open_invoices
+          - open_bills
+        as_of:
+          type: string
+          format: date
+        label:
+          oneOf:
+          - type: string
+          - type: 'null'
+        dry_run:
+          type: boolean
+          default: true
+          description: Check only; nothing is saved
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          minItems: 1
+          maxItems: 5000
+      required:
+      - kind
+      - as_of
+      - rows
+    HistoryImportResult:
+      type: object
+      properties:
+        kind:
+          type: string
+        dry_run:
+          type: boolean
+        accepted:
+          type: integer
+        problem_count:
+          type: integer
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryProblem'
+        warnings:
+          type: array
+          items:
+            type: string
+        summary:
+          type: object
+          additionalProperties: true
+        batch_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+    HistoryBatchList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryBatch'
+        next_cursor:
+          oneOf:
+          - type: string
           - type: 'null'
     BankFeedLine:
       type: object
