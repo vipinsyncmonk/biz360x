@@ -196,8 +196,9 @@ def test_msme_payables(client, h, db):
     assert [r["bill_no"] for r in rows] == ["SC/000", "SC/001"] and all(r["legal_name"] == "Shakti Castings" for r in rows)
     old = rows[0]
     assert old["breached"] is True and old["deduction_at_risk_43bh"] == old["balance_due"] == "11800.00"
-    assert rows[1]["deduction_at_risk_43bh"] == "0.00" and rows[1]["breached"] is (D(rows[1]["days_left"]) < 0)
-    assert [r["bill_no"] for r in client.get(url("/msme-payables"), headers=h, params={"breached": "true"}).json()] == ["SC/000"]
+    late = D(rows[1]["days_left"]) < 0                                                       # SC/001 is due on 9 Nov 2026, so whether it has breached depends on the day the suite runs
+    assert rows[1]["breached"] is late and rows[1]["deduction_at_risk_43bh"] == (rows[1]["balance_due"] if late else "0.00")
+    assert [r["bill_no"] for r in client.get(url("/msme-payables"), headers=h, params={"breached": "true"}).json()] == (["SC/000", "SC/001"] if late else ["SC/000"])
     from app import routes_purchases
     with db.transaction():
         first = routes_purchases.msme_alerts(db.cursor(), EN, dt.date(2026, 11, 6))
