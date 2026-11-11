@@ -492,6 +492,7 @@ def test_a_note_to_a_customer_abroad_must_correct_an_export_invoice(client):
 
 def test_amounts_on_the_pdf_use_lakhs_and_crores():
     assert [invoice_pdf.inr(x) for x in ("12345678.5", "999", "1000", "100000", "-1234.5", "0", None)] == ["1,23,45,678.50", "999.00", "1,000.00", "1,00,000.00", "-1,234.50", "0.00", "0.00"]
+    assert [invoice_pdf.rate_text(x) for x in ("1234.5678", "1000.0000", "99.9900", "12.5000", "0.1250", "1234567.1")] == ["1,234.5678", "1,000.00", "99.99", "12.50", "0.125", "12,34,567.10"]
     assert invoice_pdf.rs("83000") == "Rs. 83,000.00" and invoice_pdf._dmy("2026-11-09") == "09/11/2026"
 
 
@@ -566,6 +567,55 @@ def test_crossing_the_limit_mid_year_starts_einvoicing_on_the_next_1_april(clien
     st = client.get(url("/einvoice-status"), headers=o).json()
     assert st["level"] == "applies" and st["applies_today"] is True and preview(TODAY)
     assert client.get(url("/einvoice-status")).status_code == 401
+
+
+def test_a_line_priced_in_the_customers_currency_keeps_its_amounts_and_converts_for_gst():
+    xr = D("83.4905")
+    line = tax.Line("Valve", "8481", D("1"), D("83490.50"), D("18"), foreign_rate=D("1000"), foreign_discount=D("0"), foreign_taxable=D("1000.00"), taxable_override=tax.r2(D("1000.00") * xr))
+    res = tax.compute([line], ctx(exchange_rate=xr))
+    assert res.taxable_total == D("83490.50") and res.grand_total == D("83491") and res.round_off == D("0.50")        # GST rounds to a whole rupee
+    assert res.foreign_total == D("1000.00") and res.foreign_taxable_total == D("1000.00")                           # the dollars are what was typed
+    assert tax.foreign_amount(res.grand_total, xr) == D("1000.01")                                                  # working back from the rupees would not be
+    taxed = tax.compute([line], ctx(exchange_rate=xr, zero_rated=False, lut="none", supply_type="export_with_tax"))
+    assert taxed.igst_total == D("15028.29") and taxed.foreign_total == D("1000.00") + tax.r2(D("15028.29") / xr)    # IGST is worked out in rupees and converted
+    assert res.lines[0]["foreign_rate"] == "1000.0000" and res.lines[0]["foreign_taxable"] == D("1000.00")
+    inr_priced = tax.compute([tax.Line("Valve", "8481", D("1"), D("83490.50"), D("18"))], ctx(exchange_rate=xr))
+    assert inr_priced.foreign_total == D("1000.01") and inr_priced.foreign_taxable_total is None and "foreign_rate" not in inr_priced.lines[0]
+    assert tax.in_words_currency(D("10908.28"), "USD") == "US Dollars Ten Thousand Nine Hundred Eight and Cents Twenty Eight only"
+    assert tax.in_words_currency(D("1000.00"), "USD") == "US Dollars One Thousand only" and tax.in_words_currency(D("5"), "JPY") is None
+
+
+def test_an_export_invoice_can_be_priced_in_dollars(client, db):
+    o = login(client, OWNER)
+    valve = {"description": "Control valves", "hsn_sac": "8481", "qty": "1", "rate": "1000.00", "gst_rate": "18"}
+    body = doc(S["abroad"], [valve], currency="USD", exchange_rate="83.4905", priced_in_foreign=True)
+    p = client.post(url("/sales-documents/preview"), headers=o, json=body).json()
+    assert p["priced_in_foreign"] is True and p["foreign_total"] == "1000.00" and p["foreign_taxable_total"] == "1000.00"
+    assert p["taxable_total"] == "83490.50" and p["grand_total"] == "83491.00" and p["igst_total"] == "0.00"
+    assert p["lines"][0]["foreign_rate"] == "1000.0000" and p["lines"][0]["foreign_taxable"] == "1000.00"
+    assert p["amount_in_words_foreign"] == "US Dollars One Thousand only"
+    rupees = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["abroad"], [{**valve, "rate": "83490.50"}], currency="USD", exchange_rate="83.4905")).json()
+    assert rupees["priced_in_foreign"] is False and rupees["foreign_total"] == "1000.01" and rupees["foreign_taxable_total"] is None      # entered in rupees: the dollars are worked back
+    two = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["abroad"], [{**valve, "qty": "3", "rate": "1234.5678"}, {**valve, "description": "Spares", "rate": "99.99", "discount": "9.99"}],
+                                                                            currency="USD", exchange_rate="94.2300", priced_in_foreign=True)).json()
+    assert [l["foreign_taxable"] for l in two["lines"]] == ["3703.70", "90.00"] and two["foreign_total"] == "3793.70"             # 3 x 1234.5678 = 3703.7034 -> 3703.70; 99.99 - 9.99 = 90.00
+    assert [l["taxable_value"] for l in two["lines"]] == ["348999.65", "8480.70"]                                                  # each converted at 94.23
+
+    r = client.post(url("/sales-documents"), headers=o, json=body)
+    assert r.status_code == 201, r.text
+    saved = r.json()
+    assert saved["priced_in_foreign"] is True and saved["foreign_total"] == "1000.00" and saved["lines"][0]["foreign_rate"] == "1000.0000" and saved["lines"][0]["rate"] == "83490.50"
+    assert client.get(url(f"/sales-documents/{saved['id']}"), headers=o).json()["foreign_total"] == "1000.00"
+    assert client.post(url(f"/sales-documents/{saved['id']}/issue"), headers={**o, **key()}, json={}).status_code == 202
+    assert db.execute("SELECT fob_foreign FROM shipping_bills WHERE sales_document_id = %s", (saved["id"],)).fetchone()["fob_foreign"] == D("1000.00")      # the shipping bill is worth what was typed
+    pdf = client.get(url(f"/sales-documents/{saved['id']}/pdf"), headers=o)
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+
+    domestic = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["local"], [valve], party_gst_id=S["local_gst"], priced_in_foreign=True))
+    assert domestic.status_code == 400 and domestic.json()["code"] == "foreign_pricing_needs_currency"
+    five = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["abroad"], [{**valve, "rate": "1000.12345"}], currency="USD", exchange_rate="83", priced_in_foreign=True))
+    assert five.status_code == 400
+    assert db.execute("SELECT count(*) AS n FROM sales_document_lines WHERE foreign_rate IS NOT NULL AND foreign_taxable IS NULL").fetchone()["n"] == 0
 
 
 def test_the_audit_chain_is_intact(db):

@@ -37,6 +37,18 @@ def inr(value) -> str:
     return f"{sign}{whole}.{frac}"
 
 
+def rate_text(value) -> str:
+    """A foreign unit rate keeps up to four decimals (1,234.5678) but never fewer than two (1,000.00)."""
+    d = Decimal(str(value or "0")).quantize(Decimal("0.0001"))
+    s = f"{d:.4f}"
+    if s.endswith("00"):
+        s = s[:-2]
+    elif s.endswith("0"):
+        s = s[:-1]
+    whole, frac = s.split(".")
+    return f"{inr(whole)[:-3]}.{frac}"
+
+
 def rs(value) -> str:
     return f"Rs. {inr(value)}"
 
@@ -127,15 +139,25 @@ def render_invoice(doc: dict, supplier: dict, buyer_address: dict | None = None,
 
     # ---- the lines
     inter = Decimal(str(doc.get("igst_total") or 0)) > 0
-    cols = ["#", "Description", "HSN/SAC", "Qty", "Rate", "Taxable", "GST %", "Tax", "Amount"]
+    ccy = doc.get("currency") or "INR"
+    priced = bool(doc.get("priced_in_foreign")) and doc.get("foreign_total") is not None      # entered in the customer's currency: that is the invoice, the rupees are for GST
+    nil = doc.get("supply_type") == "export_under_lut"
+    if priced:
+        cols = ["#", "Description", "HSN/SAC", "Qty", f"Rate ({ccy})", f"Amount ({ccy})", "Taxable (Rs.)", "GST %", "Tax (Rs.)"]
+    else:
+        cols = ["#", "Description", "HSN/SAC", "Qty", "Rate", "Taxable", "GST %", "Tax", "Amount"]
     rows = [[_p(c, st["headr"] if i >= 3 else st["head"]) for i, c in enumerate(cols)]]
     for l in doc["lines"]:
         tax_amt = sum(Decimal(str(l.get(k) or 0)) for k in ("cgst_amount", "sgst_amount", "igst_amount", "cess_amount"))
         taxable = Decimal(str(l["taxable_value"]))
-        rows.append([_p(l["line_no"], st["cell"]), _p(l["description"], st["cell"]), _p(l["hsn_sac"], st["cell"]),
-                     _p(f"{Decimal(str(l['qty'])).normalize():f} {l.get('uqc') or ''}".strip(), st["cellr"]), _p(inr(l["rate"]), st["cellr"]),
-                     _p(inr(taxable), st["cellr"]), _p("Nil" if doc.get("supply_type") == "export_under_lut" else f"{Decimal(str(l['gst_rate'])).normalize():f}", st["cellr"]), _p(inr(tax_amt), st["cellr"]),
-                     _p(inr(taxable + tax_amt), st["cellr"])])
+        qty = _p(f"{Decimal(str(l['qty'])).normalize():f} {l.get('uqc') or ''}".strip(), st["cellr"])
+        rate_txt = "Nil" if nil else f"{Decimal(str(l['gst_rate'])).normalize():f}"
+        if priced and l.get("foreign_taxable") is not None:
+            rows.append([_p(l["line_no"], st["cell"]), _p(l["description"], st["cell"]), _p(l["hsn_sac"], st["cell"]), qty, _p(rate_text(l["foreign_rate"]), st["cellr"]),
+                         _p(inr(l["foreign_taxable"]), st["cellr"]), _p(inr(taxable), st["cellr"]), _p(rate_txt, st["cellr"]), _p(inr(tax_amt), st["cellr"])])
+        else:
+            rows.append([_p(l["line_no"], st["cell"]), _p(l["description"], st["cell"]), _p(l["hsn_sac"], st["cell"]), qty, _p(inr(l["rate"]), st["cellr"]),
+                         _p(inr(taxable), st["cellr"]), _p(rate_txt, st["cellr"]), _p(inr(tax_amt), st["cellr"]), _p(inr(taxable + tax_amt), st["cellr"])])
     widths = [7, 44, 19, 16, 24, 26, 10, 23, 26]
     scale = width / (sum(widths) * mm)
     items = Table(rows, colWidths=[w * mm * scale for w in widths], repeatRows=1)
@@ -145,6 +167,21 @@ def render_invoice(doc: dict, supplier: dict, buyer_address: dict | None = None,
     story += [items, Spacer(1, 8)]
 
     # ---- totals
+    if priced:
+        f_taxable = sum((Decimal(str(l["foreign_taxable"])) for l in doc["lines"] if l.get("foreign_taxable") is not None), Decimal("0"))
+        f_total = Decimal(str(doc["foreign_total"]))
+        frows = [[_p(f"Taxable value ({ccy})", st["body"]), _p(f"{ccy} {inr(f_taxable)}", st["right"])]]
+        if f_total != f_taxable:
+            frows.append([_p(f"IGST ({ccy})", st["body"]), _p(f"{ccy} {inr(f_total - f_taxable)}", st["right"])])
+        frows.append([_p("TOTAL", st["bold"]), _p(f"{ccy} {inr(f_total)}", ParagraphStyle("tf", parent=st["right"], fontName="Helvetica-Bold", fontSize=11, leading=14))])
+        ftable = Table(frows, colWidths=[56 * mm, 36 * mm], hAlign="RIGHT")
+        ftable.setStyle(TableStyle([("LINEABOVE", (0, -1), (-1, -1), 0.8, INK), ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
+        story += [ftable, Spacer(1, 4)]
+        from .tax import in_words_currency
+        words = in_words_currency(f_total, ccy)
+        if words:
+            story.append(_p(f"Amount in words: {words}", st["body"]))
+        story += [Spacer(1, 8), _p(f"VALUE FOR GST: converted at Rs. {doc['exchange_rate']} per {ccy}", st["small"])]
     tot = [("Taxable value", doc["taxable_total"])]
     if inter or export:                                           # an export is always an inter-state supply: IGST, or none under a LUT
         tot.append(("IGST (nil: supplied under LUT)" if doc.get("supply_type") == "export_under_lut" else "IGST", doc["igst_total"]))
@@ -160,8 +197,8 @@ def render_invoice(doc: dict, supplier: dict, buyer_address: dict | None = None,
     totals.setStyle(TableStyle([("LINEABOVE", (0, -1), (-1, -1), 0.8, INK), ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
     story.append(totals)
     from .tax import in_words
-    story += [Spacer(1, 4), _p(f"Amount in words: {in_words(Decimal(str(doc['grand_total'])))}", st["body"])]
-    if doc.get("foreign_total") and doc.get("exchange_rate"):
+    story += [Spacer(1, 4), _p(("Rupee value in words: " if priced else "Amount in words: ") + in_words(Decimal(str(doc['grand_total']))), st["body" if not priced else "small"])]
+    if doc.get("foreign_total") and doc.get("exchange_rate") and not priced:
         story.append(_p(f"Customer pays {doc['currency']} {inr(doc['foreign_total'])} (converted at Rs. {doc['exchange_rate']} per {doc['currency']}).", st["bold"]))
 
     # ---- what the law wants said

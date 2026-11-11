@@ -5159,6 +5159,9 @@ export interface components {
             sgst_amount?: components["schemas"]["Money"];
             igst_amount?: components["schemas"]["Money"];
             cess_amount?: components["schemas"]["Money"];
+            foreign_rate?: string | null;
+            foreign_discount?: components["schemas"]["Money"] | null;
+            foreign_taxable?: components["schemas"]["Money"] | null;
         } & components["schemas"]["DocumentLineInput"];
         Quote: {
             /** Format: uuid */
@@ -5264,6 +5267,8 @@ export interface components {
             cn_reason?: string | null;
             /** @default true */
             gst_adjusted: boolean;
+            /** @description An export invoice only: each line's `rate` and `discount` are in `currency` (the rate may have four decimals), and the rupee value for GST is worked out from them at `exchange_rate`. The foreign amounts on the invoice are then exactly what was typed. */
+            priced_in_foreign?: boolean;
             supply_type?: string;
             currency?: string | null;
             exchange_rate?: string | null;
@@ -5276,6 +5281,9 @@ export interface components {
             currency?: string;
             exchange_rate?: string | null;
             foreign_total?: components["schemas"]["Money"] | null;
+            priced_in_foreign?: boolean;
+            foreign_taxable_total?: components["schemas"]["Money"] | null;
+            amount_in_words_foreign?: string | null;
             is_inter_state?: boolean;
             place_of_supply?: components["schemas"]["StateCode"];
             lines?: components["schemas"]["DocumentLine"][];
@@ -5327,6 +5335,8 @@ export interface components {
             currency?: string;
             exchange_rate?: string | null;
             foreign_total?: components["schemas"]["Money"] | null;
+            /** @description The lines were entered in the foreign currency; the rupee columns are their value at the exchange rate, for GST */
+            priced_in_foreign?: boolean;
             reverse_charge?: boolean;
             quote_id?: string | null;
             sales_order_id?: string | null;

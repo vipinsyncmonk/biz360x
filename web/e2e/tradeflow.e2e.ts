@@ -41,17 +41,38 @@ test.describe.serial("the export flow", () => {
     await page.getByLabel("Description, item 1").fill("Control valves");
     await page.getByLabel("HSN or SAC, item 1").fill("8481");
     await page.getByLabel("Quantity, item 1").fill("10");
-    await page.getByLabel("Rate, item 1", { exact: true }).fill("8300");
+    await expect(page.getByLabel("Enter prices in")).toHaveValue("foreign");                              // the customer's currency is the default: the invoice is in dollars
+    await expect(page.getByText("Rate (USD)")).toBeVisible();
+    await page.getByLabel("Rate, item 1", { exact: true }).fill("100");                                   // USD 100 x 10 = USD 1,000
     await page.getByLabel(/Exchange rate/).fill("83");
     await expect(page.getByText("Supplied under LUT.")).toBeVisible();
     await expect(page.getByText("A draft shipping bill opens when you issue this.")).toBeVisible();
-    await expect(page.getByText("USD 1,000.00").first()).toBeVisible();                                    // what the customer pays: ₹83,000 at 83
+    await expect(page.getByText("USD 1,000.00").first()).toBeVisible();                                    // the invoice total, exactly as typed
+    await expect(page.getByText("₹83,000.00").first()).toBeVisible();                                      // its value for GST at 83
     await page.getByRole("button", { name: "Issue invoice" }).click();
     await page.waitForURL(/\/billing\/[0-9a-f-]{36}/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("EXP/");
     invoiceUrl = page.url();
     await expect(page.getByText("Supplied under LUT: no GST charged.")).toBeVisible();
+    await expect(page.getByText("Invoice total")).toBeVisible();
+    await expect(page.getByText("USD 1,000.00").first()).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Rate (USD)" })).toBeVisible();
+  });
+
+  test("prices can be entered in rupees instead, and the dollars are worked out", async () => {
+    await page.goto("/billing/new");
+    await page.getByLabel("Customer", { exact: true }).selectOption({ label: "Fjord Imports Inc · US" });
+    await page.getByLabel("Supplier GSTIN").selectOption({ index: 1 });
+    await page.getByLabel("Enter prices in").selectOption("inr");
+    await expect(page.getByText("Rate (₹)")).toBeVisible();
+    await page.getByLabel("Description, item 1").fill("Control valves");
+    await page.getByLabel("HSN or SAC, item 1").fill("8481");
+    await page.getByLabel("Quantity, item 1").fill("10");
+    await page.getByLabel("Rate, item 1", { exact: true }).fill("8300");
+    await page.getByLabel(/Exchange rate/).fill("83");
     await expect(page.getByText("Customer pays (USD)")).toBeVisible();
+    await expect(page.getByText("USD 1,000.00").first()).toBeVisible();
+    expect(problems()).toEqual([]);
   });
 
   test("the draft shipping bill is completed with what customs issued", async () => {

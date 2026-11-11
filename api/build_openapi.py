@@ -478,7 +478,9 @@ LINE_IN = schema("DocumentLineInput", {"item_id": NULLABLE(UUID), "description":
                                         "uqc": S(), "rate": MONEY, "discount": MONEY, "gst_rate": N(), "so_line_id": NULLABLE(I()),
                                         "original_line_id": NULLABLE(I())}, required=("description", "hsn_sac", "qty", "rate", "gst_rate"))
 schema("DocumentLine", {"line_no": I(readOnly=True), "taxable_value": MONEY, "cgst_amount": MONEY, "sgst_amount": MONEY,
-                        "igst_amount": MONEY, "cess_amount": MONEY}, extra={"allOf": [LINE_IN]})
+                        "igst_amount": MONEY, "cess_amount": MONEY,
+                        "foreign_rate": NULLABLE(S(readOnly=True, pattern=r"^[0-9]{1,14}\.[0-9]{4}$", description="The rate as typed, in the document's currency, when the invoice was priced in it")),
+                        "foreign_discount": NULLABLE({**MONEY, "readOnly": True}), "foreign_taxable": NULLABLE({**MONEY, "readOnly": True})}, extra={"allOf": [LINE_IN]})
 schema("Quote", {"id": RO_UUID, "quote_no": S(readOnly=True), "version": I(readOnly=True), "party_id": UUID, "registration_id": UUID,
                  "title": S(), "status": ENUM("draft", "sent", "viewed", "negotiating", "accepted", "rejected", "expired", "lost", readOnly=True),
                  "place_of_supply": STATE, "valid_until": DATE, "advance_pct": N(), "payment_terms_days": I(),
@@ -508,10 +510,13 @@ schema("TaxPreviewRequest", {"doc_type": ENUM("tax_invoice", "credit_note", "deb
                              "registration_id": UUID, "party_id": UUID, "party_gst_id": NULLABLE(UUID), "place_of_supply": NULLABLE(STATE),
                              "doc_date": DATE, "payment_terms_days": I(), "lines": ARR(LINE_IN), "original_document_id": NULLABLE(UUID),
                              "cn_reason": NULLABLE(S()), "gst_adjusted": B(default=True),
+                             "priced_in_foreign": B(description="An export invoice only: each line's `rate` and `discount` are in `currency` (the rate may have four decimals), "
+                                                    "and the rupee value for GST is worked out from them at `exchange_rate`. The foreign amounts on the invoice are then exactly what was typed."),
                              "supply_type": S(), "currency": NULLABLE(S(pattern="^[A-Z]{3}$")), "exchange_rate": NULLABLE(S(description="Rupees per unit of the currency, up to four decimals"))},
                              required=("doc_type", "registration_id", "party_id", "lines"))
 schema("TaxPreview", {"doc_type": S(description="An invoice to a customer outside India comes back as export_invoice"), "supply_type": S(), "is_export": B(),
-                      "currency": S(), "exchange_rate": NULLABLE(S()), "foreign_total": NULLABLE(MONEY), "is_inter_state": B(), "place_of_supply": STATE, "lines": ARR(ref("DocumentLine")),
+                      "currency": S(), "exchange_rate": NULLABLE(S()), "foreign_total": NULLABLE(MONEY), "priced_in_foreign": B(),
+                      "foreign_taxable_total": NULLABLE(MONEY), "amount_in_words_foreign": NULLABLE(S(description="The foreign total in words, for a currency with a wording")), "is_inter_state": B(), "place_of_supply": STATE, "lines": ARR(ref("DocumentLine")),
                       "taxable_total": MONEY, "cgst_total": MONEY, "sgst_total": MONEY, "igst_total": MONEY, "cess_total": MONEY,
                       "round_off": MONEY, "grand_total": MONEY, "amount_in_words": S(), "due_date": DATE,
                       "tds_expected": MONEY, "expected_receipt": MONEY, "next_number": S(examples=["NI/KA/213"]),
@@ -527,6 +532,7 @@ schema("SalesDocument", {
     "supply_type": ENUM("b2b", "b2c_small", "b2c_large", "export_with_tax", "export_under_lut", "sez_with_tax", "sez_under_lut", "deemed_export"),
     "currency": S(description="INR unless this is an export invoice, which states the foreign currency the customer pays in"),
     "exchange_rate": NULLABLE(S(description="Rupees per unit of that currency")), "foreign_total": NULLABLE({**MONEY, "readOnly": True}),
+    "priced_in_foreign": B(description="The lines were entered in the foreign currency; the rupee columns are their value at the exchange rate, for GST"),
     "reverse_charge": B(), "quote_id": NULLABLE(UUID), "sales_order_id": NULLABLE(UUID), "customer_po_ref": S(),
     "original_document_id": NULLABLE(UUID), "cn_reason": NULLABLE(ENUM("sales_return", "rate_revision", "post_sale_discount", "deficiency_in_service", "correction", "other")),
     "gst_adjusted": B(default=True, description="false = commercial credit note"),

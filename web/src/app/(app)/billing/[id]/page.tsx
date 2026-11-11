@@ -9,10 +9,10 @@ import { downloadInvoicePdf, viewInvoicePdf } from "@/lib/invoicePdf";
 import { useSession } from "@/lib/session";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
-interface Line { line_no: number; description: string; hsn_sac: string; qty: string; uqc: string; rate: string; discount: string; taxable_value: string; gst_rate: string | number; cgst_amount: string; sgst_amount: string; igst_amount: string }
+interface Line { line_no: number; description: string; hsn_sac: string; qty: string; uqc: string; rate: string; discount: string; taxable_value: string; gst_rate: string | number; cgst_amount: string; sgst_amount: string; igst_amount: string; foreign_rate?: string | null; foreign_taxable?: string | null }
 interface Doc extends Omit<DocRow, "days_overdue" | "irn_status"> {
   lines: Line[]; cgst_total: string; sgst_total: string; igst_total: string; round_off: string; place_of_supply: string; payment_terms_days: number | null;
-  einvoice: { status: string; irn: string | null; ack_no: string | null }; cn_reason: string | null; currency: string; exchange_rate: string | null; foreign_total: string | null; supply_type: string; tds_expected: string; original_document_id: string | null;
+  einvoice: { status: string; irn: string | null; ack_no: string | null }; cn_reason: string | null; currency: string; exchange_rate: string | null; foreign_total: string | null; supply_type: string; tds_expected: string; priced_in_foreign?: boolean; original_document_id: string | null;
 }
 
 export default function InvoiceDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -48,6 +48,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
   }
 
   const d = doc.data;
+  const priced = !!d?.priced_in_foreign && !!d.foreign_total;                // entered in the customer's currency: that is the invoice, the rupees are its value for GST
   const inter = d ? Number(d.igst_total) > 0 : false;       // only chooses which tax columns to show
   const st = d && d.doc_type === "credit_note" && d.status === "issued" ? { label: "Issued", tone: "ok" as const } : d ? docStatus({ status: d.status, payment_status: d.payment_status, days_overdue: 0, irn_status: d.einvoice.status }) : null;
 
@@ -77,13 +78,13 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
               <section className="card" style={{ overflow: "hidden" }}>
                 <div className="tablewrap">
                   <table style={{ minWidth: 720 }}>
-                    <thead><tr><th scope="col">#</th><th scope="col">Item</th><th scope="col">HSN / SAC</th><th scope="col" style={{ textAlign: "right" }}>Qty</th><th scope="col" style={{ textAlign: "right" }}>Rate</th><th scope="col" style={{ textAlign: "right" }}>Taxable</th><th scope="col" style={{ textAlign: "right" }}>GST</th></tr></thead>
+                    <thead><tr><th scope="col">#</th><th scope="col">Item</th><th scope="col">HSN / SAC</th><th scope="col" style={{ textAlign: "right" }}>Qty</th><th scope="col" style={{ textAlign: "right" }}>Rate{priced ? ` (${d.currency})` : ""}</th><th scope="col" style={{ textAlign: "right" }}>{priced ? `Amount (${d.currency})` : "Taxable"}</th><th scope="col" style={{ textAlign: "right" }}>GST</th></tr></thead>
                     <tbody>
                       {d.lines.map((l) => (
                         <tr key={l.line_no}>
                           <td className="mono">{l.line_no}</td><td>{l.description}</td><td className="mono">{l.hsn_sac}</td>
-                          <td className="mono" style={{ textAlign: "right" }}>{l.qty} {l.uqc}</td><td className="mono" style={{ textAlign: "right" }}>{formatInr(l.rate)}</td>
-                          <td className="mono" style={{ textAlign: "right" }}>{formatInr(l.taxable_value)}</td>
+                          <td className="mono" style={{ textAlign: "right" }}>{l.qty} {l.uqc}</td><td className="mono" style={{ textAlign: "right" }}>{priced && l.foreign_rate ? rate4(l.foreign_rate) : formatInr(l.rate)}</td>
+                          <td className="mono" style={{ textAlign: "right" }}>{priced && l.foreign_taxable ? money2(l.foreign_taxable) : formatInr(l.taxable_value)}</td>
                           <td className="mono" style={{ textAlign: "right" }}>{l.gst_rate}%</td>
                         </tr>
                       ))}
@@ -96,11 +97,13 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
               <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <h2>{d.buyer_legal_name}</h2>
                 <span className="mono t13">{d.doc_type === "export_invoice" || d.currency !== "INR" ? "Customer outside India · place of supply outside India" : <>{d.buyer_gstin ?? "Unregistered buyer"} · place of supply {d.place_of_supply}</>}</span>
+                {priced && d.foreign_total && <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: 10, borderBottom: "1px solid var(--line)", fontWeight: 700, fontSize: 18 }}><span>Invoice total</span><span className="mono">{d.currency} {money2(d.foreign_total)}</span></div>}
+                {priced && <span className="t13">Value for GST and the books, at ₹{d.exchange_rate} per {d.currency}:</span>}
                 <Row k="Taxable value" v={formatInr(d.taxable_total)} />
                 {inter ? <Row k="IGST" v={formatInr(d.igst_total)} /> : <><Row k="CGST" v={formatInr(d.cgst_total)} /><Row k="SGST" v={formatInr(d.sgst_total)} /></>}
                 {d.round_off !== "0.00" && <Row k="Round off" v={formatInr(d.round_off)} />}
                 <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 10, borderTop: "1px solid var(--line)", fontWeight: 700, fontSize: 18 }}><span>Total</span><span className="mono">{formatInr(d.grand_total)}</span></div>
-                {d.foreign_total && <Row k={d.doc_type === "credit_note" ? `Customer is credited (${d.currency})` : `Customer pays (${d.currency})`} v={`${d.currency} ${Number(d.foreign_total).toLocaleString("en-US", { minimumFractionDigits: 2 })}`} />}
+                {d.foreign_total && !priced && <Row k={d.doc_type === "credit_note" ? `Customer is credited (${d.currency})` : `Customer pays (${d.currency})`} v={`${d.currency} ${Number(d.foreign_total).toLocaleString("en-US", { minimumFractionDigits: 2 })}`} />}
                 {d.status === "issued" && <><Row k="Settled" v={formatInr(d.amount_settled)} /><Row k="Balance due" v={formatInr(d.balance_due)} /></>}
                 <span className="t13">Due {shortDate(d.due_date)}{d.payment_terms_days != null ? ` · ${d.payment_terms_days} day terms` : ""}</span>
               </section>
@@ -125,6 +128,10 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
     </main>
   );
 }
+
+const money2 = (v: string) => Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** A foreign unit rate keeps up to four decimals but never fewer than two. */
+const rate4 = (v: string) => Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 
 function Row({ k, v }: { k: string; v: string }) {
   return <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}><span className="muted">{k}</span><span className="mono">{v}</span></div>;
