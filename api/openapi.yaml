@@ -3458,6 +3458,43 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: sales:write
+  /entities/{entityId}/sales-documents/{id}/pdf:
+    get:
+      tags:
+      - Sales & billing
+      operationId: getSalesDocumentPdf
+      summary: The document as a PDF
+      description: Supplier, buyer, lines with their tax, totals in words, and for an export the LUT or IGST statement and
+        the foreign amount. A draft carries a DRAFT mark and is not a valid tax invoice. The IRN and its QR code are printed
+        once the e-invoice has been generated.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: download
+        in: query
+        schema:
+          type: boolean
+          default: false
+        description: true to save the file instead of showing it
+      responses:
+        '200':
+          description: The PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: sales:read
   /entities/{entityId}/sales-documents/{id}/credit-notes:
     post:
       tags:

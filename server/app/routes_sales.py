@@ -238,6 +238,33 @@ def get_document(entity_id: uuid.UUID, doc_id: uuid.UUID, response: Response, p:
     return doc
 
 
+@router.get(E + "/sales-documents/{doc_id}/pdf", tags=["Sales & billing"])
+def get_document_pdf(entity_id: uuid.UUID, doc_id: uuid.UUID, download: bool = False, p: Principal = Auth):
+    """The document as a PDF to view in the browser or, with `download=true`, to save and attach to an email. A draft carries a DRAFT mark."""
+    from .invoice_pdf import render_invoice
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "sales:read")
+        doc = load_document(cur, entity_id, doc_id)
+        cur.execute("SELECT legal_name, registered_address, pan::text AS pan, cin::text AS cin FROM entities WHERE id = %s", (entity_id,))
+        supplier = cur.fetchone()
+        cur.execute("SELECT number, state_code FROM entity_registrations WHERE id = %s", (doc["registration_id"],))
+        reg = cur.fetchone()
+        supplier = {**supplier, "gstin": reg["number"] if reg else None, "state_code": reg["state_code"] if reg else None}
+        cur.execute("""SELECT line1, line2, city, state_code, pincode FROM party_addresses WHERE party_id = %s
+                        ORDER BY (kind = 'billing') DESC, (kind = 'registered') DESC LIMIT 1""", (doc["party_id"],))
+        address = cur.fetchone()
+        cur.execute("SELECT gst_code, name FROM ref_states")
+        states = {r["gst_code"]: r["name"] for r in cur.fetchall()}
+        cur.execute("""SELECT number FROM entity_registrations WHERE entity_id = %s AND kind = 'lut' AND status = 'active'
+                          AND (valid_from IS NULL OR valid_from <= %s) AND (valid_until IS NULL OR valid_until >= %s) ORDER BY valid_until DESC NULLS FIRST LIMIT 1""",
+                    (entity_id, doc["doc_date"], doc["doc_date"]))
+        lut = cur.fetchone()
+    pdf = render_invoice(doc, supplier, address, states, lut["number"] if lut else None)
+    name = (doc["number"] or "draft").replace("/", "-")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'{"attachment" if download else "inline"}; filename="{name}.pdf"', "Cache-Control": "private, no-store"})
+
+
 class IssueRequest(BaseModel):
     create_payment_link: bool = True
     generate_eway_bill: bool = True

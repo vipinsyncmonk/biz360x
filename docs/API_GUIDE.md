@@ -104,6 +104,7 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `trade`, `partie
 3. While editing, `POST /sales-documents/preview` returns the IGST or CGST+SGST split, totals, amount in words, next number and checks: e-invoice, e-way bill (over ₹50,000), 194Q TDS, MSME terms, and the Sec 34 time limit for credit notes.
 4. `POST /sales-documents/{id}/issue` (with Idempotency-Key) assigns the number atomically from `document_series` and returns `202` with an `einvoice.generate_irn` job. The worker calls the IRP; the document gets `irn`, `ack_no` and the signed QR, and `sales_document.irn_generated` is emitted.
 5. The customer opens `/pay/{shortCode}` and pays by NEFT to the invoice's virtual account. The bank feed line is auto-matched; alternatively, `POST /receipts {allocations}` records the payment. Settlements update `payment_status`, and `sales_document.paid` fires.
+5a. `GET /sales-documents/{id}/pdf` returns the document as a PDF (`application/pdf`; `?download=true` sets `attachment` so the browser saves it) for sending to the customer. `server/app/invoice_pdf.py` draws it from the same document the API returns: supplier and buyer, lines with their tax, totals in words, the LUT or IGST statement and the foreign amount on an export, and the IRN with its QR once generated. A draft carries a DRAFT mark. The web app fetches it with the session token and opens or saves the blob, because a plain link cannot carry the token. Not built yet: sending it by email or WhatsApp (`POST /sales-documents/{id}/send` is in the contract only), the bank and UPI payment details, and the company logo.
 6. Corrections go through `POST /sales-documents/{id}/credit-notes {cn_reason, lines}`, which drafts a credit note. Issuing it follows step 4, and the settlement reduces the invoice balance.
 
 ### Filing a return (e.g. GSTR-1)
@@ -155,7 +156,7 @@ The modules are `settings`, `compliance`, `approvals`, `tasks`, `trade`, `partie
 | Group view | `GET /organizations/{id}/entities`, `GET /organizations/{id}/workload`, `POST /organizations/{id}/client-reminders` |
 | Settings | `/members`, `/advisor-grants`, `/dsc-certificates`, `/portal-connections` (+ `/portal-connections/{id}/renew`), `/me/notification-preferences`, `/webhooks` (+ `/webhooks/{id}/test`, `/webhooks/{id}/deliveries`), `/api-keys`, `/audit-log`, `/audit-log/verify` |
 | Sales & Billing | `GET /sales/summary`, `GET /sales-documents?payment_status=…`, `GET /dunning-sequences`, `GET /recurring-invoices` |
-| New GST invoice | `POST /sales-documents/preview` (every change), `POST /sales-documents`, `POST /sales-documents/{id}/issue` |
+| New GST invoice | `POST /sales-documents/preview` (every change), `POST /sales-documents`, `POST /sales-documents/{id}/issue`, `GET /sales-documents/{id}/pdf` (View PDF, Download PDF) |
 | Collections | `GET /receivables/ageing`, `GET /receipts`, `POST /receipts`, `POST /receipts/{id}/allocate`, `GET /dunning-sequences`, `POST /parties/{id}/pause-dunning`, `GET /recurring-invoices`, `PATCH /recurring-invoices/{id}` |
 | Quotes | `GET /quotes`, `POST /quotes`, `POST /quotes/{id}/send`, `POST /quotes/{id}/mark-lost`, `POST /quotes/{id}/revise`, `POST /quotes/{id}/accept`, `POST /sales-orders/{id}/invoice` |
 | Credit note | `POST /sales-documents/preview {doc_type: credit_note}`, `POST /sales-documents/{id}/credit-notes`, `POST …/issue` |

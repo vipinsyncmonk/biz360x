@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { FIRM, OWNER, PORTAL_CODE, apiGet, apiPost, apiToken, signIn, watch } from "./helpers";
 
@@ -32,6 +33,11 @@ test.describe.serial("company flows", () => {
     await page.getByRole("button", { name: "Issue invoice" }).click();
     await page.waitForURL(/\/billing\/[0-9a-f-]{36}/);
     await expect(page.locator("div.error[role=alert]")).toHaveCount(0);
+    // The invoice can be saved as a PDF to attach to an email (the file is fetched with the session, so a plain link would not work).
+    await expect(page.getByRole("button", { name: "View PDF" })).toBeVisible();
+    const [saved] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download PDF" }).click()]);
+    expect(saved.suggestedFilename()).toMatch(/\.pdf$/);
+    expect(readFileSync((await saved.path())!).subarray(0, 5).toString()).toBe("%PDF-");
     expect(problems()).toEqual([]);
   });
 

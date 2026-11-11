@@ -557,6 +557,10 @@ action(E + "/sales-documents/{id}/cancel", "Sales & billing", "cancelSalesDocume
        status="202", idem=True)
 action(E + "/sales-documents/{id}/send", "Sales & billing", "sendSalesDocument", "Email / WhatsApp the PDF and payment link", "sales:write",
        body=ref("SendRequest"), status="204")
+_op("get", E + "/sales-documents/{id}/pdf", "Sales & billing", "getSalesDocumentPdf", "The document as a PDF", "sales:read", params=[q("download", B(default=False), "true to save the file instead of showing it")],
+    desc="Supplier, buyer, lines with their tax, totals in words, and for an export the LUT or IGST statement and the foreign amount. A draft carries a DRAFT mark "
+         "and is not a valid tax invoice. The IRN and its QR code are printed once the e-invoice has been generated.",
+    extra_responses={"200": {"description": "The PDF", "content": {"application/pdf": {"schema": S(format="binary")}}}})
 action(E + "/sales-documents/{id}/credit-notes", "Sales & billing", "createCreditNoteFor", "Draft a credit note against this invoice", "sales:write",
        body=schema("CreditNoteRequest", {"cn_reason": ENUM("sales_return", "rate_revision", "post_sale_discount", "deficiency_in_service", "correction", "other"),
                                          "gst_adjusted": B(default=True), "lines": ARR(LINE_IN), "agreed_before_supply": B()}, required=("cn_reason", "lines")),

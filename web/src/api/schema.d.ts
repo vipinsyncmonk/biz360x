@@ -1283,6 +1283,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/sales-documents/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The document as a PDF
+         * @description Supplier, buyer, lines with their tax, totals in words, and for an export the LUT or IGST statement and the foreign amount. A draft carries a DRAFT mark and is not a valid tax invoice. The IRN and its QR code are printed once the e-invoice has been generated.
+         */
+        get: operations["getSalesDocumentPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/sales-documents/{id}/credit-notes": {
         parameters: {
             query?: never;
@@ -10506,6 +10526,38 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getSalesDocumentPdf: {
+        parameters: {
+            query?: {
+                /** @description true to save the file instead of showing it */
+                download?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };

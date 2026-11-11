@@ -9,7 +9,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from app import ledger, tax, trade, worker
+from app import invoice_pdf, ledger, tax, trade, worker
 
 DB = os.environ["DATABASE_URL"]
 ORG = "00000000-0000-0000-0000-000000f1a000"
@@ -488,6 +488,33 @@ def test_a_note_to_a_customer_abroad_must_correct_an_export_invoice(client):
     assert r.status_code == 400 and r.json()["code"] == "export_note_needs_invoice"
     r = client.post(url("/sales-documents"), headers=o, json={**doc(S["local"], [GOODS_LINE]), "doc_type": "credit_note", "original_document_id": S["inv"], "cn_reason": "sales_return"})
     assert r.status_code == 400                                                                                   # a domestic customer cannot be credited against another's export invoice
+
+
+def test_amounts_on_the_pdf_use_lakhs_and_crores():
+    assert [invoice_pdf.inr(x) for x in ("12345678.5", "999", "1000", "100000", "-1234.5", "0", None)] == ["1,23,45,678.50", "999.00", "1,000.00", "1,00,000.00", "-1,234.50", "0.00", "0.00"]
+    assert invoice_pdf.rs("83000") == "Rs. 83,000.00" and invoice_pdf._dmy("2026-11-09") == "09/11/2026"
+
+
+def test_an_invoice_can_be_viewed_or_saved_as_a_pdf(client):
+    o, v = login(client, OWNER), login(client, VIEWER)
+    r = client.get(url(f"/sales-documents/{S['inv']}/pdf"), headers=o)
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.content.startswith(b"%PDF") and b"%%EOF" in r.content[-32:] and len(r.content) > 1500
+    assert r.headers["content-disposition"].startswith("inline;") and r.headers["content-disposition"].endswith('.pdf"')
+    saved = client.get(url(f"/sales-documents/{S['inv']}/pdf?download=true"), headers=o)
+    assert saved.status_code == 200 and saved.headers["content-disposition"].startswith("attachment;")
+    assert "/" not in saved.headers["content-disposition"].split("filename=")[1]                                    # a number like EXP/2026-27/0001 becomes a safe file name
+    assert client.get(url(f"/sales-documents/{S['inv']}/pdf"), headers=v).status_code == 200                       # anyone who can read sales can open it
+    assert client.get(url(f"/sales-documents/{uuid.uuid4()}/pdf"), headers=o).status_code == 404
+    assert client.get(url(f"/sales-documents/{S['inv']}/pdf")).status_code == 401
+
+
+def test_a_draft_and_a_domestic_invoice_render_too(client):
+    o = login(client, OWNER)
+    draft = client.post(url("/sales-documents"), headers=o, json=doc(S["local"], [GOODS_LINE], party_gst_id=S["local_gst"]))
+    assert draft.status_code == 201
+    r = client.get(url(f"/sales-documents/{draft.json()['id']}/pdf"), headers=o)
+    assert r.status_code == 200 and r.content.startswith(b"%PDF") and r.headers["content-disposition"].find("draft") > 0
 
 
 def test_the_audit_chain_is_intact(db):

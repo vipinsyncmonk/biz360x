@@ -5,6 +5,7 @@ import { ApiProblem, api, newIdempotencyKey, unwrap } from "@/lib/api";
 import { DOC_TYPE_LABEL, ISSUE_BODY, docStatus, einvoiceLabel, type DocRow } from "@/lib/billing";
 import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
+import { downloadInvoicePdf, viewInvoicePdf } from "@/lib/invoicePdf";
 import { useSession } from "@/lib/session";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
@@ -20,6 +21,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
   const id = entity?.id ?? null;
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const doc = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/sales-documents/{id}", { params: { path: { entityId: id!, id: docId } } })) as unknown as Doc, id ? `${id}|${docId}` : null);
 
   async function issue() {
@@ -31,6 +33,17 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
       setFailure(e);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function pdf(how: "view" | "download") {
+    setPdfBusy(true); setFailure(null);
+    try {
+      if (how === "view") await viewInvoicePdf(id!, docId); else await downloadInvoicePdf(id!, docId, doc.data?.number ?? null);
+    } catch (e) {
+      setFailure(e);
+    } finally {
+      setPdfBusy(false);
     }
   }
 
@@ -52,6 +65,8 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <Pill tone={st.tone}>{st.label}</Pill>
+              <button type="button" className="btn" disabled={pdfBusy} onClick={() => void pdf("view")}>View PDF</button>
+              <button type="button" className="btn" disabled={pdfBusy} onClick={() => void pdf("download")}>Download PDF</button>
               {d.status === "issued" && ["tax_invoice", "export_invoice", "bill_of_supply"].includes(d.doc_type) && <Link href={`/billing/${docId}/credit-note`} className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Issue credit note</Link>}
               {d.status === "draft" && <button type="button" className="btn primary" disabled={busy} onClick={() => void issue()}>{busy ? "Issuing…" : "Issue invoice"}</button>}
             </div>
