@@ -27,12 +27,13 @@ export interface Statement {
 
 const money = (p: bigint) => `${p < 0n ? "-" : ""}${(p < 0n ? -p : p) / 100n}.${((p < 0n ? -p : p) % 100n).toString().padStart(2, "0")}`;
 
-/** Split CSV text into rows of cells: quotes, doubled quotes and the delimiter (comma, semicolon or tab, chosen from the first lines). */
+/** Split CSV text into rows of cells: quotes, doubled quotes and the delimiter (comma, semicolon, tab, # or |, chosen from the first lines that have text).
+ * A bank that writes amounts as 11,00,000.00 without quotes has to use another delimiter, and some banks put # between the fields. */
 export function splitCsv(text: string): string[][] {
   const src = text.replace(/^﻿/, "");
-  const head = src.split(/\r?\n/).slice(0, 8).join("\n");
-  const count = (c: string) => (head.match(new RegExp(c === "\t" ? "\t" : `\\${c}`, "g")) ?? []).length;
-  const delim = [",", ";", "\t"].reduce((best, c) => (count(c) > count(best) ? c : best), ",");
+  const head = src.split(/\r?\n/).filter((l) => l.trim() !== "").slice(0, 30).join("\n");
+  const count = (c: string) => head.split(c).length - 1;
+  const delim = [",", ";", "\t", "#", "|"].reduce((best, c) => (count(c) > count(best) ? c : best), ",");
   const rows: string[][] = [];
   let row: string[] = [], cell = "", quoted = false;
   for (let i = 0; i < src.length; i++) {
@@ -53,15 +54,15 @@ export function splitCsv(text: string): string[][] {
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const HEADERS: Record<string, RegExp> = {
-  date: /^(txn date|transaction date|tran date|trans date|post date|posting date|date|booking date)$/,
+  date: /^(txn date|transaction date|tran date|trans date|post date|posting date|txn posted date|posted date|date|booking date)$/,
   value_date: /^(value date|value dt|val date)$/,
   description: /^(narration|particulars|description|transaction remarks|remarks|transaction details|details|transaction description)$/,
   ref: /^(cheque no ref no|cheque ref no|chq ref no|chq no|cheque no|cheque number|ref no|reference no|reference number|ref no cheque no|chq ref number|utr no|utr|transaction id|tran id)$/,
   debit: /^(withdrawal amt|withdrawal amount|withdrawal amount inr|withdrawals|withdrawal|debit|debit amount|dr|dr amount|debits|amount debited)$/,
   credit: /^(deposit amt|deposit amount|deposit amount inr|deposits|deposit|credit|credit amount|cr|cr amount|credits|amount credited)$/,
-  amount: /^(amount|transaction amount|txn amount|amount inr)$/,
+  amount: /^(amount|transaction amount|txn amount|amount inr|transaction amount inr|txn amount inr)$/,
   drcr: /^(dr cr|cr dr|type|transaction type|debit credit|dr\/cr)$/,
-  balance: /^(balance|closing balance|running balance|balance amt|available balance|balance inr)$/,
+  balance: /^(balance|closing balance|running balance|balance amt|available balance|balance inr|available balance inr|closing balance inr)$/,
 };
 
 function findHeader(rows: string[][]): { at: number; map: Record<string, number> } | null {
@@ -80,7 +81,7 @@ const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct
 
 /** Indian statements put the day first: 05/04/2024 is 5 April. Also 05-Apr-2024, 05 Apr 24 and 2024-04-05. */
 export function parseDate(raw: string): string | null {
-  const s = raw.trim();
+  const s = raw.trim().replace(/[\sT]+\d{1,2}:\d{2}(:\d{2})?\s*([AP]M)?$/i, "");           // a posted date can carry the time: 02/04/2026 04:27:35 AM
   let y: number, m: number, d: number;
   let x = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
   if (x) { y = +x[1]!; m = +x[2]!; d = +x[3]!; }
@@ -117,7 +118,7 @@ export function fingerprint(s: string): string {
   return h.toString(16).padStart(8, "0");
 }
 
-const UTR_RX = [/\bIMPS[\s/\-]*(?:CR|DR)?[\s/\-]*(\d{12})\b/i, /\bUTR[\s:.\-#]*([A-Z0-9]{10,22})\b/i, /\b(?:NEFT|RTGS)[\s\-/:]*(?:CR|DR)?[\s\-/:]*([A-Z]{4}[A-Z0-9]{8,18})\b/i, /\b([A-Z]{4}[RN]\d{10,14})\b/, /\bUPI[\s/\-]*(?:CR|DR)?[\s/\-]*(\d{12})\b/i];
+const UTR_RX = [/\b(?:NEFT|RTGS)\/([A-Z]{2}\d{10,18})\//i, /\bIMPS[\s/\-]*(?:CR|DR)?[\s/\-]*(\d{12})\b/i, /\bUTR[\s:.\-#]*([A-Z0-9]{10,22})\b/i, /\b(?:NEFT|RTGS)[\s\-/:]*(?:CR|DR)?[\s\-/:]*([A-Z]{4}[A-Z0-9]{8,18})\b/i, /\b([A-Z]{4}[RN]\d{10,14})\b/, /\bUPI[\s/\-]*(?:CR|DR)?[\s/\-]*(\d{12})\b/i];
 export function extractUtr(text: string): string | null {
   for (const rx of UTR_RX) { const m = rx.exec(text); if (m) return m[1]!.toUpperCase(); }
   return null;

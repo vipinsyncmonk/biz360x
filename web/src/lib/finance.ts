@@ -5,8 +5,11 @@ import type { Tone } from "./compliance";
 export interface Period { id: string; fy: string; period_start: string; period_end: string; status: string; locked_at: string | null; close_progress: { done: number; total: number } }
 export interface CloseTask { id: string; task_key: string; title: string; is_automatic: boolean; done_at: string | null }
 export interface ExportHint { shipping_bill_id: string; sb_number: string | null; currency: string | null; proposed_foreign: string | null; expected_inr: string | null; difference_inr: string | null }
-export interface Suggestion { id: string; target_kind: string; label: string; amount: string; confidence: number; rule: string | null; status: string; export?: ExportHint | null }
-export interface BankTxn { id: string; txn_date: string; amount: string; description: string; counterparty_name: string | null; match_status: string; suggestions: Suggestion[] }
+export interface Suggestion { id: string; target_kind: string; target_id?: string; label: string; amount: string; confidence: number; rule: string | null; reason?: string | null; status: string; export?: ExportHint | null }
+export interface BankTxn { id: string; txn_date: string; amount: string; description: string; counterparty_name: string | null; match_status: string; suggestions: Suggestion[];
+  mode?: string | null; counterparty_key?: string | null; remark?: string | null }
+export interface Account { id: string; code: string; name: string; type: string }
+export interface BankRule { id: string; direction: string; counterparty_key: string | null; keyword: string | null; mode: string | null; account_id: string; account_code: string; account_name: string; hits: number }
 export interface ReportRow { line: string; values: string[] }
 export interface Report { columns: string[]; rows: ReportRow[]; provisional: boolean }
 
@@ -99,4 +102,36 @@ export const totalOf = (t: Record<string, string>) => sumMoney(Object.values(t))
 export function returnPeriod(period: string): string {
   const [y, m] = period.split("-");
   return m ? `${(MONTHS[Number(m) - 1] ?? "").slice(0, 3)} ${y}` : period;
+}
+
+// ---- booking a bank line: the other half is an account
+export const MODE_LABEL: Record<string, string> = { upi: "UPI", neft: "NEFT", rtgs: "RTGS", imps: "IMPS", auto_debit: "Auto-debit", transfer: "Transfer", cheque: "Cheque", card: "Card", cash: "Cash", charges: "Charges", interest: "Interest", other: "" };
+export const accountLabel = (a: Pick<Account, "code" | "name">) => `${a.code} · ${a.name}`;
+export const TYPE_ORDER: Array<[string, string]> = [["expense", "Expenses"], ["asset", "Assets"], ["liability", "Liabilities"], ["income", "Income"], ["equity", "Equity"]];
+
+/** The other open lines a rule on this line's counterparty would also cover: same counterparty, money moving the same way. */
+export function similarLines(rows: BankTxn[], t: BankTxn): BankTxn[] {
+  if (!t.counterparty_key) return [];
+  return rows.filter((x) => x.id !== t.id && x.counterparty_key === t.counterparty_key && x.match_status !== "matched" && x.match_status !== "ignored" && (Number(x.amount) < 0) === (Number(t.amount) < 0));
+}
+
+export interface ClassifyForm { account: string; memo: string; remember: "no" | "counterparty" | "keyword"; keyword: string; applySimilar: boolean }
+export const blankClassify = (account = ""): ClassifyForm => ({ account, memo: "", remember: "no", keyword: "", applySimilar: false });
+export function classifyProblem(f: ClassifyForm, t: BankTxn): string | null {
+  if (!f.account) return "Choose the account this line belongs to";
+  if (f.remember === "counterparty" && !t.counterparty_key) return "This line has no counterparty to remember; remember a word instead";
+  if (f.remember === "keyword") {
+    if (!f.keyword.trim()) return "Type the word from the narration to remember";
+    if (!(t.description ?? "").toLowerCase().includes(f.keyword.trim().toLowerCase())) return "That word is not in this line's narration";
+  }
+  return null;
+}
+export function classifyBody(f: ClassifyForm) {
+  return { account_id: f.account, ...(f.memo.trim() ? { memo: f.memo.trim() } : {}),
+           ...(f.remember !== "no" ? { remember: f.remember, ...(f.remember === "keyword" ? { keyword: f.keyword.trim() } : {}), ...(f.applySimilar ? { apply_to_similar: true } : {}) } : {}) };
+}
+export function ruleText(r: BankRule): string {
+  const who = r.direction === "debit" ? "Payments" : r.direction === "credit" ? "Receipts" : "Lines";
+  const bits = [r.counterparty_key ? `to or from ${r.counterparty_key}` : "", r.keyword ? `mentioning “${r.keyword}”` : "", r.mode ? `by ${(MODE_LABEL[r.mode] || r.mode).toLowerCase()}` : ""].filter(Boolean);
+  return `${who} ${bits.join(" ")}`;
 }

@@ -332,16 +332,18 @@ def test_bank_feed_import_and_suggestions(client, h):
     assert (pre["total"], pre["new"], pre["duplicates"], pre["duplicate_ids"], pre["latest_existing"]) == (3, 3, 0, [], None)
     assert client.post(url(f"/bank-accounts/{uuid.uuid4()}/transactions/preview"), headers=h, json=feed(lines)).status_code == 404
     r = client.post(url(f"/bank-accounts/{BANK}/transactions"), headers=h, json=feed(lines))
-    assert r.status_code == 201 and r.json() == {"imported": 3, "duplicates": 0, "suggested": 2}
+    assert r.status_code == 201 and r.json() == {"imported": 3, "duplicates": 0, "suggested": 3}
     again = client.post(url(f"/bank-accounts/{BANK}/transactions"), headers=h, json=feed(lines)).json()
     assert again == {"imported": 0, "duplicates": 3, "suggested": 0}
     pre = client.post(url(f"/bank-accounts/{BANK}/transactions/preview"), headers=h, json=feed(lines + [{"external_id": "T9", "txn_date": "2026-10-23", "amount": "10.00", "description": "NEW"}])).json()
     assert (pre["total"], pre["new"], pre["duplicates"], pre["duplicate_ids"]) == (4, 1, 3, ["T1", "T2", "T3"]) and pre["latest_existing"] == "2026-10-22"
     tx = {t["description"][:4]: t for t in client.get(url("/bank-transactions"), headers=h).json()["data"]}
-    assert tx["NEFT"]["match_status"] == "suggested" and tx["RTGS"]["match_status"] == "suggested" and tx["SERV"]["match_status"] == "unmatched"
+    assert tx["NEFT"]["match_status"] == "suggested" and tx["RTGS"]["match_status"] == "suggested" and tx["SERV"]["match_status"] == "suggested"
     s_va, s_num = tx["NEFT"]["suggestions"][0], tx["RTGS"]["suggestions"][0]
     assert (s_va["rule"], s_va["confidence"], s_va["amount"]) == ("virtual_account", 1.0, "6440.00")
     assert (s_num["rule"], s_num["confidence"]) == ("invoice_number", 0.95) and s_num["label"].startswith("Receipt RCPT-")
+    fee = tx["SERV"]["suggestions"][0]
+    assert (fee["target_kind"], fee["label"], fee["rule"]) == ("ledger_account", "Book to 5910 Bank charges", "starter") and "starter list" in fee["reason"]      # a debit gets the other side from the starter list
     S.update(tx_va=tx["NEFT"], tx_num=tx["RTGS"], tx_fee=tx["SERV"])
     bank = client.get(url(f"/bank-accounts/{BANK}"), headers=h).json()
     assert bank["balance"] == "7120.00" and bank["bank_name"] == "HDFC"

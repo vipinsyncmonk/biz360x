@@ -498,7 +498,7 @@ def test_consent_lifecycle_and_signed_callback(client, h, hv, db):
     queued = db.execute("SELECT id FROM jobs WHERE kind = 'aa.sync' AND subject_id = %s AND status = 'queued'", (c["id"],)).fetchall()
     assert len(queued) == 1
     run_worker(db)
-    assert job(db, queued[0]["id"])["result"] == {"accounts": 2, "imported": 3, "suggested": 0}
+    assert job(db, queued[0]["id"])["result"] == {"accounts": 2, "imported": 3, "suggested": 1}
     lines = client.get(url("/bank-transactions"), headers=h).json()["data"]
     assert sorted((l["description"], l["amount"]) for l in lines) == [("NEFT FROM COASTAL GRID", "25000.00"), ("SERVICE CHARGES", "-1180.00"), ("UPI COLLECTION", "9000.00")]
     S["consent"], S["handle"] = c, handle

@@ -134,3 +134,43 @@ describe("an ICICI current account export", () => {
     expect(s.lines.map((l) => l.utr)).toEqual(["HDFCN52024040112345", "409512345678", "412233445566"]);
   });
 });
+
+const HASH = [
+  "Detailed Statement",
+  "",
+  "Statement Criteria",
+  "",
+  "Account Id :  317105000334 :\tSYNCMONK TECHNOLOGIES PRIVATE LIMITED",
+  "Transactions in the date range 01/04/2026 to 11/11/2026",
+  "",
+  "No.#Transaction ID#Value Date#Txn Posted Date#ChequeNo.#Description#Cr/Dr#Transaction Amount(INR)#Available Balance(INR)",
+  "",
+  "1#S13087592#02/04/2026#02/04/2026 04:27:35 AM#        #INF/NEFT/IN42609256057825/UTIB0001888/DirectorPayment/Yamini#DR#11,00,000.00#13,89,960.84",
+  "2#S16766069#02/04/2026#02/04/2026 10:54:30 AM#        #INF/NEFT/IN42609256186997/UTIB0001888/SalaryFY2526   /Vipin#DR#11,00,000.00#2,89,960.84",
+  "3#S16779771#02/04/2026#02/04/2026 10:56:01 AM#        #INF/NEFT/IN42609256188348/KKBK0008107/SalaryMarch26  /Madan#DR#15,000.00#2,74,960.84",
+  "4#S16813302#02/04/2026#02/04/2026 10:59:25 AM#        #INF/NEFT/IN42609256190107/SBIN0010366/March26Rent   /SUNDARESAN#DR#66,150.00#2,08,810.84",
+  "5#S16900001#03/04/2026#03/04/2026 09:00:00 AM#        #INF/NEFT/IN42609256200000/HDFC0000001/Receipt/ACME#CR#1,50,000.00#3,58,810.84",
+].join("\n");
+
+describe("a statement with # between the fields", () => {
+  it("is read although it has a title block, a posted date with the time and amounts in lakhs", () => {
+    const s = parseStatement(HASH);
+    expect(s.fatal).toBeNull();
+    expect(s.problems).toEqual([]);
+    expect(s.lines.map((l) => [l.txn_date, l.amount, l.balance_after])).toEqual([
+      ["2026-04-02", "-1100000.00", "1389960.84"],
+      ["2026-04-02", "-1100000.00", "289960.84"],
+      ["2026-04-02", "-15000.00", "274960.84"],
+      ["2026-04-02", "-66150.00", "208810.84"],
+      ["2026-04-03", "150000.00", "358810.84"],
+    ]);
+    expect(s.columns).toMatchObject({ date: "Txn Posted Date", amount: "Transaction Amount(INR)", drcr: "Cr/Dr", balance: "Available Balance(INR)" });
+    expect(s.balanceBreaks).toBe(0);
+    expect(s.credits).toBe("150000.00"); expect(s.debits).toBe("2281150.00");
+    expect(s.lines[0]!.utr).toBe("IN42609256057825");
+    expect(s.lines[0]!.description).toContain("DirectorPayment/Yamini");
+  });
+  it("still reads a comma file, because a comma is the delimiter unless another character is used more", () => {
+    expect(parseStatement(HDFC).lines).toHaveLength(3);
+  });
+});

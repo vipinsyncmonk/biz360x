@@ -12,7 +12,7 @@ from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ledger, trade
+from . import bank_rules, ledger, trade
 from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, money, require, tx
 from .routes_orders import js, offset_of, page
 
@@ -430,7 +430,7 @@ def suggest_matches(cur, entity_id) -> int:
                        VALUES (%s, 'receipt', %s, %s, %s, %s)""", (t["id"], rid, t["amount"], conf, f"{rule}:{doc['id']}"))
         cur.execute("UPDATE bank_transactions SET match_status = 'suggested' WHERE id = %s", (t["id"],))
         made += 1
-    return made + suggest_export_proceeds(cur, entity_id)
+    return made + suggest_export_proceeds(cur, entity_id) + bank_rules.suggest_classifications(cur, entity_id)
 
 
 def suggest_export_proceeds(cur, entity_id) -> int:
@@ -507,18 +507,25 @@ def import_bank_transactions(entity_id: uuid.UUID, bank_account_id: uuid.UUID, b
 
 
 def txn_out(cur, tid) -> dict:
-    cur.execute("""SELECT id, bank_account_id, txn_date, amount, description, utr, counterparty_name, match_status FROM bank_transactions WHERE id = %s""", (tid,))
+    cur.execute("""SELECT id, bank_account_id, txn_date, amount, description, utr, counterparty_name, match_status, mode, counterparty_key, remark, journal_entry_id
+                     FROM bank_transactions WHERE id = %s""", (tid,))
     t = cur.fetchone()
     cur.execute("""SELECT m.id, m.target_kind, m.target_id, m.amount, m.confidence, m.rule, m.status,
                           CASE WHEN m.target_kind = 'receipt' THEN 'Receipt ' || coalesce((SELECT receipt_no FROM receipts WHERE id = m.target_id), '')
                                WHEN m.target_kind = 'shipping_bill' THEN 'Export proceeds · ' || coalesce((SELECT concat_ws(' · ', p.legal_name, coalesce('SB ' || sb.sb_number, 'draft shipping bill'))
                                       FROM shipping_bills sb LEFT JOIN sales_documents d ON d.id = sb.sales_document_id
                                       LEFT JOIN parties p ON p.id = coalesce(sb.buyer_party_id, d.party_id) WHERE sb.id = m.target_id), 'shipping bill')
+                               WHEN m.target_kind = 'ledger_account' THEN 'Book to ' || coalesce((SELECT code || ' ' || name FROM ledger_accounts WHERE id = m.target_id), 'an account')
+                               WHEN m.target_kind = 'vendor_payment' THEN 'Vendor payment ' || coalesce((SELECT payment_no FROM vendor_payments WHERE id = m.target_id), '')
+                               WHEN m.target_kind = 'payroll_run' THEN 'Salaries ' || coalesce((SELECT to_char(period_month, 'Mon YYYY') FROM payroll_runs WHERE id = m.target_id), '')
+                               WHEN m.target_kind = 'tax_challan' THEN 'Challan ' || coalesce((SELECT kind || ' ' || period_label FROM tax_challans WHERE id = m.target_id), '')
+                               WHEN m.target_kind = 'journal_entry' THEN 'Journal ' || coalesce((SELECT entry_no FROM journal_entries WHERE id = m.target_id), '')
                                ELSE m.target_kind END AS label
                      FROM bank_matches m WHERE m.bank_transaction_id = %s ORDER BY m.status = 'rejected', m.confidence DESC NULLS LAST""", (tid,))
     t["suggestions"] = []
     for m in cur.fetchall():
         s = {**m, "rule": m["rule"].split(":")[0] if m["rule"] else None, "amount": money(m["amount"]), "confidence": float(m["confidence"] or 0)}
+        s["reason"] = bank_rules.explain(cur, m["target_kind"], m["rule"])
         if m["target_kind"] == "shipping_bill":
             s["export"] = _export_hint(cur, m, t["amount"])
         t["suggestions"].append(s)
@@ -563,6 +570,33 @@ def _match_for_update(cur, entity_id, match_id):
     return m
 
 
+def _accept_other(cur, entity_id, m, match_id) -> dict:
+    """Accept a suggestion that is not a receipt. An account books the line (a journal is posted). A vendor payment, a challan or a payroll run was booked
+    when it was paid, so the line is only linked to it: posting it again would count the money twice."""
+    cur.execute("SELECT * FROM bank_transactions WHERE id = %s FOR UPDATE", (m["bank_transaction_id"],))
+    t = cur.fetchone()
+    if t["match_status"] == "matched":
+        raise ApiError(409, "conflict", "This line is already booked or matched")
+    kind = m["target_kind"]
+    if kind == "ledger_account":
+        bank_rules.post_line(cur, entity_id, t, m["target_id"])
+        if (m["rule"] or "").startswith("rule:"):
+            cur.execute("UPDATE bank_rules SET hits = hits + 1, last_hit_on = %s WHERE id = %s", (t["txn_date"], m["rule"].split(":", 1)[1]))
+    elif kind in ("vendor_payment", "tax_challan", "payroll_run"):
+        if kind != "payroll_run":
+            table = "vendor_payments" if kind == "vendor_payment" else "tax_challans"
+            cur.execute(f"UPDATE {table} SET bank_transaction_id = %s WHERE id = %s AND entity_id = %s AND bank_transaction_id IS NULL", (t["id"], m["target_id"], entity_id))
+            if cur.rowcount != 1:
+                raise ApiError(409, "conflict", "That payment is already matched to another line")
+        cur.execute("UPDATE bank_transactions SET match_status = 'matched' WHERE id = %s", (t["id"],))
+        cur.execute("UPDATE bank_matches SET status = 'rejected' WHERE bank_transaction_id = %s AND status = 'suggested' AND id <> %s", (t["id"], match_id))
+    else:
+        raise ApiError(409, "conflict", "That kind of match cannot be accepted here")
+    cur.execute("UPDATE bank_matches SET status = 'accepted', decided_by = app.current_user_id(), decided_at = now() WHERE id = %s", (match_id,))
+    audit(cur, entity_id, "bank_match.accepted", "bank_matches", match_id, after={"kind": kind})
+    return txn_out(cur, t["id"])
+
+
 @router.post(E + "/bank-matches/{match_id}/accept", tags=["Finance & books"])
 def accept_match(entity_id: uuid.UUID, match_id: uuid.UUID, p: Principal = Auth,
                  idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
@@ -575,7 +609,9 @@ def accept_match(entity_id: uuid.UUID, match_id: uuid.UUID, p: Principal = Auth,
         if m["target_kind"] == "shipping_bill":
             raise ApiError(409, "conflict", "Export proceeds need the foreign amount", "Accept this line with its dollars and bank charges at /bank-transactions/{id}/export-proceeds.")
         if m["target_kind"] != "receipt":
-            raise ApiError(409, "conflict", "Only receipt matches can be accepted here")
+            out = _accept_other(cur, entity_id, m, match_id)
+            idempotency_finish(cur, idempotency_key, 200, out)
+            return out
         doc_id = uuid.UUID(m["rule"].split(":", 1)[1])
         cur.execute("SELECT * FROM receipts WHERE id = %s FOR UPDATE", (m["target_id"],))
         rc = cur.fetchone()

@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api, newIdempotencyKey, unwrap } from "@/lib/api";
-import { CloseTask, Period, Report, BankTxn, closeCounts, confidenceLabel, currentPeriod, exportHintText, isTotalRow, lakh, periodName, returnPeriod } from "@/lib/finance";
+import { Account, CloseTask, MODE_LABEL, Period, Report, BankTxn, closeCounts, confidenceLabel, currentPeriod, exportHintText, isTotalRow, lakh, periodName, returnPeriod } from "@/lib/finance";
 import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { ProceedsRow } from "@/components/BankProceeds";
+import { BankRules, ClassifyRow } from "@/components/BankClassify";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
 interface Summary { revenue: string; gross_margin_pct: number; ebitda: string; cash_in_bank: string; cash_change: string; receivables: string; receivables_overdue: string; runway_months: number | null; net_burn: string | null }
@@ -17,12 +18,17 @@ export default function Finance() {
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
   const [taking, setTaking] = useState<string | null>(null);
+  const [classifying, setClassifying] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [rulesVersion, setRulesVersion] = useState(0);
+  const parsedOnce = useRef(false);
 
   const summary = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/finance/summary", { params: { path: { entityId: id! } } })) as unknown as Summary, id);
   const periods = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/periods", { params: { path: { entityId: id! } } })) as unknown as Period[], id);
   const period = periods.data ? currentPeriod(periods.data) : undefined;
   const tasks = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/periods/{id}/close-tasks", { params: { path: { entityId: id!, id: period!.id } } })) as unknown as CloseTask[], id && period ? `${id}|${period.id}` : null);
   const txns = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/bank-transactions", { params: { path: { entityId: id! }, query: { limit: 50 } } })).data as unknown as BankTxn[], id);
+  const accounts = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/accounts", { params: { path: { entityId: id! }, query: { limit: 200 } } })).data as unknown as Account[], id);
   const pl = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/reports/{report}", { params: { path: { entityId: id!, report: "profit-and-loss" } } })) as unknown as Report, id);
 
   async function act(key: string, run: () => Promise<unknown>, after: () => void) {
@@ -40,6 +46,13 @@ export default function Finance() {
   const counts = closeCounts(list);
   const locked = period?.status === "locked";
   const rows = txns.data ?? [];
+  // lines imported before the narration was read have no mode yet: read them and suggest once
+  useEffect(() => {
+    if (!id || parsedOnce.current || !rows.some((t) => t.match_status !== "matched" && t.mode == null)) return;
+    parsedOnce.current = true;
+    void (async () => { try { unwrap(await api.POST("/entities/{entityId}/bank-transactions/suggest", { params: { path: { entityId: id } } })); txns.reload(); } catch { /* the lines still show; suggestions can be refreshed later */ } })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, rows]);
   const open = rows.filter((t) => t.match_status !== "matched" && t.match_status !== "ignored");
   const r = pl.data;
 
@@ -73,6 +86,7 @@ export default function Finance() {
               <span className="t13">{open.length} {open.length === 1 ? "line" : "lines"} left · <Link href="/finance/import">Import a statement</Link> · <Link href="/finance/history">Opening balances</Link></span>
             </div>
             <div style={{ padding: "0 20px" }}><ErrorNote error={txns.error} /></div>
+            {notice && <div role="status" style={{ padding: "8px 20px", fontSize: 14, background: "var(--cobalt-soft)" }}>{notice}</div>}
             {txns.loading ? <Loading what="bank lines" /> : (
               <div className="tablewrap">
                 <table style={{ minWidth: 640 }}>
@@ -83,15 +97,18 @@ export default function Finance() {
                       return (
                         <Fragment key={t.id}>
                         <tr>
-                          <td><span style={{ fontWeight: 500 }}>{t.counterparty_name ?? t.description}</span><span className="t13" style={{ display: "block" }}>{shortDate(t.txn_date)} · {t.description}</span></td>
+                          <td><span style={{ fontWeight: 500 }}>{t.counterparty_name ?? t.description}</span><span className="t13" style={{ display: "block" }}>{shortDate(t.txn_date)}{t.mode && MODE_LABEL[t.mode] ? ` · ${MODE_LABEL[t.mode]}` : ""} · {t.description}</span></td>
                           <td className="mono" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{formatInr(t.amount)}</td>
-                          <td>{t.match_status === "matched" ? <Pill tone="ok">Matched</Pill> : sug ? <><span>{sug.label}</span><span className="t13" style={{ display: "block" }}>{confidenceLabel(sug.confidence)}</span>{sug.export && <span className="t13" style={{ display: "block", maxWidth: 360 }}>{exportHintText(sug.export)}</span>}</> : <span className="t13">No suggestion</span>}</td>
+                          <td>{t.match_status === "matched" ? <Pill tone="ok">Matched</Pill> : sug ? <><span>{sug.label}</span><span className="t13" style={{ display: "block" }}>{confidenceLabel(sug.confidence)}</span>{sug.export && <span className="t13" style={{ display: "block", maxWidth: 360 }}>{exportHintText(sug.export)}</span>}{sug.reason && !sug.export && <span className="t13" style={{ display: "block", maxWidth: 360 }}>{sug.reason}</span>}</> : <span className="t13">No suggestion</span>}</td>
                           <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                             {sug?.export && t.match_status !== "matched" && <button type="button" className="btn primary" style={{ height: 36, fontSize: 13 }} onClick={() => setTaking(taking === t.id ? null : t.id)}>Record as export proceeds</button>}
-                            {sug && t.match_status !== "matched" && sug.target_kind === "receipt" && <button type="button" className="btn" style={{ height: 36, fontSize: 13 }} disabled={busy === sug.id} onClick={() => void decide(sug.id, "accept")}>Accept</button>}
+                            {sug && t.match_status !== "matched" && !sug.export && <button type="button" className="btn" style={{ height: 36, fontSize: 13 }} disabled={busy === sug.id} onClick={() => void decide(sug.id, "accept")}>{sug.target_kind === "ledger_account" ? "Accept and book" : sug.target_kind === "receipt" ? "Accept" : "Link"}</button>}
+                            {t.match_status !== "matched" && !sug?.export && <button type="button" className="btn" style={{ height: 36, fontSize: 13, marginLeft: 6 }} onClick={() => setClassifying(classifying === t.id ? null : t.id)}>{sug ? "Book elsewhere" : "Classify"}</button>}
                             {sug && t.match_status !== "matched" && <button type="button" className="btn" style={{ height: 36, fontSize: 13, marginLeft: 6 }} disabled={busy === sug.id} onClick={() => void decide(sug.id, "reject")}>Reject</button>}
                           </td>
                         </tr>
+                        {classifying === t.id && id && <ClassifyRow entityId={id} txn={t} rows={rows} accounts={accounts.data ?? []} defaultAccount={sug?.target_kind === "ledger_account" ? sug.target_id : undefined} onCancel={() => setClassifying(null)}
+                          onDone={(n) => { setClassifying(null); setNotice(n > 0 ? `Booked, and ${n} similar ${n === 1 ? "line" : "lines"} as well.` : "Booked."); txns.reload(); summary.reload(); setRulesVersion((v) => v + 1); }} />}
                         {taking === t.id && sug?.export && id && <ProceedsRow entityId={id} txn={t} hint={sug.export} onCancel={() => setTaking(null)} onDone={() => { setTaking(null); txns.reload(); summary.reload(); }} />}
                         </Fragment>
                       );
@@ -102,6 +119,7 @@ export default function Finance() {
               </div>
             )}
           </section>
+          {id && <BankRules entityId={id} version={rulesVersion} onChange={() => txns.reload()} />}
 
           <section className="card" style={{ overflow: "hidden" }}>
             <div style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line-2)" }}>

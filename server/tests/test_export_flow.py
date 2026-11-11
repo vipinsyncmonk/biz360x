@@ -477,7 +477,7 @@ def test_a_refused_suggestion_is_not_offered_again_and_a_debit_is_never_proceeds
     again = next(x for x in client.get(url(f"/bank-transactions?bank_account_id={bank}"), headers=o).json()["data"] if x["id"] == t["id"])
     assert not set(refused) & {s["target_id"] for s in again["suggestions"] if s["status"] == "suggested"}
     d = next(x for x in client.get(url(f"/bank-transactions?bank_account_id={bank}"), headers=o).json()["data"] if x["description"].startswith("INWARD REMITTANCE CHARGES"))
-    assert d["suggestions"] == []
+    assert not [s for s in d["suggestions"] if s["target_kind"] == "shipping_bill"]                                                  # never export proceeds; the starter list may suggest the bank-charges account
     r = client.post(url(f"/bank-transactions/{d['id']}/export-proceeds"), headers={**o, **key()}, json={"shipping_bill_id": first["target_id"], "amount_foreign": "10.00"})
     assert r.status_code == 400
 

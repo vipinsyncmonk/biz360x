@@ -802,11 +802,40 @@ action(E + "/bank-accounts/{id}/transactions", "Finance & books", "importBankTra
 schema("ExportMatchHint", {"shipping_bill_id": UUID, "sb_number": NULLABLE(S()), "currency": NULLABLE(S()),
                            "proposed_foreign": NULLABLE(MONEY), "expected_inr": NULLABLE(MONEY), "difference_inr": NULLABLE(MONEY)},
        desc="For a suggestion that names a shipping bill: the foreign amount the matcher guessed, what that is worth at the invoice's rate, and how far the credit is from it. The statement shows rupees after the bank's charges and its own rate, so the credit is rarely exact.")
-schema("BankMatchSuggestion", {"id": RO_UUID, "target_kind": S(), "target_id": UUID, "label": S(examples=["Invoice NI/KA/184"]), "amount": MONEY,
-                               "confidence": N(), "rule": S(), "status": ENUM("suggested", "accepted", "rejected"), "export": NULLABLE(ref("ExportMatchHint"))})
+schema("BankMatchSuggestion", {"id": RO_UUID, "target_kind": ENUM("receipt", "vendor_payment", "journal_entry", "payroll_run", "tax_challan", "shipping_bill", "ledger_account",
+                                                                  description="ledger_account: book the line to that account (accepting posts a journal). vendor_payment, tax_challan and payroll_run: the app booked it when it was paid, so accepting only links the line."),
+                               "target_id": UUID, "label": S(examples=["Invoice NI/KA/184", "Book to 5390 Rent"]), "amount": MONEY,
+                               "confidence": N(), "rule": S(description="Where it came from: rule (a rule the company made), starter (the starter list), virtual_account, invoice_number, vendor_payment_utr and so on"),
+                               "reason": NULLABLE(S(description="Why this was suggested, in words")),
+                               "status": ENUM("suggested", "accepted", "rejected"), "export": NULLABLE(ref("ExportMatchHint"))})
 schema("BankTransaction", {"id": RO_UUID, "bank_account_id": UUID, "txn_date": DATE, "amount": MONEY, "description": S(), "utr": NULLABLE(S()),
                            "counterparty_name": NULLABLE(S()), "match_status": ENUM("unmatched", "suggested", "matched", "ignored"),
+                           "mode": NULLABLE(ENUM("upi", "neft", "rtgs", "imps", "auto_debit", "transfer", "cheque", "card", "cash", "charges", "interest", "other", description="How the money moved, read from the narration")),
+                           "counterparty_key": NULLABLE(S(description="What identifies the other side for a rule: a UPI handle, a beneficiary, a card or deposit number")),
+                           "remark": NULLABLE(S(description="What the sender typed, such as SalaryMarch26")), "journal_entry_id": NULLABLE(UUID),
                            "suggestions": ARR(ref("BankMatchSuggestion"))}, extra={"readOnly": True})
+BANK_MODES = ENUM("upi", "neft", "rtgs", "imps", "auto_debit", "transfer", "cheque", "card", "cash", "charges", "interest", "other")
+schema("BankRule", {"id": RO_UUID, "direction": ENUM("debit", "credit", "any"), "counterparty_key": NULLABLE(S()), "keyword": NULLABLE(S(description="Whole words in the narration")), "mode": NULLABLE(BANK_MODES),
+                    "account_id": UUID, "account_code": {**S(), "readOnly": True}, "account_name": {**S(), "readOnly": True}, "party_id": NULLABLE(UUID), "memo": NULLABLE(S()),
+                    "hits": I(readOnly=True), "last_hit_on": NULLABLE(DATE_RO), "created_at": RO_TS}, required=("account_id",),
+       desc="Lines that match every condition the rule states are suggested for the account. Conditions: a counterparty, a keyword, a mode; at least one is needed.")
+_op("get", E + "/bank-rules", "Finance & books", "listBankRules", "Rules for booking bank lines", "finance:read", resp=ARR(ref("BankRule")))
+_op("post", E + "/bank-rules", "Finance & books", "createBankRule", "Teach a rule for booking bank lines", "finance:write", body=ref("BankRule"), resp=ref("BankRule"), status="201",
+    desc="One live rule per set of conditions: a second rule with the same conditions replaces the account of the first.")
+_op("delete", E + "/bank-rules/{id}", "Finance & books", "deleteBankRule", "Remove a rule", "finance:write", status="204")
+schema("BankClassifyRequest", {"account_id": UUID, "party_id": NULLABLE(UUID), "memo": NULLABLE(S()),
+                               "remember": NULLABLE(ENUM("counterparty", "keyword", description="Also save a rule for lines like this one")),
+                               "keyword": NULLABLE(S(description="With remember=keyword: a word or phrase from the narration")),
+                               "apply_to_similar": B(description="With remember: also book every other open line the rule matches, in the same transaction")}, required=("account_id",))
+schema("BankClassifyResult", {"rule_id": NULLABLE(UUID), "also_booked": I(description="How many other lines the rule booked")}, required=("also_booked",),
+       extra={"allOf": [ref("BankTransaction")], "readOnly": True})
+action(E + "/bank-transactions/{id}/classify", "Finance & books", "classifyBankTransaction", "Book a bank line to an account", "finance:write", body=ref("BankClassifyRequest"),
+       resp=ref("BankClassifyResult"), idem=True,
+       desc="Posts a journal: money out is a debit to the account and a credit to the bank, money in the reverse. 409 when the line is already booked or matched; 400 when the account is the "
+            "bank's own. With `remember` a rule is saved, and with `apply_to_similar` every other open line it matches is booked in the same transaction.")
+action(E + "/bank-transactions/suggest", "Finance & books", "suggestBankTransactions", "Suggest the other side of the open bank lines again", "finance:write",
+       resp=schema("BankSuggestResult", {"suggested": I()}, required=("suggested",)),
+       desc="Order: a document the app already holds (a vendor payment, a challan, a payroll run), then a rule the company made, then the starter list. Nothing is posted.")
 _op("get", E + "/bank-transactions", "Finance & books", "listBankTransactions", "Bank lines", "finance:read",
     params=[P("Limit"), P("Cursor"), q("bank_account_id", UUID), q("match_status", S()), P("From"), P("To")], resp=page_of("BankTransaction"))
 action(E + "/bank-matches/{id}/accept", "Finance & books", "acceptBankMatch", "Accept a suggested match", "finance:write", resp=ref("BankTransaction"), idem=True)

@@ -6583,6 +6583,172 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: finance:write
+  /entities/{entityId}/bank-rules:
+    get:
+      tags:
+      - Finance & books
+      operationId: listBankRules
+      summary: Rules for booking bank lines
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BankRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+    post:
+      tags:
+      - Finance & books
+      operationId: createBankRule
+      summary: Teach a rule for booking bank lines
+      description: 'One live rule per set of conditions: a second rule with the same conditions replaces the account of the
+        first.'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankRule'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankRule'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/bank-rules/{id}:
+    delete:
+      tags:
+      - Finance & books
+      operationId: deleteBankRule
+      summary: Remove a rule
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '204':
+          description: Done
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/bank-transactions/{id}/classify:
+    post:
+      tags:
+      - Finance & books
+      operationId: classifyBankTransaction
+      summary: Book a bank line to an account
+      description: 'Posts a journal: money out is a debit to the account and a credit to the bank, money in the reverse. 409
+        when the line is already booked or matched; 400 when the account is the bank''s own. With `remember` a rule is saved,
+        and with `apply_to_similar` every other open line it matches is booked in the same transaction.'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankClassifyRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankClassifyResult'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/bank-transactions/suggest:
+    post:
+      tags:
+      - Finance & books
+      operationId: suggestBankTransactions
+      summary: Suggest the other side of the open bank lines again
+      description: 'Order: a document the app already holds (a vendor payment, a challan, a payroll run), then a rule the
+        company made, then the starter list. Nothing is posted.'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankSuggestResult'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
   /entities/{entityId}/bank-transactions:
     get:
       tags:
@@ -16152,6 +16318,16 @@ components:
           readOnly: true
         target_kind:
           type: string
+          enum:
+          - receipt
+          - vendor_payment
+          - journal_entry
+          - payroll_run
+          - tax_challan
+          - shipping_bill
+          - ledger_account
+          description: 'ledger_account: book the line to that account (accepting posts a journal). vendor_payment, tax_challan
+            and payroll_run: the app booked it when it was paid, so accepting only links the line.'
         target_id:
           type: string
           format: uuid
@@ -16159,12 +16335,20 @@ components:
           type: string
           examples:
           - Invoice NI/KA/184
+          - Book to 5390 Rent
         amount:
           $ref: '#/components/schemas/Money'
         confidence:
           type: number
         rule:
           type: string
+          description: 'Where it came from: rule (a rule the company made), starter (the starter list), virtual_account, invoice_number,
+            vendor_payment_utr and so on'
+        reason:
+          oneOf:
+          - type: string
+            description: Why this was suggested, in words
+          - type: 'null'
         status:
           type: string
           enum:
@@ -16207,11 +16391,174 @@ components:
           - suggested
           - matched
           - ignored
+        mode:
+          oneOf:
+          - type: string
+            enum:
+            - upi
+            - neft
+            - rtgs
+            - imps
+            - auto_debit
+            - transfer
+            - cheque
+            - card
+            - cash
+            - charges
+            - interest
+            - other
+            description: How the money moved, read from the narration
+          - type: 'null'
+        counterparty_key:
+          oneOf:
+          - type: string
+            description: 'What identifies the other side for a rule: a UPI handle, a beneficiary, a card or deposit number'
+          - type: 'null'
+        remark:
+          oneOf:
+          - type: string
+            description: What the sender typed, such as SalaryMarch26
+          - type: 'null'
+        journal_entry_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
         suggestions:
           type: array
           items:
             $ref: '#/components/schemas/BankMatchSuggestion'
       readOnly: true
+    BankRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        direction:
+          type: string
+          enum:
+          - debit
+          - credit
+          - any
+        counterparty_key:
+          oneOf:
+          - type: string
+          - type: 'null'
+        keyword:
+          oneOf:
+          - type: string
+            description: Whole words in the narration
+          - type: 'null'
+        mode:
+          oneOf:
+          - type: string
+            enum:
+            - upi
+            - neft
+            - rtgs
+            - imps
+            - auto_debit
+            - transfer
+            - cheque
+            - card
+            - cash
+            - charges
+            - interest
+            - other
+          - type: 'null'
+        account_id:
+          type: string
+          format: uuid
+        account_code:
+          type: string
+          readOnly: true
+        account_name:
+          type: string
+          readOnly: true
+        party_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        memo:
+          oneOf:
+          - type: string
+          - type: 'null'
+        hits:
+          type: integer
+          readOnly: true
+        last_hit_on:
+          oneOf:
+          - type: string
+            format: date
+            readOnly: true
+          - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - account_id
+      description: 'Lines that match every condition the rule states are suggested for the account. Conditions: a counterparty,
+        a keyword, a mode; at least one is needed.'
+    BankClassifyRequest:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        party_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        memo:
+          oneOf:
+          - type: string
+          - type: 'null'
+        remember:
+          oneOf:
+          - type: string
+            enum:
+            - counterparty
+            - keyword
+            description: Also save a rule for lines like this one
+          - type: 'null'
+        keyword:
+          oneOf:
+          - type: string
+            description: 'With remember=keyword: a word or phrase from the narration'
+          - type: 'null'
+        apply_to_similar:
+          type: boolean
+          description: 'With remember: also book every other open line the rule matches, in the same transaction'
+      required:
+      - account_id
+    BankClassifyResult:
+      type: object
+      properties:
+        rule_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        also_booked:
+          type: integer
+          description: How many other lines the rule booked
+      required:
+      - also_booked
+      allOf:
+      - $ref: '#/components/schemas/BankTransaction'
+      readOnly: true
+    BankSuggestResult:
+      type: object
+      properties:
+        suggested:
+          type: integer
+      required:
+      - suggested
     BankTransactionPage:
       type: object
       properties:
