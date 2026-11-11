@@ -8,6 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
+from . import engine
 from .core import ApiError, Auth, Principal, audit, emit, money, require, tx
 from .routes_orders import js, offset_of, page
 
@@ -137,6 +138,7 @@ def create_registration(entity_id: uuid.UUID, body: RegistrationIn, p: Principal
                     (entity_id, body.kind, body.number, body.label, body.valid_from, body.valid_until))
         row = cur.fetchone()
         audit(cur, entity_id, "registration.recorded", "entity_registrations", row["id"], after={"kind": body.kind, "number": body.number})
+        engine.run_engine(cur, entity_id, "fact_change")        # a LUT closes the year's LUT duty; an IEC makes the entity an exporter
         return js(row)
 
 

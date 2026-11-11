@@ -206,9 +206,28 @@ def test_a_domestic_customer_is_unchanged(client):
     assert p["doc_type"] == "tax_invoice" and not p["is_export"] and p["currency"] == "INR" and p["foreign_total"] is None
 
 
+def lut_duty(db):
+    return db.execute("""SELECT o.status::text AS status, o.period_start, o.due_date, o.acknowledgement, o.reason_snapshot FROM obligations o
+                           JOIN compliance_rules r ON r.id = o.rule_id WHERE o.entity_id = %s AND r.code = 'GST.LUT.ANNUAL' ORDER BY o.period_start""", (EN,)).fetchall()
+
+
+def test_an_exporter_with_no_lut_is_told_at_the_start_of_the_year_and_recording_one_closes_it(client, db):
+    o = login(client, OWNER)
+    assert client.post(url("/compliance/engine-runs"), headers=o).status_code == 201                                  # the customer abroad makes the company an exporter
+    duty, *later = lut_duty(db)
+    start = TODAY.replace(month=4, day=1) if TODAY.month >= 4 else TODAY.replace(year=TODAY.year - 1, month=4, day=1)
+    assert duty["period_start"] == start and duty["due_date"] == start                                               # due as the year starts, however long ago that was
+    assert duty["status"] == ("overdue" if TODAY > start else "upcoming")
+    assert {c["fact"]: c["result"] for c in duty["reason_snapshot"]["applicability"]} == {"is_exporter": True}
+    assert client.post(url("/registrations"), headers=o, json=S["lut"]).status_code == 201                            # recording a LUT that covers the year closes the duty
+    duty, *later = lut_duty(db)
+    assert duty["status"] == "filed" and duty["acknowledgement"] == S["lut"]["number"]
+    for nxt in later:                                                                                                  # the next year's LUT shows up ahead of 1 April, and this LUT does not cover it
+        assert nxt["period_start"] > start and nxt["status"] == "upcoming"
+
+
 def test_a_valid_lut_makes_the_supply_tax_free_and_a_missing_rate_blocks_it(client):
     o = login(client, OWNER)
-    assert client.post(url("/registrations"), headers=o, json=S["lut"]).status_code == 201
     assert client.post(url("/registrations"), headers=o, json=S["lut"]).status_code == 409
     p = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["abroad"], [GOODS_LINE], currency="USD", exchange_rate="83")).json()
     assert p["supply_type"] == "export_under_lut" and p["igst_total"] == "0.00" and p["grand_total"] == "83000.00" and p["foreign_total"] == "1000.00"
