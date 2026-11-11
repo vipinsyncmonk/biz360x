@@ -37,6 +37,12 @@ describe("the exchange rate on an export invoice", () => {
     expect(docBody(f)).not.toHaveProperty("exchange_rate");
     expect(docBody({ ...f, currency: "usd", rate: " 83.2150 " })).toMatchObject({ currency: "USD", exchange_rate: "83.2150" });
   });
+  it("says the rates are in the customer's currency only when that is chosen and there is a currency", () => {
+    const f = { registrationId: "R", partyId: "P", partyGstId: "", docDate: "2026-11-09", terms: "", po: "", lines: [{ ...blankLine(), description: "Valve", hsn_sac: "8481", qty: "1", rate: "100.25" }] };
+    expect(docBody({ ...f, currency: "USD", rate: "83", priceIn: "foreign" })).toMatchObject({ priced_in_foreign: true, currency: "USD" });
+    expect(docBody({ ...f, currency: "USD", rate: "83", priceIn: "inr" })).not.toHaveProperty("priced_in_foreign");
+    expect(docBody({ ...f, priceIn: "foreign" })).not.toHaveProperty("priced_in_foreign");                      // a domestic invoice has no currency to price in
+  });
 });
 
 describe("the LUT and the IEC", () => {

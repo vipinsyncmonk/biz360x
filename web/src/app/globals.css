@@ -107,14 +107,19 @@ table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560p
 th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 10px 20px; }
 td { padding: 12px 20px; border-top: 1px solid var(--line-2); }
 tr.sel td { background: var(--cobalt-soft); }
+/* the items table of the invoice and quote editors: tight cells so every column fits the page's main column; it scrolls only below 580px */
+.linetable { table-layout: fixed; width: 100%; min-width: 580px; }
+.linetable th, .linetable td { padding-left: 6px; padding-right: 6px; }
+.linetable th:first-child, .linetable td:first-child { padding-left: 20px; }
+.linetable th:last-child, .linetable td:last-child { padding-right: 12px; }
 tr.click { cursor: pointer; }
 tr.click:hover td { background: #FAFAF7; }
-.weeks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; min-width: 640px; }
+.weeks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; min-width: 580px; }
 .weekhead { font-size: 12px; color: var(--muted); padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .chip { padding: 10px; border-radius: 10px; background: var(--surface-2); display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; display: inline-block; }
 .dot.due { background: var(--amber-bar); } .dot.ok { background: var(--green); } .dot.wait { background: var(--cobalt); } .dot.prep { background: #9A9EA6; }
-.month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; min-width: 640px; }
+.month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; min-width: 580px; }
 .cell { min-height: 92px; background: var(--surface-2); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .cell.empty-cell { background: transparent; }
 .cell.today { outline: 2px solid var(--cobalt); }

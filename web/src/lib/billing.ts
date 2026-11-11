@@ -72,7 +72,9 @@ export function linesBody(ls: LineDraft[]) {
                           uqc: "NOS" }));
 }
 
-export interface DocForm { registrationId: string; partyId: string; partyGstId: string; docDate: string; terms: string; po: string; lines: LineDraft[]; currency?: string; rate?: string }
+export interface DocForm { registrationId: string; partyId: string; partyGstId: string; docDate: string; terms: string; po: string; lines: LineDraft[]; currency?: string; rate?: string;
+  /** An invoice to a customer abroad: "foreign" = the rates typed are in their currency (the invoice is in it), "inr" = the rates are rupees. */
+  priceIn?: "foreign" | "inr" }
 
 export function docBody(f: DocForm) {
   return {
@@ -82,6 +84,7 @@ export function docBody(f: DocForm) {
     ...(f.po.trim() ? { customer_po_ref: f.po.trim() } : {}),
     ...(f.currency?.trim() ? { currency: f.currency.trim().toUpperCase() } : {}),          // an invoice to a customer outside India: what they pay in, and the rate
     ...(f.rate?.trim() ? { exchange_rate: f.rate.trim() } : {}),
+    ...(f.currency?.trim() && f.priceIn === "foreign" ? { priced_in_foreign: true } : {}),
     lines: linesBody(f.lines),
   };
 }

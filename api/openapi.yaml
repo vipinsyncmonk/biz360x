@@ -3458,6 +3458,76 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: sales:write
+  /entities/{entityId}/einvoice-status:
+    get:
+      tags:
+      - Sales & billing
+      operationId: getEInvoiceStatus
+      summary: Whether e-invoicing applies and the turnover it rests on
+      description: E-invoicing starts in the financial year after the first year in which aggregate turnover went above ₹5
+        Cr, and stays on. A year's figure is the one declared as an `aato` fact dated in it (`POST /facts`, for example dated
+        31 March), else the taxable value of the documents issued in it, less credit notes. `level` is `approaching` from
+        80% of the limit in the current year and `crossed` once it has gone over, before it applies.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EInvoiceStatus'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: sales:read
+  /entities/{entityId}/sales-documents/{id}/pdf:
+    get:
+      tags:
+      - Sales & billing
+      operationId: getSalesDocumentPdf
+      summary: The document as a PDF
+      description: Supplier, buyer, lines with their tax, totals in words, and for an export the LUT or IGST statement and
+        the foreign amount. A draft carries a DRAFT mark and is not a valid tax invoice. The IRN and its QR code are printed
+        once the e-invoice has been generated.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: download
+        in: query
+        schema:
+          type: boolean
+          default: false
+        description: true to save the file instead of showing it
+      responses:
+        '200':
+          description: The PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: sales:read
   /entities/{entityId}/sales-documents/{id}/credit-notes:
     post:
       tags:
@@ -13467,6 +13537,23 @@ components:
           $ref: '#/components/schemas/Money'
         cess_amount:
           $ref: '#/components/schemas/Money'
+        foreign_rate:
+          oneOf:
+          - type: string
+            readOnly: true
+            pattern: ^[0-9]{1,14}\.[0-9]{4}$
+            description: The rate as typed, in the document's currency, when the invoice was priced in it
+          - type: 'null'
+        foreign_discount:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+            readOnly: true
+          - type: 'null'
+        foreign_taxable:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+            readOnly: true
+          - type: 'null'
       allOf:
       - $ref: '#/components/schemas/DocumentLineInput'
     Quote:
@@ -13736,6 +13823,11 @@ components:
         gst_adjusted:
           type: boolean
           default: true
+        priced_in_foreign:
+          type: boolean
+          description: 'An export invoice only: each line''s `rate` and `discount` are in `currency` (the rate may have four
+            decimals), and the rupee value for GST is worked out from them at `exchange_rate`. The foreign amounts on the
+            invoice are then exactly what was typed.'
         supply_type:
           type: string
         currency:
@@ -13772,6 +13864,17 @@ components:
         foreign_total:
           oneOf:
           - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        priced_in_foreign:
+          type: boolean
+        foreign_taxable_total:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        amount_in_words_foreign:
+          oneOf:
+          - type: string
+            description: The foreign total in words, for a currency with a wording
           - type: 'null'
         is_inter_state:
           type: boolean
@@ -13919,6 +14022,10 @@ components:
           - $ref: '#/components/schemas/Money'
             readOnly: true
           - type: 'null'
+        priced_in_foreign:
+          type: boolean
+          description: The lines were entered in the foreign currency; the rupee columns are their value at the exchange rate,
+            for GST
         reverse_charge:
           type: boolean
         quote_id:
@@ -14073,6 +14180,77 @@ components:
           type: string
       required:
       - reason
+    EInvoiceYear:
+      type: object
+      properties:
+        financial_year:
+          $ref: '#/components/schemas/FyLabel'
+        books:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        declared:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        used:
+          $ref: '#/components/schemas/Money'
+        above_limit:
+          type: boolean
+      required:
+      - financial_year
+      - used
+      - above_limit
+      readOnly: true
+    EInvoiceThisYear:
+      type: object
+      properties:
+        turnover:
+          $ref: '#/components/schemas/Money'
+        percent_of_limit:
+          type: string
+      required:
+      - turnover
+      - percent_of_limit
+    EInvoiceStatus:
+      type: object
+      properties:
+        limit:
+          $ref: '#/components/schemas/Money'
+        financial_year:
+          $ref: '#/components/schemas/FyLabel'
+        applies_today:
+          type: boolean
+        level:
+          type: string
+          enum:
+          - clear
+          - approaching
+          - crossed
+          - applies
+        applies_from:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        crossed_in:
+          oneOf:
+          - $ref: '#/components/schemas/FyLabel'
+          - type: 'null'
+        this_year:
+          $ref: '#/components/schemas/EInvoiceThisYear'
+        years:
+          type: array
+          items:
+            $ref: '#/components/schemas/EInvoiceYear'
+      required:
+      - limit
+      - financial_year
+      - applies_today
+      - level
+      - this_year
+      - years
+      readOnly: true
     CreditNoteRequest:
       type: object
       properties:

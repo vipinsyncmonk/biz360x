@@ -9,7 +9,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from app import ledger, tax, trade, worker
+from app import invoice_pdf, ledger, tax, trade, turnover, worker
 
 DB = os.environ["DATABASE_URL"]
 ORG = "00000000-0000-0000-0000-000000f1a000"
@@ -488,6 +488,134 @@ def test_a_note_to_a_customer_abroad_must_correct_an_export_invoice(client):
     assert r.status_code == 400 and r.json()["code"] == "export_note_needs_invoice"
     r = client.post(url("/sales-documents"), headers=o, json={**doc(S["local"], [GOODS_LINE]), "doc_type": "credit_note", "original_document_id": S["inv"], "cn_reason": "sales_return"})
     assert r.status_code == 400                                                                                   # a domestic customer cannot be credited against another's export invoice
+
+
+def test_amounts_on_the_pdf_use_lakhs_and_crores():
+    assert [invoice_pdf.inr(x) for x in ("12345678.5", "999", "1000", "100000", "-1234.5", "0", None)] == ["1,23,45,678.50", "999.00", "1,000.00", "1,00,000.00", "-1,234.50", "0.00", "0.00"]
+    assert [invoice_pdf.rate_text(x) for x in ("1234.5678", "1000.0000", "99.9900", "12.5000", "0.1250", "1234567.1")] == ["1,234.5678", "1,000.00", "99.99", "12.50", "0.125", "12,34,567.10"]
+    assert invoice_pdf.rs("83000") == "Rs. 83,000.00" and invoice_pdf._dmy("2026-11-09") == "09/11/2026"
+
+
+def test_an_invoice_can_be_viewed_or_saved_as_a_pdf(client):
+    o, v = login(client, OWNER), login(client, VIEWER)
+    r = client.get(url(f"/sales-documents/{S['inv']}/pdf"), headers=o)
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.content.startswith(b"%PDF") and b"%%EOF" in r.content[-32:] and len(r.content) > 1500
+    assert r.headers["content-disposition"].startswith("inline;") and r.headers["content-disposition"].endswith('.pdf"')
+    saved = client.get(url(f"/sales-documents/{S['inv']}/pdf?download=true"), headers=o)
+    assert saved.status_code == 200 and saved.headers["content-disposition"].startswith("attachment;")
+    assert "/" not in saved.headers["content-disposition"].split("filename=")[1]                                    # a number like EXP/2026-27/0001 becomes a safe file name
+    assert client.get(url(f"/sales-documents/{S['inv']}/pdf"), headers=v).status_code == 200                       # anyone who can read sales can open it
+    assert client.get(url(f"/sales-documents/{uuid.uuid4()}/pdf"), headers=o).status_code == 404
+    assert client.get(url(f"/sales-documents/{S['inv']}/pdf")).status_code == 401
+
+
+def test_a_draft_and_a_domestic_invoice_render_too(client):
+    o = login(client, OWNER)
+    draft = client.post(url("/sales-documents"), headers=o, json=doc(S["local"], [GOODS_LINE], party_gst_id=S["local_gst"]))
+    assert draft.status_code == 201
+    r = client.get(url(f"/sales-documents/{draft.json()['id']}/pdf"), headers=o)
+    assert r.status_code == 200 and r.content.startswith(b"%PDF") and r.headers["content-disposition"].find("draft") > 0
+
+
+def test_einvoicing_starts_the_year_after_turnover_first_goes_over_the_limit_and_stays():
+    cr = D("10000000")
+    used = {2024: 1 * cr, 2025: 3 * cr, 2026: 6 * cr}                                            # crossed 5 Cr during FY 2026-27
+    assert turnover.einvoice_basis(used, 2026)["applies"] is False                                # the year of crossing: earlier years were all under
+    nxt = turnover.einvoice_basis(used, 2027)
+    assert nxt["applies"] is True and nxt["crossed_year"] == 2026 and nxt["applies_from"] == dt.date(2027, 4, 1)
+    assert turnover.einvoice_basis({**used, 2027: 2 * cr}, 2028)["applies"] is True               # it stays on although turnover fell back
+    assert turnover.einvoice_basis({2025: 5 * cr}, 2026)["applies"] is False                      # exactly 5 Cr is not above it
+    assert turnover.einvoice_basis({}, 2026) == {"applies": False, "basis": None, "crossed_year": None, "applies_from": None}
+    assert turnover.einvoice_basis({2015: 9 * cr}, 2026)["applies"] is False                      # the look-back starts at 2017-18
+    assert (turnover.fy_start_year(dt.date(2027, 3, 31)), turnover.fy_start_year(dt.date(2027, 4, 1)), turnover.fy_label(2026)) == (2026, 2027, "2026-27")
+
+
+def test_crossing_the_limit_mid_year_starts_einvoicing_on_the_next_1_april(client, db):
+    o = login(client, OWNER)
+    this_fy = turnover.fy_start_year(TODAY)
+    prev_end, next_start = dt.date(this_fy, 3, 31), dt.date(this_fy + 1, 4, 1)
+    cr = 10_000_000
+
+    def declare(value, when):
+        assert client.post(url("/facts"), headers=o, json=[{"fact_key": "aato", "value": value, "as_of": str(when)}]).status_code == 201
+
+    def preview(on):
+        p = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["local"], [GOODS_LINE], party_gst_id=S["local_gst"], doc_date=str(on))).json()
+        return "einvoice_required" in {c["code"] for c in p["checks"]}
+
+    st = client.get(url("/einvoice-status"), headers=o).json()                                       # nothing declared: only the small books of this test entity
+    assert st["level"] == "clear" and st["applies_today"] is False and st["applies_from"] is None and st["limit"] == "50000000.00"
+    assert not preview(TODAY)
+    declare(4 * cr, prev_end)                                                                          # last year ₹4 Cr, this year so far ₹4.2 Cr: 84% of the limit
+    declare(42_000_000, TODAY)
+    st = client.get(url("/einvoice-status"), headers=o).json()
+    assert st["level"] == "approaching" and st["this_year"] == {"turnover": "42000000.00", "percent_of_limit": "84.0"} and not st["applies_today"]
+    assert client.post(url("/compliance/engine-runs"), headers=o).status_code == 201
+    assert client.post(url("/compliance/engine-runs"), headers=o).status_code == 201
+    like = f"E-invoicing: FY {turnover.fy_label(this_fy)}%"
+    assert db.execute("SELECT count(*) AS n FROM tasks WHERE entity_id = %s AND title LIKE %s", (EN, like)).fetchone()["n"] == 1      # warned once, not on every run
+
+    declare(60 * cr // 10, TODAY)                                                                      # this year goes over ₹5 Cr
+    st = client.get(url("/einvoice-status"), headers=o).json()
+    assert st["level"] == "crossed" and st["applies_today"] is False and st["crossed_in"] == turnover.fy_label(this_fy) and st["applies_from"] == str(next_start)
+    assert not preview(TODAY) and preview(next_start)                                                  # not now, but from 1 April
+    assert [y["financial_year"] for y in st["years"]][:2] == [turnover.fy_label(this_fy), turnover.fy_label(this_fy - 1)]
+    assert st["years"][1]["declared"] == "40000000.00" and st["years"][1]["above_limit"] is False
+
+    declare(6 * cr, prev_end)                                                                          # had last year's turnover been over ₹5 Cr, it would apply today
+    st = client.get(url("/einvoice-status"), headers=o).json()
+    assert st["level"] == "applies" and st["applies_today"] is True and preview(TODAY)
+    assert client.get(url("/einvoice-status")).status_code == 401
+
+
+def test_a_line_priced_in_the_customers_currency_keeps_its_amounts_and_converts_for_gst():
+    xr = D("83.4905")
+    line = tax.Line("Valve", "8481", D("1"), D("83490.50"), D("18"), foreign_rate=D("1000"), foreign_discount=D("0"), foreign_taxable=D("1000.00"), taxable_override=tax.r2(D("1000.00") * xr))
+    res = tax.compute([line], ctx(exchange_rate=xr))
+    assert res.taxable_total == D("83490.50") and res.grand_total == D("83491") and res.round_off == D("0.50")        # GST rounds to a whole rupee
+    assert res.foreign_total == D("1000.00") and res.foreign_taxable_total == D("1000.00")                           # the dollars are what was typed
+    assert tax.foreign_amount(res.grand_total, xr) == D("1000.01")                                                  # working back from the rupees would not be
+    taxed = tax.compute([line], ctx(exchange_rate=xr, zero_rated=False, lut="none", supply_type="export_with_tax"))
+    assert taxed.igst_total == D("15028.29") and taxed.foreign_total == D("1000.00") + tax.r2(D("15028.29") / xr)    # IGST is worked out in rupees and converted
+    assert res.lines[0]["foreign_rate"] == "1000.0000" and res.lines[0]["foreign_taxable"] == D("1000.00")
+    inr_priced = tax.compute([tax.Line("Valve", "8481", D("1"), D("83490.50"), D("18"))], ctx(exchange_rate=xr))
+    assert inr_priced.foreign_total == D("1000.01") and inr_priced.foreign_taxable_total is None and "foreign_rate" not in inr_priced.lines[0]
+    assert tax.in_words_currency(D("10908.28"), "USD") == "US Dollars Ten Thousand Nine Hundred Eight and Cents Twenty Eight only"
+    assert tax.in_words_currency(D("1000.00"), "USD") == "US Dollars One Thousand only" and tax.in_words_currency(D("5"), "JPY") is None
+
+
+def test_an_export_invoice_can_be_priced_in_dollars(client, db):
+    o = login(client, OWNER)
+    valve = {"description": "Control valves", "hsn_sac": "8481", "qty": "1", "rate": "1000.00", "gst_rate": "18"}
+    body = doc(S["abroad"], [valve], currency="USD", exchange_rate="83.4905", priced_in_foreign=True)
+    p = client.post(url("/sales-documents/preview"), headers=o, json=body).json()
+    assert p["priced_in_foreign"] is True and p["foreign_total"] == "1000.00" and p["foreign_taxable_total"] == "1000.00"
+    assert p["taxable_total"] == "83490.50" and p["grand_total"] == "83491.00" and p["igst_total"] == "0.00"
+    assert p["lines"][0]["foreign_rate"] == "1000.0000" and p["lines"][0]["foreign_taxable"] == "1000.00"
+    assert p["amount_in_words_foreign"] == "US Dollars One Thousand only"
+    rupees = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["abroad"], [{**valve, "rate": "83490.50"}], currency="USD", exchange_rate="83.4905")).json()
+    assert rupees["priced_in_foreign"] is False and rupees["foreign_total"] == "1000.01" and rupees["foreign_taxable_total"] is None      # entered in rupees: the dollars are worked back
+    two = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["abroad"], [{**valve, "qty": "3", "rate": "1234.5678"}, {**valve, "description": "Spares", "rate": "99.99", "discount": "9.99"}],
+                                                                            currency="USD", exchange_rate="94.2300", priced_in_foreign=True)).json()
+    assert [l["foreign_taxable"] for l in two["lines"]] == ["3703.70", "90.00"] and two["foreign_total"] == "3793.70"             # 3 x 1234.5678 = 3703.7034 -> 3703.70; 99.99 - 9.99 = 90.00
+    assert [l["taxable_value"] for l in two["lines"]] == ["348999.65", "8480.70"]                                                  # each converted at 94.23
+
+    r = client.post(url("/sales-documents"), headers=o, json=body)
+    assert r.status_code == 201, r.text
+    saved = r.json()
+    assert saved["priced_in_foreign"] is True and saved["foreign_total"] == "1000.00" and saved["lines"][0]["foreign_rate"] == "1000.0000" and saved["lines"][0]["rate"] == "83490.50"
+    assert client.get(url(f"/sales-documents/{saved['id']}"), headers=o).json()["foreign_total"] == "1000.00"
+    assert client.post(url(f"/sales-documents/{saved['id']}/issue"), headers={**o, **key()}, json={}).status_code == 202
+    assert db.execute("SELECT fob_foreign FROM shipping_bills WHERE sales_document_id = %s", (saved["id"],)).fetchone()["fob_foreign"] == D("1000.00")      # the shipping bill is worth what was typed
+    pdf = client.get(url(f"/sales-documents/{saved['id']}/pdf"), headers=o)
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+
+    domestic = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["local"], [valve], party_gst_id=S["local_gst"], priced_in_foreign=True))
+    assert domestic.status_code == 400 and domestic.json()["code"] == "foreign_pricing_needs_currency"
+    five = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["abroad"], [{**valve, "rate": "1000.12345"}], currency="USD", exchange_rate="83", priced_in_foreign=True))
+    assert five.status_code == 400
+    assert db.execute("SELECT count(*) AS n FROM sales_document_lines WHERE foreign_rate IS NOT NULL AND foreign_taxable IS NULL").fetchone()["n"] == 0
 
 
 def test_the_audit_chain_is_intact(db):

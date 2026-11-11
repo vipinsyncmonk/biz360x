@@ -478,7 +478,9 @@ LINE_IN = schema("DocumentLineInput", {"item_id": NULLABLE(UUID), "description":
                                         "uqc": S(), "rate": MONEY, "discount": MONEY, "gst_rate": N(), "so_line_id": NULLABLE(I()),
                                         "original_line_id": NULLABLE(I())}, required=("description", "hsn_sac", "qty", "rate", "gst_rate"))
 schema("DocumentLine", {"line_no": I(readOnly=True), "taxable_value": MONEY, "cgst_amount": MONEY, "sgst_amount": MONEY,
-                        "igst_amount": MONEY, "cess_amount": MONEY}, extra={"allOf": [LINE_IN]})
+                        "igst_amount": MONEY, "cess_amount": MONEY,
+                        "foreign_rate": NULLABLE(S(readOnly=True, pattern=r"^[0-9]{1,14}\.[0-9]{4}$", description="The rate as typed, in the document's currency, when the invoice was priced in it")),
+                        "foreign_discount": NULLABLE({**MONEY, "readOnly": True}), "foreign_taxable": NULLABLE({**MONEY, "readOnly": True})}, extra={"allOf": [LINE_IN]})
 schema("Quote", {"id": RO_UUID, "quote_no": S(readOnly=True), "version": I(readOnly=True), "party_id": UUID, "registration_id": UUID,
                  "title": S(), "status": ENUM("draft", "sent", "viewed", "negotiating", "accepted", "rejected", "expired", "lost", readOnly=True),
                  "place_of_supply": STATE, "valid_until": DATE, "advance_pct": N(), "payment_terms_days": I(),
@@ -508,10 +510,13 @@ schema("TaxPreviewRequest", {"doc_type": ENUM("tax_invoice", "credit_note", "deb
                              "registration_id": UUID, "party_id": UUID, "party_gst_id": NULLABLE(UUID), "place_of_supply": NULLABLE(STATE),
                              "doc_date": DATE, "payment_terms_days": I(), "lines": ARR(LINE_IN), "original_document_id": NULLABLE(UUID),
                              "cn_reason": NULLABLE(S()), "gst_adjusted": B(default=True),
+                             "priced_in_foreign": B(description="An export invoice only: each line's `rate` and `discount` are in `currency` (the rate may have four decimals), "
+                                                    "and the rupee value for GST is worked out from them at `exchange_rate`. The foreign amounts on the invoice are then exactly what was typed."),
                              "supply_type": S(), "currency": NULLABLE(S(pattern="^[A-Z]{3}$")), "exchange_rate": NULLABLE(S(description="Rupees per unit of the currency, up to four decimals"))},
                              required=("doc_type", "registration_id", "party_id", "lines"))
 schema("TaxPreview", {"doc_type": S(description="An invoice to a customer outside India comes back as export_invoice"), "supply_type": S(), "is_export": B(),
-                      "currency": S(), "exchange_rate": NULLABLE(S()), "foreign_total": NULLABLE(MONEY), "is_inter_state": B(), "place_of_supply": STATE, "lines": ARR(ref("DocumentLine")),
+                      "currency": S(), "exchange_rate": NULLABLE(S()), "foreign_total": NULLABLE(MONEY), "priced_in_foreign": B(),
+                      "foreign_taxable_total": NULLABLE(MONEY), "amount_in_words_foreign": NULLABLE(S(description="The foreign total in words, for a currency with a wording")), "is_inter_state": B(), "place_of_supply": STATE, "lines": ARR(ref("DocumentLine")),
                       "taxable_total": MONEY, "cgst_total": MONEY, "sgst_total": MONEY, "igst_total": MONEY, "cess_total": MONEY,
                       "round_off": MONEY, "grand_total": MONEY, "amount_in_words": S(), "due_date": DATE,
                       "tds_expected": MONEY, "expected_receipt": MONEY, "next_number": S(examples=["NI/KA/213"]),
@@ -527,6 +532,7 @@ schema("SalesDocument", {
     "supply_type": ENUM("b2b", "b2c_small", "b2c_large", "export_with_tax", "export_under_lut", "sez_with_tax", "sez_under_lut", "deemed_export"),
     "currency": S(description="INR unless this is an export invoice, which states the foreign currency the customer pays in"),
     "exchange_rate": NULLABLE(S(description="Rupees per unit of that currency")), "foreign_total": NULLABLE({**MONEY, "readOnly": True}),
+    "priced_in_foreign": B(description="The lines were entered in the foreign currency; the rupee columns are their value at the exchange rate, for GST"),
     "reverse_charge": B(), "quote_id": NULLABLE(UUID), "sales_order_id": NULLABLE(UUID), "customer_po_ref": S(),
     "original_document_id": NULLABLE(UUID), "cn_reason": NULLABLE(ENUM("sales_return", "rate_revision", "post_sale_discount", "deficiency_in_service", "correction", "other")),
     "gst_adjusted": B(default=True, description="false = commercial credit note"),
@@ -557,6 +563,21 @@ action(E + "/sales-documents/{id}/cancel", "Sales & billing", "cancelSalesDocume
        status="202", idem=True)
 action(E + "/sales-documents/{id}/send", "Sales & billing", "sendSalesDocument", "Email / WhatsApp the PDF and payment link", "sales:write",
        body=ref("SendRequest"), status="204")
+schema("EInvoiceYear", {"financial_year": FY, "books": NULLABLE(MONEY), "declared": NULLABLE(MONEY), "used": MONEY, "above_limit": B()},
+       required=("financial_year", "used", "above_limit"), extra={"readOnly": True})
+schema("EInvoiceStatus", {"limit": MONEY, "financial_year": FY, "applies_today": B(), "level": ENUM("clear", "approaching", "crossed", "applies"),
+                          "applies_from": NULLABLE(DATE), "crossed_in": NULLABLE(FY),
+                          "this_year": schema("EInvoiceThisYear", {"turnover": MONEY, "percent_of_limit": S()}, required=("turnover", "percent_of_limit")),
+                          "years": ARR(ref("EInvoiceYear"))},
+       required=("limit", "financial_year", "applies_today", "level", "this_year", "years"), extra={"readOnly": True})
+_op("get", E + "/einvoice-status", "Sales & billing", "getEInvoiceStatus", "Whether e-invoicing applies and the turnover it rests on", "sales:read", resp=ref("EInvoiceStatus"),
+    desc="E-invoicing starts in the financial year after the first year in which aggregate turnover went above ₹5 Cr, and stays on. A year's figure is the one declared "
+         "as an `aato` fact dated in it (`POST /facts`, for example dated 31 March), else the taxable value of the documents issued in it, less credit notes. "
+         "`level` is `approaching` from 80% of the limit in the current year and `crossed` once it has gone over, before it applies.")
+_op("get", E + "/sales-documents/{id}/pdf", "Sales & billing", "getSalesDocumentPdf", "The document as a PDF", "sales:read", params=[q("download", B(default=False), "true to save the file instead of showing it")],
+    desc="Supplier, buyer, lines with their tax, totals in words, and for an export the LUT or IGST statement and the foreign amount. A draft carries a DRAFT mark "
+         "and is not a valid tax invoice. The IRN and its QR code are printed once the e-invoice has been generated.",
+    extra_responses={"200": {"description": "The PDF", "content": {"application/pdf": {"schema": S(format="binary")}}}})
 action(E + "/sales-documents/{id}/credit-notes", "Sales & billing", "createCreditNoteFor", "Draft a credit note against this invoice", "sales:write",
        body=schema("CreditNoteRequest", {"cn_reason": ENUM("sales_return", "rate_revision", "post_sale_discount", "deficiency_in_service", "correction", "other"),
                                          "gst_adjusted": B(default=True), "lines": ARR(LINE_IN), "agreed_before_supply": B()}, required=("cn_reason", "lines")),

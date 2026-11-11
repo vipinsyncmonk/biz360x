@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ledger, tax, trade
+from . import ledger, tax, trade, turnover
 from .core import (ApiError, Auth, Principal, audit, emit, etag_of, idempotency_begin, idempotency_finish, jsonable, money,
                    require, tx)
 
@@ -47,6 +47,7 @@ class SalesDocIn(BaseModel):
     gst_adjusted: bool = True
     currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")      # an export invoice: what the customer pays in
     exchange_rate: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=4)   # rupees per unit of that currency
+    priced_in_foreign: bool = False        # the line rates and discounts are in that currency; the rupee value for GST is worked out at the rate
     quote_id: uuid.UUID | None = None
     sales_order_id: uuid.UUID | None = None
     lines: list[LineIn] = Field(min_length=1)
@@ -71,8 +72,7 @@ def _context(cur, entity_id, body: SalesDocIn):
         gst = cur.fetchone()
         if not gst:
             raise ApiError(400, "validation_failed", "party_gst_id does not belong to the party")
-    cur.execute("SELECT value_num FROM entity_facts_current WHERE entity_id = %s AND fact_key = 'aato'", (entity_id,))
-    f = cur.fetchone()
+    basis = turnover.basis_for(cur, entity_id, body.doc_date)      # the highest turnover of the years before this document's year
     cur.execute("SELECT udyam_class::text FROM entities WHERE id = %s", (entity_id,))
     cls = cur.fetchone()["udyam_class"]
     original_date = original = None
@@ -91,11 +91,25 @@ def _context(cur, entity_id, body: SalesDocIn):
     pos = "96" if ex["is_export"] else body.place_of_supply or (gst["state_code"] if gst else reg["state_code"])
     terms = body.payment_terms_days if body.payment_terms_days is not None else party["payment_terms_days"]
     ctx = tax.Context(doc_type=ex["doc_type"], supplier_state=reg["state_code"], place_of_supply=pos, doc_date=body.doc_date,
-                      buyer_gstin=gst["gstin"] if gst else None, aato=f["value_num"] if f else None,
+                      buyer_gstin=gst["gstin"] if gst else None, aato=basis,
                       deducts_194q=party["deducts_tds_194q"], payment_terms_days=terms,
                       supplier_is_mse=cls in ("micro", "small"), original_doc_date=original_date, gst_adjusted=body.gst_adjusted,
                       is_export=ex["is_export"], zero_rated=ex["zero_rated"], lut=ex["lut"],
                       currency=ex["currency"], exchange_rate=ex["exchange_rate"], country=party["country"], supply_type=ex["supply_type"])
+    if body.priced_in_foreign:
+        if not ex["is_export"] or not ex["exchange_rate"]:
+            raise ApiError(400, "foreign_pricing_needs_currency", "Prices can be entered in the customer's currency only on an export invoice",
+                           "Choose a customer outside India and give the currency and exchange rate, or enter the prices in rupees.")
+        xr = ex["exchange_rate"]
+        lines = []
+        for i, l in enumerate(body.lines, start=1):
+            if l.rate != l.rate.quantize(Decimal("0.0001")) or l.discount != l.discount.quantize(Decimal("0.01")):
+                raise ApiError(400, "validation_failed", "Foreign rates take up to four decimals and discounts two",
+                               errors=[{"field": f"lines.{i - 1}.rate", "message": "at most 4 decimals"}])
+            amount = tax.r2(l.qty * l.rate - l.discount)             # what the customer is charged for the line, as typed
+            lines.append(tax.Line(l.description, l.hsn_sac, l.qty, tax.r2(l.rate * xr), l.gst_rate, tax.r2(l.discount * xr), is_service=l.hsn_sac.startswith("99"),
+                                  foreign_rate=l.rate, foreign_discount=l.discount, foreign_taxable=amount, taxable_override=tax.r2(amount * xr)))
+        return ctx, lines, party, gst, reg
     lines = [tax.Line(l.description, l.hsn_sac, l.qty, l.rate, l.gst_rate, l.discount, is_service=l.hsn_sac.startswith("99"))
              for l in body.lines]
     return ctx, lines, party, gst, reg
@@ -152,7 +166,9 @@ def preview(entity_id: uuid.UUID, body: SalesDocIn, p: Principal = Auth):
         nxt = _peek_number(cur, body.registration_id, ctx.doc_type, cur.fetchone()["fy"])
     return {"doc_type": ctx.doc_type, "supply_type": ctx.supply_type or body.supply_type, "is_export": ctx.is_export, "currency": ctx.currency,
             "exchange_rate": str(ctx.exchange_rate) if ctx.exchange_rate else None,
-            "foreign_total": money(tax.foreign_amount(res.grand_total, ctx.exchange_rate)) if ctx.is_export and ctx.exchange_rate else None,
+            "foreign_total": money(res.foreign_total) if res.foreign_total is not None else None, "priced_in_foreign": body.priced_in_foreign,
+            "foreign_taxable_total": money(res.foreign_taxable_total) if res.foreign_taxable_total is not None else None,
+            "amount_in_words_foreign": tax.in_words_currency(res.foreign_total, ctx.currency) if res.foreign_total is not None and body.priced_in_foreign else None,
             "is_inter_state": res.is_inter_state, "place_of_supply": ctx.place_of_supply,
             "lines": [_money_out(l) for l in res.lines],
             "taxable_total": money(res.taxable_total), "cgst_total": money(res.cgst_total), "sgst_total": money(res.sgst_total),
@@ -164,7 +180,7 @@ def preview(entity_id: uuid.UUID, body: SalesDocIn, p: Principal = Auth):
 
 def load_document(cur, entity_id, doc_id) -> dict:
     cur.execute("""SELECT id, doc_type::text, number, doc_date, fy, registration_id, party_id, party_gst_id, buyer_gstin,
-                          buyer_legal_name, place_of_supply, is_inter_state, supply_type::text, currency, exchange_rate::text AS exchange_rate, foreign_total, original_document_id,
+                          buyer_legal_name, place_of_supply, is_inter_state, supply_type::text, currency, exchange_rate::text AS exchange_rate, foreign_total, priced_in_foreign, original_document_id,
                           cn_reason::text, gst_adjusted, payment_terms_days, due_date, taxable_total, cgst_total, sgst_total,
                           igst_total, cess_total, round_off, grand_total, tds_expected, amount_settled, balance_due, status,
                           payment_status, irn_status::text, irn, irn_ack_no, irn_ack_at, irn_signed_qr, issued_at
@@ -173,6 +189,7 @@ def load_document(cur, entity_id, doc_id) -> dict:
     if not d:
         raise ApiError(404, "not_found", "Not found")
     cur.execute("""SELECT line_no, description, hsn_sac, qty, uqc, rate, discount, taxable_value, gst_rate,
+                          foreign_rate::text AS foreign_rate, foreign_discount, foreign_taxable,
                           cgst_amount, sgst_amount, igst_amount, cess_amount
                      FROM sales_document_lines WHERE document_id = %s ORDER BY line_no""", (doc_id,))
     d["lines"] = cur.fetchall()
@@ -195,8 +212,8 @@ def create_draft(cur, entity_id, body: SalesDocIn) -> uuid.UUID:
         INSERT INTO sales_documents (entity_id, doc_type, doc_date, registration_id, supplier_state, party_id, party_gst_id,
                buyer_gstin, buyer_legal_name, bill_to, place_of_supply, supply_type, customer_po_ref, original_document_id,
                cn_reason, gst_adjusted, payment_terms_days, due_date, taxable_total, cgst_total, sgst_total, igst_total,
-               round_off, grand_total, tds_expected, irn_status, currency, exchange_rate, created_by, quote_id, sales_order_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+               round_off, grand_total, tds_expected, irn_status, currency, exchange_rate, foreign_total, priced_in_foreign, created_by, quote_id, sales_order_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 app.current_user_id(), %s, %s)
         RETURNING id""",
         (entity_id, ctx.doc_type, body.doc_date, body.registration_id, ctx.supplier_state, body.party_id, body.party_gst_id,
@@ -205,15 +222,18 @@ def create_draft(cur, entity_id, body: SalesDocIn) -> uuid.UUID:
          body.gst_adjusted, ctx.payment_terms_days, res.due_date, res.taxable_total, res.cgst_total, res.sgst_total,
          res.igst_total, res.round_off, res.grand_total, res.tds_expected,
          "pending" if any(c["code"] == "einvoice_required" for c in res.checks) else "not_required",
-         ctx.currency, ctx.exchange_rate, body.quote_id, body.sales_order_id))
+         ctx.currency, ctx.exchange_rate, res.foreign_total, body.priced_in_foreign, body.quote_id, body.sales_order_id))
     doc_id = cur.fetchone()["id"]
     for l, src in zip(res.lines, body.lines):
         cur.execute("""INSERT INTO sales_document_lines (document_id, line_no, item_id, so_line_id, original_line_id, description, hsn_sac,
-                              is_service, qty, uqc, rate, discount, taxable_value, gst_rate, cgst_amount, sgst_amount, igst_amount)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                              is_service, qty, uqc, rate, discount, taxable_value, gst_rate, cgst_amount, sgst_amount, igst_amount,
+                              foreign_rate, foreign_discount, foreign_taxable)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (doc_id, l["line_no"], src.item_id, src.so_line_id, src.original_line_id, src.description, src.hsn_sac,
-                     src.hsn_sac.startswith("99"), src.qty, src.uqc, src.rate, src.discount, l["taxable_value"], src.gst_rate,
-                     l["cgst_amount"], l["sgst_amount"], l["igst_amount"]))
+                     src.hsn_sac.startswith("99"), src.qty, src.uqc,
+                     Decimal(l["rate"]) if body.priced_in_foreign else src.rate, Decimal(l["discount"]) if body.priced_in_foreign else src.discount,
+                     l["taxable_value"], src.gst_rate, l["cgst_amount"], l["sgst_amount"], l["igst_amount"],
+                     l.get("foreign_rate"), l.get("foreign_discount"), l.get("foreign_taxable")))
     audit(cur, entity_id, "sales_document.drafted", "sales_documents", doc_id, after={"grand_total": res.grand_total})
     return doc_id
 
@@ -238,6 +258,50 @@ def get_document(entity_id: uuid.UUID, doc_id: uuid.UUID, response: Response, p:
     return doc
 
 
+def _status_out(s: dict) -> dict:
+    return {"limit": money(s["limit"]), "financial_year": s["financial_year"], "applies_today": s["applies_today"], "level": s["level"],
+            "applies_from": s["applies_from"].isoformat() if s["applies_from"] else None, "crossed_in": s["crossed_in"],
+            "this_year": {"turnover": money(s["this_year"]["turnover"]), "percent_of_limit": str(s["this_year"]["percent_of_limit"])},
+            "years": [{"financial_year": y["financial_year"], "books": money(y["books"]) if y["books"] is not None else None,
+                       "declared": money(y["declared"]) if y["declared"] is not None else None, "used": money(y["used"]), "above_limit": y["above_limit"]} for y in s["years"]]}
+
+
+@router.get(E + "/einvoice-status", tags=["Sales & billing"])
+def einvoice_status(entity_id: uuid.UUID, p: Principal = Auth):
+    """Whether e-invoicing applies, from which year, and the turnover it rests on. It starts the financial year after turnover first went above ₹5 Cr
+    and stays on. A year's figure is the one declared as an `aato` fact dated in it, else what the books show."""
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "sales:read")
+        return _status_out(turnover.status(cur, entity_id))
+
+
+@router.get(E + "/sales-documents/{doc_id}/pdf", tags=["Sales & billing"])
+def get_document_pdf(entity_id: uuid.UUID, doc_id: uuid.UUID, download: bool = False, p: Principal = Auth):
+    """The document as a PDF to view in the browser or, with `download=true`, to save and attach to an email. A draft carries a DRAFT mark."""
+    from .invoice_pdf import render_invoice
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "sales:read")
+        doc = load_document(cur, entity_id, doc_id)
+        cur.execute("SELECT legal_name, registered_address, pan::text AS pan, cin::text AS cin FROM entities WHERE id = %s", (entity_id,))
+        supplier = cur.fetchone()
+        cur.execute("SELECT number, state_code FROM entity_registrations WHERE id = %s", (doc["registration_id"],))
+        reg = cur.fetchone()
+        supplier = {**supplier, "gstin": reg["number"] if reg else None, "state_code": reg["state_code"] if reg else None}
+        cur.execute("""SELECT line1, line2, city, state_code, pincode FROM party_addresses WHERE party_id = %s
+                        ORDER BY (kind = 'billing') DESC, (kind = 'registered') DESC LIMIT 1""", (doc["party_id"],))
+        address = cur.fetchone()
+        cur.execute("SELECT gst_code, name FROM ref_states")
+        states = {r["gst_code"]: r["name"] for r in cur.fetchall()}
+        cur.execute("""SELECT number FROM entity_registrations WHERE entity_id = %s AND kind = 'lut' AND status = 'active'
+                          AND (valid_from IS NULL OR valid_from <= %s) AND (valid_until IS NULL OR valid_until >= %s) ORDER BY valid_until DESC NULLS FIRST LIMIT 1""",
+                    (entity_id, doc["doc_date"], doc["doc_date"]))
+        lut = cur.fetchone()
+    pdf = render_invoice(doc, supplier, address, states, lut["number"] if lut else None)
+    name = (doc["number"] or "draft").replace("/", "-")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'{"attachment" if download else "inline"}; filename="{name}.pdf"', "Cache-Control": "private, no-store"})
+
+
 class IssueRequest(BaseModel):
     create_payment_link: bool = True
     generate_eway_bill: bool = True
@@ -247,12 +311,13 @@ def open_draft_shipping_bill(cur, entity_id, doc_id, number) -> uuid.UUID | None
     """An issued export invoice with goods on it opens a draft shipping bill (foreign value of the goods, at the invoice's rate) and a task to add what customs issues.
     Services need no shipping bill. Customs numbers, port and date come from a person: nothing here files with ICEGATE."""
     cur.execute("""SELECT d.party_id, d.currency, d.exchange_rate, d.doc_date,
-                          coalesce(sum(l.taxable_value) FILTER (WHERE NOT l.is_service), 0) AS goods
+                          coalesce(sum(l.taxable_value) FILTER (WHERE NOT l.is_service AND l.foreign_taxable IS NULL), 0) AS goods,
+                          coalesce(sum(l.foreign_taxable) FILTER (WHERE NOT l.is_service), 0) AS goods_foreign
                      FROM sales_documents d JOIN sales_document_lines l ON l.document_id = d.id WHERE d.id = %s GROUP BY d.id""", (doc_id,))
     d = cur.fetchone()
-    if not d or not d["exchange_rate"] or d["goods"] <= 0:
+    if not d or not d["exchange_rate"] or (d["goods"] <= 0 and d["goods_foreign"] <= 0):
         return None
-    fob = tax.foreign_amount(d["goods"], d["exchange_rate"])
+    fob = (tax.foreign_amount(d["goods"], d["exchange_rate"]) if d["goods"] > 0 else Decimal("0")) + d["goods_foreign"]      # lines priced in rupees are converted, lines priced in the currency are exact
     if fob <= 0:
         return None
     cur.execute("""INSERT INTO shipping_bills (entity_id, sales_document_id, buyer_party_id, currency, fob_foreign, exchange_rate, status)
@@ -268,14 +333,17 @@ def open_draft_shipping_bill(cur, entity_id, doc_id, number) -> uuid.UUID | None
 def invoice_goods_foreign(cur, doc_id):
     """What is to be shipped on an export invoice, in the foreign currency: its goods, less the goods credited back by issued credit notes."""
     cur.execute("""SELECT d.exchange_rate,
-                          coalesce((SELECT sum(l.taxable_value) FROM sales_document_lines l WHERE l.document_id = d.id AND NOT l.is_service), 0)
+                          coalesce((SELECT sum(l.taxable_value) FROM sales_document_lines l WHERE l.document_id = d.id AND NOT l.is_service AND l.foreign_taxable IS NULL), 0)
                         - coalesce((SELECT sum(l.taxable_value) FROM sales_documents c JOIN sales_document_lines l ON l.document_id = c.id
-                                     WHERE c.original_document_id = d.id AND c.doc_type = 'credit_note' AND c.status = 'issued' AND NOT l.is_service), 0) AS goods
+                                     WHERE c.original_document_id = d.id AND c.doc_type = 'credit_note' AND c.status = 'issued' AND NOT l.is_service AND l.foreign_taxable IS NULL), 0) AS goods,
+                          coalesce((SELECT sum(l.foreign_taxable) FROM sales_document_lines l WHERE l.document_id = d.id AND NOT l.is_service), 0)
+                        - coalesce((SELECT sum(l.foreign_taxable) FROM sales_documents c JOIN sales_document_lines l ON l.document_id = c.id
+                                     WHERE c.original_document_id = d.id AND c.doc_type = 'credit_note' AND c.status = 'issued' AND NOT l.is_service), 0) AS goods_foreign
                      FROM sales_documents d WHERE d.id = %s""", (doc_id,))
     r = cur.fetchone()
     if not r or not r["exchange_rate"]:
         return None
-    return max(tax.foreign_amount(r["goods"], r["exchange_rate"]), Decimal("0"))
+    return max(tax.foreign_amount(r["goods"], r["exchange_rate"]) + r["goods_foreign"], Decimal("0"))
 
 
 def check_shipment_total(cur, doc_id) -> None:

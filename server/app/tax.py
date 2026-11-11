@@ -30,10 +30,16 @@ class Line:
     gst_rate: Decimal
     discount: Decimal = Decimal("0")
     is_service: bool = False
+    # An export line priced in the customer's currency: the figures as typed, and the rupee value they convert to at the document's rate.
+    # `rate` and `discount` then hold the rupee equivalents and `taxable_override` the rupee value of the line.
+    foreign_rate: Decimal | None = None
+    foreign_discount: Decimal | None = None
+    foreign_taxable: Decimal | None = None
+    taxable_override: Decimal | None = None
 
     @property
     def taxable(self) -> Decimal:
-        return r2(self.qty * self.rate - self.discount)
+        return self.taxable_override if self.taxable_override is not None else r2(self.qty * self.rate - self.discount)
 
 
 @dataclass
@@ -71,6 +77,8 @@ class Result:
     tds_expected: Decimal = Decimal("0")
     due_date: dt.date | None = None
     checks: list = field(default_factory=list)
+    foreign_total: Decimal | None = None             # what the customer pays, in the document's currency (exports only)
+    foreign_taxable_total: Decimal | None = None     # the same before tax, when the lines were priced in that currency
 
 
 def compute(lines: list[Line], ctx: Context) -> Result:
@@ -83,13 +91,23 @@ def compute(lines: list[Line], ctx: Context) -> Result:
         else:
             # split the line's tax exactly in half so CGST always equals SGST
             cg = sg = r2(tax / 2); ig = Decimal("0")
-        res.lines.append({"line_no": i, "description": ln.description, "hsn_sac": ln.hsn_sac, "qty": str(ln.qty),
-                          "rate": f"{ln.rate:.2f}", "discount": f"{ln.discount:.2f}", "gst_rate": float(ln.gst_rate),
-                          "taxable_value": taxable, "cgst_amount": cg, "sgst_amount": sg, "igst_amount": ig, "cess_amount": Decimal("0")})
+        row = {"line_no": i, "description": ln.description, "hsn_sac": ln.hsn_sac, "qty": str(ln.qty),
+               "rate": f"{ln.rate:.2f}", "discount": f"{ln.discount:.2f}", "gst_rate": float(ln.gst_rate),
+               "taxable_value": taxable, "cgst_amount": cg, "sgst_amount": sg, "igst_amount": ig, "cess_amount": Decimal("0")}
+        if ln.foreign_taxable is not None:
+            row.update(foreign_rate=f"{ln.foreign_rate:.4f}", foreign_discount=f"{ln.foreign_discount or 0:.2f}", foreign_taxable=ln.foreign_taxable)
+        res.lines.append(row)
         res.taxable_total += taxable; res.cgst_total += cg; res.sgst_total += sg; res.igst_total += ig
     exact = res.taxable_total + res.cgst_total + res.sgst_total + res.igst_total
     res.grand_total = exact.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     res.round_off = res.grand_total - exact
+    if ctx.is_export and ctx.exchange_rate:
+        if lines and all(ln.foreign_taxable is not None for ln in lines):
+            # priced in the customer's currency: the foreign amount is what was typed; tax (if any) is worked out in rupees and converted
+            res.foreign_taxable_total = sum((ln.foreign_taxable for ln in lines), Decimal("0"))
+            res.foreign_total = res.foreign_taxable_total + r2((res.cgst_total + res.sgst_total + res.igst_total) / ctx.exchange_rate)
+        else:
+            res.foreign_total = foreign_amount(res.grand_total, ctx.exchange_rate)
     res.due_date = ctx.doc_date + dt.timedelta(days=ctx.payment_terms_days)
     if ctx.deducts_194q and ctx.doc_type == "tax_invoice":
         res.tds_expected = r2(res.taxable_total * TDS_194Q_RATE)
@@ -111,7 +129,7 @@ def checks(lines: list[Line], ctx: Context, res: Result) -> list[dict]:
     if ctx.is_export:
         out.extend(export_checks(lines, ctx, res))
     if ctx.aato is not None and ctx.aato > EINVOICE_AATO and (ctx.buyer_gstin or ctx.is_export) and ctx.gst_adjusted:
-        out.append(check("einvoice_required", "ok", "E-invoice required.", "Turnover is above ₹5 Cr — the IRN is generated on issue."))
+        out.append(check("einvoice_required", "ok", "E-invoice required.", "Turnover was above ₹5 Cr in an earlier year, so the IRN is generated on issue."))
     goods = sum((r2(ln.taxable * (1 + ln.gst_rate / 100)) for ln in lines if not ln.is_service), Decimal("0"))
     if ctx.doc_type == "tax_invoice":
         if goods > EWAY_THRESHOLD:
@@ -145,7 +163,7 @@ def export_checks(lines: list[Line], ctx: Context, res: Result) -> list[dict]:
         how = "no GST, as the invoice was supplied under LUT" if ctx.zero_rated else "IGST, as the invoice was exported with payment of tax"
         out = [check("export_note", "ok", f"{word} on an export invoice.", f"It follows the invoice: same currency and exchange rate, {how}.")]
         if ctx.exchange_rate:
-            out.append(check("export_foreign_value", "info", f"{ctx.currency} {foreign_amount(res.grand_total, ctx.exchange_rate):,.2f}",
+            out.append(check("export_foreign_value", "info", f"{ctx.currency} {res.foreign_total:,.2f}",
                              f"What your customer is {'credited' if ctx.doc_type == 'credit_note' else 'charged'}; ₹{res.grand_total:,.2f} at ₹{ctx.exchange_rate:f} per {ctx.currency} is what the books and GST show."))
         return out
     out = [check("export_detected", "ok", "Export invoice.", f"The customer is in {ctx.country or 'another country'}; the place of supply is outside India.")]
@@ -153,8 +171,9 @@ def export_checks(lines: list[Line], ctx: Context, res: Result) -> list[dict]:
         out.append(check("export_needs_rate", "block", "Choose the currency and exchange rate.",
                          "An export invoice states the foreign currency and the rate used to convert it. Enter both."))
     else:
-        out.append(check("export_foreign_value", "info", f"{ctx.currency} {foreign_amount(res.grand_total, ctx.exchange_rate):,.2f}",
-                         f"The customer pays this amount; ₹{res.grand_total:,.2f} at ₹{ctx.exchange_rate:f} per {ctx.currency} is what the books and GST show."))
+        out.append(check("export_foreign_value", "info", f"{ctx.currency} {res.foreign_total:,.2f}",
+                         f"The customer pays this amount; ₹{res.grand_total:,.2f} at ₹{ctx.exchange_rate:f} per {ctx.currency} is what the books and GST show. "
+                         "What the bank credits when they pay will differ with the market rate; the difference is posted as exchange gain or loss."))
     if ctx.supply_type == "export_under_lut" and not ctx.zero_rated:
         out.append(check("lut_not_valid", "block", "No valid LUT for this date.", "A supply under LUT needs a Letter of Undertaking that covers the invoice date. Record one under Settings, or export with payment of IGST."))
     elif ctx.zero_rated:
@@ -205,3 +224,19 @@ def _words(n: int) -> str:
 
 def in_words(amount: Decimal) -> str:
     return "Rupees " + (_words(int(amount)) or "Zero") + " only"
+
+
+CURRENCY_WORDS = {"USD": ("US Dollars", "Cents"), "EUR": ("Euros", "Cents"), "GBP": ("Pounds Sterling", "Pence"), "AUD": ("Australian Dollars", "Cents"),
+                  "CAD": ("Canadian Dollars", "Cents"), "SGD": ("Singapore Dollars", "Cents"), "AED": ("UAE Dirhams", "Fils"), "CHF": ("Swiss Francs", "Rappen")}
+
+
+def in_words_currency(amount: Decimal, currency: str) -> str | None:
+    """'US Dollars Ten Thousand Nine Hundred Eight and Cents Twenty Eight only', or None for a currency without a wording here (such as the yen)."""
+    names = CURRENCY_WORDS.get(currency)
+    if not names:
+        return None
+    whole, cents = int(amount), int((amount - int(amount)) * 100)
+    out = f"{names[0]} {_words(whole) or 'Zero'}"
+    if cents:
+        out += f" and {names[1]} {_words(cents)}"
+    return out + " only"

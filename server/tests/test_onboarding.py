@@ -1,4 +1,5 @@
 """POST /onboarding/workspaces: a person with no workspace creates one from a registry lookup."""
+import datetime as dt
 import json
 import os
 import uuid
@@ -78,6 +79,10 @@ def test_someone_with_no_workspace_creates_one(client, db):
     assert facts["headcount"]["value_num"] == 30 and facts["headcount"]["source"] == "user"
     assert facts["paid_up_capital"]["source"] == "registry" and facts["has_foreign_investor"]["value_bool"] is False
     assert facts["has_mse_dues_over_45_days"]["value_bool"] is False
+    today = dt.date.today()
+    last_year_end = dt.date(today.year if today.month >= 4 else today.year - 1, 3, 31)
+    dated = {f["fact_key"]: f["as_of"] for f in db.execute("SELECT fact_key, as_of FROM entity_facts WHERE entity_id = %s", (out["entity_id"],)).fetchall()}
+    assert dated["aato"] == last_year_end and dated["headcount"] == today                  # "turnover last financial year" belongs to last year, so e-invoicing starts this year if it was over the limit
 
 
 def test_the_first_engine_run_and_the_audit_trail(client, db):

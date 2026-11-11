@@ -21,6 +21,8 @@ import datetime as dt
 import json
 from dataclasses import dataclass, field
 from decimal import Decimal
+
+from . import turnover
 from typing import Any
 
 from .core import audit, emit, jsonable
@@ -452,7 +454,7 @@ def run_engine(cur, entity_id, trigger: str, as_of: dt.date | None = None, *, ho
         emit(cur, entity_id, "obligation.overdue", "obligations", oid, {})
     filed_luts = close_covered_luts(cur, entity_id)
     changed += filed_luts
-    alerts = check_thresholds(cur, entity_id, ctx.facts)
+    alerts = check_thresholds(cur, entity_id, ctx.facts) + turnover.warn_before_start(cur, entity_id, as_of)
     cur.execute("""UPDATE engine_runs SET finished_at = now(), rules_evaluated = %s, obligations_created = %s, obligations_changed = %s
                     WHERE id = %s RETURNING *""", (n_rules, created, changed, run_id))
     run = cur.fetchone()
