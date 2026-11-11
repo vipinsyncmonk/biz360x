@@ -11,7 +11,7 @@ import { ErrorNote, Loading } from "@/components/ui";
 
 interface Doc { id: string; doc_type: string; number: string | null; status: string; buyer_legal_name: string; registration_id: string; party_id: string; party_gst_id: string | null; place_of_supply: string; grand_total: string; balance_due: string; lines: DocLine[] }
 interface Check { code: string; level: string; title: string; detail: string }
-interface Preview { taxable_total: string; cgst_total: string; sgst_total: string; igst_total: string; grand_total: string; is_inter_state: boolean; checks: Check[] }
+interface Preview { is_export: boolean; currency: string; foreign_total: string | null; taxable_total: string; cgst_total: string; sgst_total: string; igst_total: string; grand_total: string; is_inter_state: boolean; checks: Check[] }
 
 export default function CreditNote({ params }: { params: Promise<{ id: string }> }) {
   const { id: docId } = use(params);
@@ -135,6 +135,7 @@ export default function CreditNote({ params }: { params: Promise<{ id: string }>
                   <Row k="Taxable value" v={`-${formatInr(preview.taxable_total)}`} />
                   {preview.is_inter_state ? <Row k="IGST" v={`-${formatInr(preview.igst_total)}`} /> : <><Row k="CGST" v={`-${formatInr(preview.cgst_total)}`} /><Row k="SGST" v={`-${formatInr(preview.sgst_total)}`} /></>}
                   <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid var(--line)", fontWeight: 700, fontSize: 18 }}><span>Credit total</span><span className="mono">-{formatInr(preview.grand_total)}</span></div>
+                  {preview.is_export && preview.foreign_total && <Row k={`Customer is credited (${preview.currency})`} v={`-${preview.currency} ${Number(preview.foreign_total).toLocaleString("en-US", { minimumFractionDigits: 2 })}`} />}
                   <span className="t13">The customer owes {formatInr(d.balance_due)} on this invoice now; the credit reduces that and your output GST.</span>
                   {preview.checks.map((c) => (
                     <div key={c.code} style={{ display: "flex", gap: 8, fontSize: 13, lineHeight: 1.4 }}>

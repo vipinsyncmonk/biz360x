@@ -2451,7 +2451,7 @@ export interface paths {
         put?: never;
         /**
          * Import bank lines from a feed (Account Aggregator, bank API or parsed statement)
-         * @description Duplicates (same `external_id`) are ignored. Credits paid into an invoice virtual account, or naming an invoice number, get a suggested receipt to accept or reject.
+         * @description Duplicates (same `external_id`) are ignored. Credits paid into an invoice virtual account, or naming an invoice number, get a suggested receipt to accept or reject. A credit that reads like money from abroad gets a suggested shipping bill instead (accept it with bankCreditAsExportProceeds).
          */
         post: operations["importBankTransactions"];
         delete?: never;
@@ -2488,6 +2488,26 @@ export interface paths {
         put?: never;
         /** Accept a suggested match */
         post: operations["acceptBankMatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/bank-transactions/{id}/export-proceeds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take a bank credit as the proceeds of an export
+         * @description A credit that reads like an inward remittance gets a suggested shipping bill (rule export_proceeds), tolerant of the bank's charges and rate. The line is the rupees after those charges, so the person gives the foreign amount and the charges: a receipt is created, the export invoice is settled at its own rate and the difference is posted as foreign exchange gain or loss. Needs finance:write too. 409 if the line is already matched or the shipping bill has no issued export invoice (proceeds_need_invoice).
+         */
+        post: operations["bankCreditAsExportProceeds"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3569,7 +3589,7 @@ export interface paths {
         put?: never;
         /**
          * Record export proceeds received against a shipping bill
-         * @description Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409).
+         * @description Proceeds may arrive before the goods leave, but the total cannot exceed the shipping bill's value (409). With amount_inr the shipping bill must be linked to an issued export invoice (409 proceeds_need_invoice): a receipt is created, the invoice is settled at its own rate and the difference is posted as foreign exchange gain or loss.
          */
         post: operations["recordRealisation"];
         delete?: never;
@@ -4624,6 +4644,15 @@ export interface components {
             /** @enum {string} */
             status?: "active" | "suspended" | "cancelled" | "applied";
         };
+        /** @description Records the Letter of Undertaking (dates required) or the Importer-Exporter Code. GSTINs come from onboarding. */
+        RegistrationCreate: {
+            /** @enum {string} */
+            kind?: "lut" | "iec";
+            number?: string;
+            valid_from?: string | null;
+            valid_until?: string | null;
+            label?: string;
+        };
         RegistrationPage: {
             data: components["schemas"]["Registration"][];
             next_cursor: string | null;
@@ -5004,6 +5033,16 @@ export interface components {
             credit_limit?: components["schemas"]["Money"] | null;
             deducts_tds_194q?: boolean;
             default_tds_section?: string;
+            /**
+             * @description Two-letter country code. A customer outside India turns its invoices into export invoices.
+             * @default IN
+             */
+            country: string;
+            /**
+             * @description What an overseas customer is invoiced in
+             * @default INR
+             */
+            currency: string;
             /** @enum {string} */
             status?: "active" | "on_hold" | "blocked" | "archived";
             gstins?: components["schemas"]["PartyGstin"][];
@@ -5011,6 +5050,20 @@ export interface components {
             contacts?: components["schemas"]["Contact"][];
             readonly balance_receivable?: components["schemas"]["Money"];
             readonly balance_payable?: components["schemas"]["Money"];
+        };
+        /** @description A party outside India has no GSTIN and needs the currency it is invoiced in (409 for a name already in use). */
+        PartyCreate: {
+            legal_name?: string;
+            /** @default true */
+            is_customer: boolean;
+            /** @default false */
+            is_vendor: boolean;
+            /** @default IN */
+            country: string;
+            currency?: string | null;
+            gstin?: components["schemas"]["Gstin"] | null;
+            pan?: components["schemas"]["Pan"] | null;
+            payment_terms_days?: number | null;
         };
         PartyPage: {
             data: components["schemas"]["Party"][];
@@ -5171,9 +5224,18 @@ export interface components {
             cn_reason?: string | null;
             /** @default true */
             gst_adjusted: boolean;
+            supply_type?: string;
+            currency?: string | null;
+            exchange_rate?: string | null;
         };
         TaxPreview: {
+            /** @description An invoice to a customer outside India comes back as export_invoice */
+            doc_type?: string;
             supply_type?: string;
+            is_export?: boolean;
+            currency?: string;
+            exchange_rate?: string | null;
+            foreign_total?: components["schemas"]["Money"] | null;
             is_inter_state?: boolean;
             place_of_supply?: components["schemas"]["StateCode"];
             lines?: components["schemas"]["DocumentLine"][];
@@ -5221,6 +5283,10 @@ export interface components {
             readonly is_inter_state?: boolean;
             /** @enum {string} */
             supply_type?: "b2b" | "b2c_small" | "b2c_large" | "export_with_tax" | "export_under_lut" | "sez_with_tax" | "sez_under_lut" | "deemed_export";
+            /** @description INR unless this is an export invoice, which states the foreign currency the customer pays in */
+            currency?: string;
+            exchange_rate?: string | null;
+            foreign_total?: components["schemas"]["Money"] | null;
             reverse_charge?: boolean;
             quote_id?: string | null;
             sales_order_id?: string | null;
@@ -5954,6 +6020,16 @@ export interface components {
             duplicates?: number;
             suggested?: number;
         };
+        /** @description For a suggestion that names a shipping bill: the foreign amount the matcher guessed, what that is worth at the invoice's rate, and how far the credit is from it. The statement shows rupees after the bank's charges and its own rate, so the credit is rarely exact. */
+        ExportMatchHint: {
+            /** Format: uuid */
+            shipping_bill_id?: string;
+            sb_number?: string | null;
+            currency?: string | null;
+            proposed_foreign?: components["schemas"]["Money"] | null;
+            expected_inr?: components["schemas"]["Money"] | null;
+            difference_inr?: components["schemas"]["Money"] | null;
+        };
         BankMatchSuggestion: {
             /** Format: uuid */
             readonly id?: string;
@@ -5967,6 +6043,7 @@ export interface components {
             rule?: string;
             /** @enum {string} */
             status?: "suggested" | "accepted" | "rejected";
+            export?: components["schemas"]["ExportMatchHint"] | null;
         };
         BankTransaction: {
             /** Format: uuid */
@@ -5986,6 +6063,13 @@ export interface components {
         BankTransactionPage: {
             data: components["schemas"]["BankTransaction"][];
             next_cursor: string | null;
+        };
+        ProceedsFromBank: {
+            /** Format: uuid */
+            shipping_bill_id: string;
+            amount_foreign: components["schemas"]["Money"];
+            bank_charges?: components["schemas"]["Money"];
+            firc_no?: string;
         };
         MatchTarget: {
             target_kind: string;
@@ -6697,16 +6781,21 @@ export interface components {
             amount_foreign: components["schemas"]["Money"];
             bank_ref?: string | null;
             firc_no?: string | null;
+            amount_inr?: components["schemas"]["Money"] | null;
+            /** @description What the bank deducted; needs amount_inr */
+            bank_charges?: components["schemas"]["Money"];
+            bank_account_id?: string | null;
+            booked_inr?: components["schemas"]["Money"] | null;
+            forex_gain?: components["schemas"]["Money"] | null;
+            receipt_id?: string | null;
         };
-        /** @description Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases). */
+        /** @description A draft is opened when an export invoice with goods is issued; the number, port and date customs issues turn it into a filed shipping bill. Rupee values are worked out from the foreign amount and the exchange rate. Proceeds are due nine calendar months after the date of export (a starter rule: FEMA allows longer periods and extensions in some cases). */
         ShippingBill: {
             /** Format: uuid */
             readonly id?: string;
-            sb_number: string;
-            /** Format: date */
-            sb_date: string;
-            /** @example INMAA1 */
-            port_code: string;
+            sb_number: string | null;
+            sb_date: string | null;
+            port_code: string | null;
             /** @example USD */
             currency: string;
             fob_foreign: components["schemas"]["Money"];
@@ -6714,10 +6803,11 @@ export interface components {
             exchange_rate: string;
             readonly fob_inr?: components["schemas"]["Money"];
             /** @enum {string} */
-            status?: "filed" | "let_export" | "shipped" | "closed";
+            status?: "draft" | "filed" | "let_export" | "shipped" | "closed";
             exported_on?: string | null;
             sales_document_id?: string | null;
             invoice_number?: string | null;
+            invoice_status?: string | null;
             buyer_party_id?: string | null;
             buyer_name?: string | null;
             rodtep_claimed?: components["schemas"]["Money"];
@@ -6738,10 +6828,17 @@ export interface components {
             data: components["schemas"]["ShippingBill"][];
             next_cursor: string | null;
         };
-        /** @description The date of export starts the realisation clock and cannot be changed once recorded. */
+        /** @description The customs details (number, date, port, value, rate) can be added only while the shipping bill is a draft; adding all three of number, date and port files it. The date of export starts the realisation clock and cannot be changed once recorded. */
         ShippingBillUpdate: {
+            sb_number?: string;
+            /** Format: date */
+            sb_date?: string;
+            /** @example INMAA1 */
+            port_code?: string;
+            fob_foreign?: components["schemas"]["Money"];
+            exchange_rate?: string;
             /** @enum {string} */
-            status?: "filed" | "let_export" | "shipped" | "closed";
+            status?: "draft" | "filed" | "let_export" | "shipped" | "closed";
             /** Format: date */
             exported_on?: string;
             rodtep_claimed?: components["schemas"]["Money"];
@@ -6802,6 +6899,8 @@ export interface components {
         ExportTotals: {
             bills?: number;
             value_inr?: components["schemas"]["Money"];
+            /** @description Shipping bills opened from export invoices that still need the customs details */
+            drafts?: number;
         };
         RealisationTotals: {
             outstanding_bills?: number;
@@ -7611,7 +7710,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Registration"];
+                "application/json": components["schemas"]["RegistrationCreate"];
             };
         };
         responses: {
@@ -9386,7 +9485,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Party"];
+                "application/json": components["schemas"]["PartyCreate"];
             };
         };
         responses: {
@@ -13408,6 +13507,44 @@ export interface operations {
             429: components["responses"]["TooMany"];
         };
     };
+    bankCreditAsExportProceeds: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProceedsFromBank"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankTransaction"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
     rejectBankMatch: {
         parameters: {
             query?: never;
@@ -16364,7 +16501,10 @@ export interface operations {
     recordRealisation: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 /** @description Legal entity the call acts on */
                 entityId: components["parameters"]["EntityId"];

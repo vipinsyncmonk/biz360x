@@ -256,6 +256,8 @@ def derived_facts(facts: dict, regs: list[Reg]) -> dict:
     out: dict[str, Any] = {}
     for r in regs:
         out[f"has_{r.kind}"] = True
+        if r.kind == "iec":
+            out["is_exporter"] = True                           # an Importer-Exporter Code is held to export
         if r.kind == "professional_tax" and r.state_code:
             out[f"employs_in_state_{r.state_code}"] = True
     out.update(facts)
@@ -322,6 +324,12 @@ def in_create_window(due: dt.date, as_of: dt.date, horizon_days: int, lookback_d
     return as_of - dt.timedelta(days=lookback_days) <= due <= as_of + dt.timedelta(days=horizon_days)
 
 
+def open_until_filed(c: Candidate, as_of: dt.date) -> bool:
+    """A duty that stays on the list for the whole of its period however long ago it fell due (the LUT: it is due as the year starts and
+    an exporter who has none is overdue until it is filed), so it is created when first seen mid-year, not only near its due date."""
+    return bool(c.rule["due_rule"].get("open_until_filed")) and c.period.start <= as_of <= c.period.end
+
+
 # ================================================================ 2. database layer
 def _facts_from_rows(rows) -> dict:
     out = {}
@@ -344,6 +352,10 @@ def load_context(cur, entity_id) -> Context:
     for k in ("constitution", "track", "udyam_class"):
         if e[k] is not None:
             facts.setdefault(k, e[k])
+    cur.execute("""SELECT (EXISTS (SELECT 1 FROM parties WHERE entity_id = %s AND is_customer AND country <> 'IN')
+                         OR EXISTS (SELECT 1 FROM sales_documents WHERE entity_id = %s AND currency <> 'INR')) AS exports""", (entity_id, entity_id))
+    if cur.fetchone()["exports"]:
+        facts.setdefault("is_exporter", True)                   # a customer abroad or an invoice in a foreign currency; an explicit fact wins
     cur.execute("""SELECT id::text, kind::text, number, label, state_code, gst_filing_frequency, valid_from, valid_until
                      FROM entity_registrations WHERE entity_id = %s AND status = 'active' ORDER BY kind, number""", (entity_id,))
     regs = [Reg(**r) for r in cur.fetchall()]
@@ -386,7 +398,7 @@ def run_engine(cur, entity_id, trigger: str, as_of: dt.date | None = None, *, ho
         ex = cur.fetchone()
         eff_due = (ex["extended_due_date"] or c.due) if ex else c.due
         if not ex:
-            if not c.applies or not in_create_window(c.due, as_of, horizon_days, lookback_days):
+            if not c.applies or not (in_create_window(c.due, as_of, horizon_days, lookback_days) or open_until_filed(c, as_of)):
                 continue
             status = "overdue" if eff_due < as_of else "upcoming"
             fee, _ = late_fee(c.rule["penalty_rule"], eff_due, as_of, ctx.facts)
@@ -438,6 +450,8 @@ def run_engine(cur, entity_id, trigger: str, as_of: dt.date | None = None, *, ho
             changed += 1
     for oid in newly_overdue:
         emit(cur, entity_id, "obligation.overdue", "obligations", oid, {})
+    filed_luts = close_covered_luts(cur, entity_id)
+    changed += filed_luts
     alerts = check_thresholds(cur, entity_id, ctx.facts)
     cur.execute("""UPDATE engine_runs SET finished_at = now(), rules_evaluated = %s, obligations_created = %s, obligations_changed = %s
                     WHERE id = %s RETURNING *""", (n_rules, created, changed, run_id))
@@ -445,6 +459,23 @@ def run_engine(cur, entity_id, trigger: str, as_of: dt.date | None = None, *, ho
     audit(cur, entity_id, "engine.run", "engine_runs", run_id, actor_kind="user" if trigger in ("manual", "onboarding") else "engine",
           after={"trigger": trigger, "created": created, "changed": changed, "threshold_alerts": alerts})
     return run
+
+
+def close_covered_luts(cur, entity_id) -> int:
+    """The yearly LUT duty is done when a LUT on record is valid for the whole year. Mark it filed against that LUT's number."""
+    cur.execute("""SELECT o.id, g.number
+                     FROM obligations o JOIN compliance_rules r ON r.id = o.rule_id
+                     JOIN LATERAL (SELECT number FROM entity_registrations g
+                                    WHERE g.entity_id = o.entity_id AND g.kind = 'lut' AND g.status = 'active'
+                                      AND g.valid_from <= o.period_start AND g.valid_until >= o.period_end
+                                    ORDER BY g.valid_until DESC LIMIT 1) g ON true
+                    WHERE o.entity_id = %s AND r.code = 'GST.LUT.ANNUAL'
+                      AND o.status NOT IN ('filed', 'waived', 'not_applicable') FOR UPDATE OF o""", (entity_id,))
+    rows = cur.fetchall()
+    for r in rows:
+        cur.execute("UPDATE obligations SET status = 'filed', filed_at = now(), acknowledgement = %s WHERE id = %s", (r["number"], r["id"]))
+        _event(cur, r["id"], "status_changed", None, "filed", f"A LUT valid for the year is on record ({r['number']})")
+    return len(rows)
 
 
 # ---------------------------------------------------------------- thresholds

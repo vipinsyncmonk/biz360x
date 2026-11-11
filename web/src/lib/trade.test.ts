@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  blankBoe, blankRealisation, blankSb, boeBody, boeProblem, claimsBody, claimsForm, claimsPending, claimsProblem, clockText, lutText, previewInr, previewText, realisationBody, realisationProblem,
+  blankBoe, blankRealisation, blankSb, boeBody, boeProblem, claimsBody, claimsForm, claimsPending, claimsProblem, clockText, lutText, previewInr, previewText, realisationBody, realisationProblem, receivedText,
   sbBody, sbProblem,
 } from "./trade";
 
@@ -59,6 +59,15 @@ describe("exports and imports", () => {
     expect(realisationProblem({ ...f, date: "2026-12-01" }, "4000.00", TODAY)).toMatch(/future/);
     expect(blankRealisation("0.00").amount).toBe("");
     expect(realisationBody({ ...f, bankRef: " UTR1 ", firc: "" })).toEqual({ received_on: "2026-11-01", amount_foreign: "4000.00", bank_ref: "UTR1" });
+    expect(realisationBody({ ...f, inr: " 331800.00 ", charges: "450.00" })).toMatchObject({ amount_inr: "331800.00", bank_charges: "450.00" });
+    expect(realisationBody({ ...f, inr: "", charges: "450.00" })).not.toHaveProperty("bank_charges");
+    expect(realisationProblem({ ...f, inr: "abc" }, "4000.00", "2026-11-09")).toMatch(/rupees/);
+    expect(realisationProblem({ ...f, charges: "10.00" }, "4000.00", "2026-11-09")).toMatch(/Bank charges/);
+    expect(realisationProblem({ ...f, inr: "331800.00", charges: "450.00" }, "4000.00", "2026-11-09")).toBeNull();
+    const r = { id: "r", received_on: "2026-11-01", amount_foreign: "4000.00", bank_ref: null, firc_no: "F1", amount_inr: "331800.00", bank_charges: "0.00", booked_inr: "332000.00", forex_gain: "-200.00" };
+    expect(receivedText("USD", r, "1 Nov")).toBe("USD 4000.00 on 1 Nov (FIRC F1) · exchange loss ₹200.00");
+    expect(receivedText("USD", { ...r, forex_gain: "1500.5" }, "1 Nov")).toMatch(/exchange gain ₹1,500\.50/);
+    expect(receivedText("USD", { ...r, forex_gain: null, firc_no: null }, "1 Nov")).toBe("USD 4000.00 on 1 Nov");
   });
 
   it("checks RoDTEP and drawback figures", () => {

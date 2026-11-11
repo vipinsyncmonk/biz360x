@@ -13,7 +13,7 @@ import os
 import time
 from typing import Protocol
 
-from . import adapters, auth, secretbox, security, webhooks
+from . import adapters, auth, secretbox, security, trade, webhooks
 from .core import ApiError, audit, emit, tx
 
 WORKER_ID = os.environ.get("WORKER_ID", f"worker-{os.getpid()}")
@@ -23,12 +23,20 @@ IRP = adapters.proxy("irp")
 
 
 def handle_generate_irn(cur, job: dict) -> dict:
-    cur.execute("""SELECT d.id, d.entity_id, d.number, d.fy, d.doc_type::text, d.buyer_gstin, d.grand_total, r.number AS seller_gstin
+    cur.execute("""SELECT d.id, d.entity_id, d.number, d.fy, d.doc_type::text, d.buyer_gstin, d.grand_total, r.number AS seller_gstin,
+                          d.supply_type::text AS supply_type, d.currency, d.bill_to->>'country' AS country, d.original_document_id
                      FROM sales_documents d JOIN entity_registrations r ON r.id = d.registration_id
                     WHERE d.id = %s FOR UPDATE OF d""", (job["subject_id"],))
     d = cur.fetchone()
-    out = IRP.generate_irn({"seller_gstin": d["seller_gstin"], "fy": d["fy"], "doc_type": d["doc_type"], "number": d["number"],
-                            "buyer_gstin": d["buyer_gstin"], "total": str(d["grand_total"])})
+    payload = {"seller_gstin": d["seller_gstin"], "fy": d["fy"], "doc_type": d["doc_type"], "number": d["number"],
+               "buyer_gstin": d["buyer_gstin"], "total": str(d["grand_total"])}
+    cur.execute("SELECT sb_number, sb_date, port_code FROM shipping_bills WHERE sales_document_id = %s AND status <> 'draft' ORDER BY sb_date, created_at",
+                (d["original_document_id"] or d["id"],))
+    export = trade.irp_export_details(d, cur.fetchall())
+    if export:                                          # an export is not to a registered buyer: the portal takes URP, place of supply 96, the currency and the shipping bill
+        payload["export"] = export
+        payload["buyer_gstin"] = export["buyer_gstin"]
+    out = IRP.generate_irn(payload)
     cur.execute("""UPDATE sales_documents SET irn = %s, irn_ack_no = %s, irn_ack_at = now(), irn_signed_qr = %s,
                           irn_status = 'generated' WHERE id = %s""", (out["irn"], out["ack_no"], out["signed_qr"], d["id"]))
     audit(cur, d["entity_id"], "sales_document.irn_generated", "sales_documents", d["id"], after={"ack_no": out["ack_no"]},

@@ -50,6 +50,8 @@ SYSTEM_ACCOUNTS = {
     "sales": ("4000", "Sales", "income", "sales"),
     "sales_returns": ("4100", "Sales returns and credit notes", "income", "sales_returns"),
     "round_off": ("4900", "Round off", "income", "round_off"),
+    "forex_gain_loss": ("4950", "Foreign exchange gain or loss", "income", "forex_gain_loss"),
+    "bank_charges": ("5910", "Bank charges", "expense", "bank_charges"),
 }
 
 
@@ -150,6 +152,21 @@ def payroll_run_lines(t: dict) -> list[Line]:
             out.append(Line(key, credit=amount))
     if not balanced(out):
         raise PostingError("payroll run does not balance: net != gross - deductions")
+    return out
+
+
+def export_proceeds_lines(*, received: Decimal, charges: Decimal, booked: Decimal, party_id, bank_account_key: str | None = None) -> list[Line]:
+    """Money from a customer abroad. Dr bank for what was credited and Dr bank charges for what the bank kept; Cr receivable for the invoice value this settles
+    (at the invoice's rate); the difference is the foreign exchange gain (Cr) or loss (Dr)."""
+    gain = received + charges - booked
+    out = [Line(bank_account_key or "bank", debit=received)]
+    if charges:
+        out.append(Line("bank_charges", debit=charges))
+    out.append(Line("receivable", credit=booked, party_id=party_id))
+    if gain > 0:
+        out.append(Line("forex_gain_loss", credit=gain))
+    elif gain < 0:
+        out.append(Line("forex_gain_loss", debit=-gain))
     return out
 
 

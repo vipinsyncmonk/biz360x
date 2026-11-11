@@ -1,10 +1,11 @@
 /** Pure helpers for the Finance & Books and GST & Tax screens. Every figure comes from the server; nothing here does tax or ledger maths. */
-import { isoDate, sumMoney, toPaise } from "./format";
+import { formatInr, isoDate, sumMoney, toPaise } from "./format";
 import type { Tone } from "./compliance";
 
 export interface Period { id: string; fy: string; period_start: string; period_end: string; status: string; locked_at: string | null; close_progress: { done: number; total: number } }
 export interface CloseTask { id: string; task_key: string; title: string; is_automatic: boolean; done_at: string | null }
-export interface Suggestion { id: string; target_kind: string; label: string; amount: string; confidence: number; rule: string | null; status: string }
+export interface ExportHint { shipping_bill_id: string; sb_number: string | null; currency: string | null; proposed_foreign: string | null; expected_inr: string | null; difference_inr: string | null }
+export interface Suggestion { id: string; target_kind: string; label: string; amount: string; confidence: number; rule: string | null; status: string; export?: ExportHint | null }
 export interface BankTxn { id: string; txn_date: string; amount: string; description: string; counterparty_name: string | null; match_status: string; suggestions: Suggestion[] }
 export interface ReportRow { line: string; values: string[] }
 export interface Report { columns: string[]; rows: ReportRow[]; provisional: boolean }
@@ -30,6 +31,28 @@ export function closeCounts(tasks: CloseTask[]): { done: number; total: number }
 }
 
 export const confidenceLabel = (c: number) => `${Math.round(c * 100)}% match`;
+
+// ---- a credit that is money from abroad. The statement shows rupees after the bank's charges and its own rate, so it is never exact: the person gives the foreign amount and the charges.
+const MONEY = /^\d{1,13}(\.\d{1,2})?$/;
+export interface ProceedsForm { foreign: string; charges: string; firc: string }
+export const proceedsForm = (h: ExportHint): ProceedsForm => ({ foreign: h.proposed_foreign ?? "", charges: "", firc: "" });
+export function proceedsProblem(f: ProceedsForm): string | null {
+  if (!MONEY.test(f.foreign.trim()) || Number(f.foreign) <= 0) return "Enter the amount in the foreign currency, from the FIRC or the customer's advice";
+  if (f.charges.trim() && !MONEY.test(f.charges.trim())) return "Enter the bank's charges in rupees, such as 450.00";
+  return null;
+}
+export const proceedsBody = (shippingBillId: string, f: ProceedsForm) => ({
+  shipping_bill_id: shippingBillId, amount_foreign: f.foreign.trim(),
+  ...(f.charges.trim() ? { bank_charges: f.charges.trim() } : {}), ...(f.firc.trim() ? { firc_no: f.firc.trim() } : {}),
+});
+/** What the matcher saw: the amount it expected at the invoice's rate and why the credit may differ from it. */
+export function exportHintText(h: ExportHint): string {
+  if (!h.proposed_foreign) return "Looks like money from abroad";
+  const worth = h.expected_inr ? ` (${formatInr(h.expected_inr)} at the invoice rate)` : "";
+  const d = h.difference_inr == null ? 0 : toPaise(h.difference_inr);
+  const gap = d === 0n ? "The credit matches to the rupee." : `The credit is ${formatInr((h.difference_inr ?? "").replace("-", ""))} ${d < 0n ? "less" : "more"}, which the bank's charges and its own rate can explain.`;
+  return `Looks like ${[h.currency, h.proposed_foreign].filter(Boolean).join(" ")}${worth}. ${gap}`;
+}
 
 /** Report cells are two-decimal strings; the design shows ₹ lakh. Display only: rounds to one decimal using integers. */
 export function lakh(v: string): string {

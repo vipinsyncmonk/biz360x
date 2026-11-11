@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field
 
-from .core import ApiError, Auth, Principal, money, require, tx
+from . import engine
+from .core import ApiError, Auth, Principal, audit, emit, money, require, tx
 from .routes_orders import js, offset_of, page
 
 router = APIRouter()
@@ -40,7 +43,7 @@ def list_parties(entity_id: uuid.UUID, role: str | None = Query(default=None, pa
     off = offset_of(cursor)
     with tx(p.user_id) as cur:
         require(cur, entity_id, "parties:read")
-        cur.execute("""SELECT pa.id, pa.legal_name, pa.display_name, pa.is_customer, pa.is_vendor, pa.pan, pa.payment_terms_days, pa.status,
+        cur.execute("""SELECT pa.id, pa.legal_name, pa.display_name, pa.is_customer, pa.is_vendor, pa.pan, pa.payment_terms_days, pa.status, pa.country, pa.currency,
                               coalesce((SELECT json_agg(json_build_object('id', g.id, 'gstin', g.gstin, 'state_code', g.state_code,
                                                                           'taxpayer_type', g.taxpayer_type::text, 'is_default', g.is_default) ORDER BY g.is_default DESC, g.gstin)
                                           FROM party_gst_registrations g WHERE g.party_id = pa.id), '[]'::json) AS gstins,
@@ -53,6 +56,90 @@ def list_parties(entity_id: uuid.UUID, role: str | None = Query(default=None, pa
                         ORDER BY pa.legal_name, pa.id LIMIT %s OFFSET %s""", (entity_id, role, role, role, q, _like(q), _like(q), limit + 1, off))
         rows = cur.fetchall()
     return js(page(rows, limit, off))
+
+
+GSTIN = r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"
+
+
+class PartyIn(BaseModel):
+    legal_name: str = Field(min_length=2, max_length=200)
+    is_customer: bool = True
+    is_vendor: bool = False
+    country: str = Field(default="IN", pattern=r"^[A-Z]{2}$")
+    currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")           # what an overseas customer is invoiced in
+    gstin: str | None = Field(default=None, pattern=GSTIN)
+    pan: str | None = Field(default=None, pattern=r"^[A-Z]{5}[0-9]{4}[A-Z]$")
+    payment_terms_days: int | None = Field(default=None, ge=0, le=365)
+
+
+@router.post(E + "/parties", status_code=201, tags=["Parties"])
+def create_party(entity_id: uuid.UUID, body: PartyIn, p: Principal = Auth):
+    """A customer or vendor. One outside India has no GSTIN and is invoiced in a foreign currency, which is what turns its invoices into export invoices."""
+    name = body.legal_name.strip()
+    if not (body.is_customer or body.is_vendor):
+        raise ApiError(400, "validation_failed", "A party is a customer, a vendor or both", errors=[{"field": "is_customer", "message": "choose at least one"}])
+    overseas = body.country != "IN"
+    if overseas and body.gstin:
+        raise ApiError(400, "validation_failed", "A customer outside India has no GSTIN", errors=[{"field": "gstin", "message": "leave it empty for an overseas party"}])
+    if overseas and (not body.currency or body.currency == "INR"):
+        raise ApiError(400, "validation_failed", "Choose the currency this customer is invoiced in", errors=[{"field": "currency", "message": "for example USD, EUR or GBP"}])
+    if not overseas and body.currency and body.currency != "INR":
+        raise ApiError(400, "validation_failed", "Only a customer outside India is invoiced in a foreign currency", errors=[{"field": "currency", "message": "leave it as INR for an Indian party"}])
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "parties:write")
+        cur.execute("SELECT 1 FROM parties WHERE entity_id = %s AND lower(legal_name) = lower(%s) AND status <> 'archived'", (entity_id, name))
+        if cur.fetchone():
+            raise ApiError(409, "conflict", "A party with that name already exists", "Open it instead of adding it again.")
+        state = body.gstin[:2] if body.gstin else None
+        if state:
+            cur.execute("SELECT 1 FROM ref_states WHERE gst_code = %s", (state,))
+            if not cur.fetchone():
+                raise ApiError(400, "validation_failed", "That GSTIN starts with an unknown state code", errors=[{"field": "gstin", "message": "check the first two digits"}])
+        pan = body.pan or (body.gstin[2:12] if body.gstin else None)
+        cur.execute("""INSERT INTO parties (entity_id, legal_name, is_customer, is_vendor, pan, country, currency, payment_terms_days)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, coalesce(%s, 30)) RETURNING id""",
+                    (entity_id, name, body.is_customer, body.is_vendor, pan, body.country, body.currency or "INR", body.payment_terms_days))
+        pid = cur.fetchone()["id"]
+        if body.gstin or overseas:
+            cur.execute("""INSERT INTO party_gst_registrations (party_id, gstin, state_code, taxpayer_type, is_default) VALUES (%s, %s, %s, %s, true)""",
+                        (pid, body.gstin, state or "96", "overseas" if overseas else "regular"))
+        audit(cur, entity_id, "party.created", "parties", pid, after={"legal_name": name, "country": body.country, "currency": body.currency or "INR"})
+        emit(cur, entity_id, "party.created", "parties", pid, {"legal_name": name})
+        cur.execute("""SELECT pa.id, pa.legal_name, pa.is_customer, pa.is_vendor, pa.pan, pa.payment_terms_days, pa.status, pa.country, pa.currency,
+                              coalesce((SELECT json_agg(json_build_object('id', g.id, 'gstin', g.gstin, 'state_code', g.state_code, 'taxpayer_type', g.taxpayer_type::text, 'is_default', g.is_default))
+                                          FROM party_gst_registrations g WHERE g.party_id = pa.id), '[]'::json) AS gstins FROM parties pa WHERE pa.id = %s""", (pid,))
+        return js(cur.fetchone())
+
+
+class RegistrationIn(BaseModel):
+    kind: Literal["lut", "iec"]
+    number: str = Field(pattern=r"^[A-Z0-9]{10,20}$")
+    valid_from: dt.date | None = None
+    valid_until: dt.date | None = None
+    label: str | None = Field(default=None, max_length=80)
+
+
+@router.post(E + "/registrations", status_code=201, tags=["Entities"])
+def create_registration(entity_id: uuid.UUID, body: RegistrationIn, p: Principal = Auth):
+    """Record the Letter of Undertaking (what lets an export go out without IGST) or the Importer-Exporter Code. GSTINs come from onboarding; this is for the two an exporter adds."""
+    if body.kind == "lut" and not (body.valid_from and body.valid_until):
+        raise ApiError(400, "validation_failed", "A LUT is valid for a period", errors=[{"field": "valid_until", "message": "give the dates on the LUT"}])
+    if body.kind == "iec" and len(body.number) != 10:
+        raise ApiError(400, "validation_failed", "An IEC has ten characters", errors=[{"field": "number", "message": "check the code on your IEC certificate"}])
+    if body.valid_from and body.valid_until and body.valid_until < body.valid_from:
+        raise ApiError(400, "validation_failed", "It cannot end before it starts", errors=[{"field": "valid_until", "message": "choose a later date"}])
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "settings:write")
+        cur.execute("SELECT 1 FROM entity_registrations WHERE kind = %s AND number = %s", (body.kind, body.number))
+        if cur.fetchone():
+            raise ApiError(409, "conflict", "That number is already recorded")
+        cur.execute("""INSERT INTO entity_registrations (entity_id, kind, number, label, valid_from, valid_until, status)
+                       VALUES (%s, %s, %s, %s, %s, %s, 'active') RETURNING id, kind::text, number, state_code, label, gst_filing_frequency, valid_from, valid_until, status""",
+                    (entity_id, body.kind, body.number, body.label, body.valid_from, body.valid_until))
+        row = cur.fetchone()
+        audit(cur, entity_id, "registration.recorded", "entity_registrations", row["id"], after={"kind": body.kind, "number": body.number})
+        engine.run_engine(cur, entity_id, "fact_change")        # a LUT closes the year's LUT duty; an IEC makes the entity an exporter
+        return js(row)
 
 
 @router.get(E + "/sales-documents", tags=["Sales & billing"])
