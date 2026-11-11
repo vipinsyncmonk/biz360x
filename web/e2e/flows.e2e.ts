@@ -41,6 +41,18 @@ test.describe.serial("company flows", () => {
     expect(problems()).toEqual([]);
   });
 
+  test("the e-invoicing card says where turnover stands and a year's turnover can be declared", async () => {
+    await page.goto("/billing");
+    const card = page.getByRole("region", { name: "E-invoicing" });
+    await expect(card.getByText("Not required", { exact: true })).toBeVisible();                       // no earlier year is over ₹5 Cr
+    await card.getByRole("button", { name: "Turnover by year" }).click();
+    await card.getByLabel("Turnover (₹)").fill("1,20,00,000");
+    await card.getByRole("button", { name: "Declare turnover" }).click();
+    await expect(card.getByText(/1,20,00,000/).first()).toBeVisible();                // last year's declared figure now appears in the table
+    await expect(card.getByText("Not required", { exact: true })).toBeVisible();                       // ₹1.2 Cr is far from the limit
+    expect(problems()).toEqual([]);
+  });
+
   test("file a GSTR-1 with the one-time code", async () => {
     const token = await apiToken(page, OWNER);
     const me = await apiGet<Me>(page, token, "/me");

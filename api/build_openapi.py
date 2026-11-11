@@ -557,6 +557,17 @@ action(E + "/sales-documents/{id}/cancel", "Sales & billing", "cancelSalesDocume
        status="202", idem=True)
 action(E + "/sales-documents/{id}/send", "Sales & billing", "sendSalesDocument", "Email / WhatsApp the PDF and payment link", "sales:write",
        body=ref("SendRequest"), status="204")
+schema("EInvoiceYear", {"financial_year": FY, "books": NULLABLE(MONEY), "declared": NULLABLE(MONEY), "used": MONEY, "above_limit": B()},
+       required=("financial_year", "used", "above_limit"), extra={"readOnly": True})
+schema("EInvoiceStatus", {"limit": MONEY, "financial_year": FY, "applies_today": B(), "level": ENUM("clear", "approaching", "crossed", "applies"),
+                          "applies_from": NULLABLE(DATE), "crossed_in": NULLABLE(FY),
+                          "this_year": schema("EInvoiceThisYear", {"turnover": MONEY, "percent_of_limit": S()}, required=("turnover", "percent_of_limit")),
+                          "years": ARR(ref("EInvoiceYear"))},
+       required=("limit", "financial_year", "applies_today", "level", "this_year", "years"), extra={"readOnly": True})
+_op("get", E + "/einvoice-status", "Sales & billing", "getEInvoiceStatus", "Whether e-invoicing applies and the turnover it rests on", "sales:read", resp=ref("EInvoiceStatus"),
+    desc="E-invoicing starts in the financial year after the first year in which aggregate turnover went above ₹5 Cr, and stays on. A year's figure is the one declared "
+         "as an `aato` fact dated in it (`POST /facts`, for example dated 31 March), else the taxable value of the documents issued in it, less credit notes. "
+         "`level` is `approaching` from 80% of the limit in the current year and `crossed` once it has gone over, before it applies.")
 _op("get", E + "/sales-documents/{id}/pdf", "Sales & billing", "getSalesDocumentPdf", "The document as a PDF", "sales:read", params=[q("download", B(default=False), "true to save the file instead of showing it")],
     desc="Supplier, buyer, lines with their tax, totals in words, and for an export the LUT or IGST statement and the foreign amount. A draft carries a DRAFT mark "
          "and is not a valid tax invoice. The IRN and its QR code are printed once the e-invoice has been generated.",

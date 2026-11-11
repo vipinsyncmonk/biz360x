@@ -9,7 +9,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from app import invoice_pdf, ledger, tax, trade, worker
+from app import invoice_pdf, ledger, tax, trade, turnover, worker
 
 DB = os.environ["DATABASE_URL"]
 ORG = "00000000-0000-0000-0000-000000f1a000"
@@ -515,6 +515,57 @@ def test_a_draft_and_a_domestic_invoice_render_too(client):
     assert draft.status_code == 201
     r = client.get(url(f"/sales-documents/{draft.json()['id']}/pdf"), headers=o)
     assert r.status_code == 200 and r.content.startswith(b"%PDF") and r.headers["content-disposition"].find("draft") > 0
+
+
+def test_einvoicing_starts_the_year_after_turnover_first_goes_over_the_limit_and_stays():
+    cr = D("10000000")
+    used = {2024: 1 * cr, 2025: 3 * cr, 2026: 6 * cr}                                            # crossed 5 Cr during FY 2026-27
+    assert turnover.einvoice_basis(used, 2026)["applies"] is False                                # the year of crossing: earlier years were all under
+    nxt = turnover.einvoice_basis(used, 2027)
+    assert nxt["applies"] is True and nxt["crossed_year"] == 2026 and nxt["applies_from"] == dt.date(2027, 4, 1)
+    assert turnover.einvoice_basis({**used, 2027: 2 * cr}, 2028)["applies"] is True               # it stays on although turnover fell back
+    assert turnover.einvoice_basis({2025: 5 * cr}, 2026)["applies"] is False                      # exactly 5 Cr is not above it
+    assert turnover.einvoice_basis({}, 2026) == {"applies": False, "basis": None, "crossed_year": None, "applies_from": None}
+    assert turnover.einvoice_basis({2015: 9 * cr}, 2026)["applies"] is False                      # the look-back starts at 2017-18
+    assert (turnover.fy_start_year(dt.date(2027, 3, 31)), turnover.fy_start_year(dt.date(2027, 4, 1)), turnover.fy_label(2026)) == (2026, 2027, "2026-27")
+
+
+def test_crossing_the_limit_mid_year_starts_einvoicing_on_the_next_1_april(client, db):
+    o = login(client, OWNER)
+    this_fy = turnover.fy_start_year(TODAY)
+    prev_end, next_start = dt.date(this_fy, 3, 31), dt.date(this_fy + 1, 4, 1)
+    cr = 10_000_000
+
+    def declare(value, when):
+        assert client.post(url("/facts"), headers=o, json=[{"fact_key": "aato", "value": value, "as_of": str(when)}]).status_code == 201
+
+    def preview(on):
+        p = client.post(url("/sales-documents/preview"), headers=o, json=doc(S["local"], [GOODS_LINE], party_gst_id=S["local_gst"], doc_date=str(on))).json()
+        return "einvoice_required" in {c["code"] for c in p["checks"]}
+
+    st = client.get(url("/einvoice-status"), headers=o).json()                                       # nothing declared: only the small books of this test entity
+    assert st["level"] == "clear" and st["applies_today"] is False and st["applies_from"] is None and st["limit"] == "50000000.00"
+    assert not preview(TODAY)
+    declare(4 * cr, prev_end)                                                                          # last year ₹4 Cr, this year so far ₹4.2 Cr: 84% of the limit
+    declare(42_000_000, TODAY)
+    st = client.get(url("/einvoice-status"), headers=o).json()
+    assert st["level"] == "approaching" and st["this_year"] == {"turnover": "42000000.00", "percent_of_limit": "84.0"} and not st["applies_today"]
+    assert client.post(url("/compliance/engine-runs"), headers=o).status_code == 201
+    assert client.post(url("/compliance/engine-runs"), headers=o).status_code == 201
+    like = f"E-invoicing: FY {turnover.fy_label(this_fy)}%"
+    assert db.execute("SELECT count(*) AS n FROM tasks WHERE entity_id = %s AND title LIKE %s", (EN, like)).fetchone()["n"] == 1      # warned once, not on every run
+
+    declare(60 * cr // 10, TODAY)                                                                      # this year goes over ₹5 Cr
+    st = client.get(url("/einvoice-status"), headers=o).json()
+    assert st["level"] == "crossed" and st["applies_today"] is False and st["crossed_in"] == turnover.fy_label(this_fy) and st["applies_from"] == str(next_start)
+    assert not preview(TODAY) and preview(next_start)                                                  # not now, but from 1 April
+    assert [y["financial_year"] for y in st["years"]][:2] == [turnover.fy_label(this_fy), turnover.fy_label(this_fy - 1)]
+    assert st["years"][1]["declared"] == "40000000.00" and st["years"][1]["above_limit"] is False
+
+    declare(6 * cr, prev_end)                                                                          # had last year's turnover been over ₹5 Cr, it would apply today
+    st = client.get(url("/einvoice-status"), headers=o).json()
+    assert st["level"] == "applies" and st["applies_today"] is True and preview(TODAY)
+    assert client.get(url("/einvoice-status")).status_code == 401
 
 
 def test_the_audit_chain_is_intact(db):

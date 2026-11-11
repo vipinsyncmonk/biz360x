@@ -111,7 +111,7 @@ def checks(lines: list[Line], ctx: Context, res: Result) -> list[dict]:
     if ctx.is_export:
         out.extend(export_checks(lines, ctx, res))
     if ctx.aato is not None and ctx.aato > EINVOICE_AATO and (ctx.buyer_gstin or ctx.is_export) and ctx.gst_adjusted:
-        out.append(check("einvoice_required", "ok", "E-invoice required.", "Turnover is above ₹5 Cr — the IRN is generated on issue."))
+        out.append(check("einvoice_required", "ok", "E-invoice required.", "Turnover was above ₹5 Cr in an earlier year, so the IRN is generated on issue."))
     goods = sum((r2(ln.taxable * (1 + ln.gst_rate / 100)) for ln in lines if not ln.is_service), Decimal("0"))
     if ctx.doc_type == "tax_invoice":
         if goods > EWAY_THRESHOLD:

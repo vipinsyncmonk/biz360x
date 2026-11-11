@@ -6,6 +6,7 @@ import { DOC_TYPE_LABEL, ISSUE_BODY, TABS, ageLabel, docStatus, einvoiceLabel, t
 import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { EInvoiceCard } from "@/components/EInvoiceCard";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
 interface Summary { invoiced: string; collected: string; outstanding: string; overdue: string; overdue_count: number; tds_to_claim: string; collected_by_method: Record<string, string> }
@@ -58,6 +59,7 @@ export default function Billing() {
       </div>
 
       <ErrorNote error={summary.error} />
+      {id && <EInvoiceCard entityId={id} />}
       <section aria-label="Key numbers" className="kpis">
         <Tile label="Invoiced this FY" value={s ? formatInr(s.invoiced, { decimals: false }) : "…"} note="Issued, net of credit notes" />
         <Tile label="Collected this FY" value={s ? formatInr(s.collected, { decimals: false }) : "…"} note="Confirmed receipts" />

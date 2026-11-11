@@ -1283,6 +1283,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/einvoice-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether e-invoicing applies and the turnover it rests on
+         * @description E-invoicing starts in the financial year after the first year in which aggregate turnover went above ₹5 Cr, and stays on. A year's figure is the one declared as an `aato` fact dated in it (`POST /facts`, for example dated 31 March), else the taxable value of the documents issued in it, less credit notes. `level` is `approaching` from 80% of the limit in the current year and `crossed` once it has gone over, before it applies.
+         */
+        get: operations["getEInvoiceStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/sales-documents/{id}/pdf": {
         parameters: {
             query?: never;
@@ -5355,6 +5375,28 @@ export interface components {
             /** @enum {string} */
             reason: "duplicate" | "data_entry_mistake" | "order_cancelled" | "other";
             remark?: string;
+        };
+        EInvoiceYear: {
+            financial_year: components["schemas"]["FyLabel"];
+            books?: components["schemas"]["Money"] | null;
+            declared?: components["schemas"]["Money"] | null;
+            used: components["schemas"]["Money"];
+            above_limit: boolean;
+        };
+        EInvoiceThisYear: {
+            turnover: components["schemas"]["Money"];
+            percent_of_limit: string;
+        };
+        EInvoiceStatus: {
+            limit: components["schemas"]["Money"];
+            financial_year: components["schemas"]["FyLabel"];
+            applies_today: boolean;
+            /** @enum {string} */
+            level: "clear" | "approaching" | "crossed" | "applies";
+            applies_from?: string | null;
+            crossed_in?: components["schemas"]["FyLabel"] | null;
+            this_year: components["schemas"]["EInvoiceThisYear"];
+            years: components["schemas"]["EInvoiceYear"][];
         };
         CreditNoteRequest: {
             /** @enum {string} */
@@ -10526,6 +10568,35 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getEInvoiceStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EInvoiceStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };

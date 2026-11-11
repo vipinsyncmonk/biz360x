@@ -3458,6 +3458,39 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: sales:write
+  /entities/{entityId}/einvoice-status:
+    get:
+      tags:
+      - Sales & billing
+      operationId: getEInvoiceStatus
+      summary: Whether e-invoicing applies and the turnover it rests on
+      description: E-invoicing starts in the financial year after the first year in which aggregate turnover went above ₹5
+        Cr, and stays on. A year's figure is the one declared as an `aato` fact dated in it (`POST /facts`, for example dated
+        31 March), else the taxable value of the documents issued in it, less credit notes. `level` is `approaching` from
+        80% of the limit in the current year and `crossed` once it has gone over, before it applies.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EInvoiceStatus'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: sales:read
   /entities/{entityId}/sales-documents/{id}/pdf:
     get:
       tags:
@@ -14110,6 +14143,77 @@ components:
           type: string
       required:
       - reason
+    EInvoiceYear:
+      type: object
+      properties:
+        financial_year:
+          $ref: '#/components/schemas/FyLabel'
+        books:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        declared:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        used:
+          $ref: '#/components/schemas/Money'
+        above_limit:
+          type: boolean
+      required:
+      - financial_year
+      - used
+      - above_limit
+      readOnly: true
+    EInvoiceThisYear:
+      type: object
+      properties:
+        turnover:
+          $ref: '#/components/schemas/Money'
+        percent_of_limit:
+          type: string
+      required:
+      - turnover
+      - percent_of_limit
+    EInvoiceStatus:
+      type: object
+      properties:
+        limit:
+          $ref: '#/components/schemas/Money'
+        financial_year:
+          $ref: '#/components/schemas/FyLabel'
+        applies_today:
+          type: boolean
+        level:
+          type: string
+          enum:
+          - clear
+          - approaching
+          - crossed
+          - applies
+        applies_from:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        crossed_in:
+          oneOf:
+          - $ref: '#/components/schemas/FyLabel'
+          - type: 'null'
+        this_year:
+          $ref: '#/components/schemas/EInvoiceThisYear'
+        years:
+          type: array
+          items:
+            $ref: '#/components/schemas/EInvoiceYear'
+      required:
+      - limit
+      - financial_year
+      - applies_today
+      - level
+      - this_year
+      - years
+      readOnly: true
     CreditNoteRequest:
       type: object
       properties:

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ledger, tax, trade
+from . import ledger, tax, trade, turnover
 from .core import (ApiError, Auth, Principal, audit, emit, etag_of, idempotency_begin, idempotency_finish, jsonable, money,
                    require, tx)
 
@@ -71,8 +71,7 @@ def _context(cur, entity_id, body: SalesDocIn):
         gst = cur.fetchone()
         if not gst:
             raise ApiError(400, "validation_failed", "party_gst_id does not belong to the party")
-    cur.execute("SELECT value_num FROM entity_facts_current WHERE entity_id = %s AND fact_key = 'aato'", (entity_id,))
-    f = cur.fetchone()
+    basis = turnover.basis_for(cur, entity_id, body.doc_date)      # the highest turnover of the years before this document's year
     cur.execute("SELECT udyam_class::text FROM entities WHERE id = %s", (entity_id,))
     cls = cur.fetchone()["udyam_class"]
     original_date = original = None
@@ -91,7 +90,7 @@ def _context(cur, entity_id, body: SalesDocIn):
     pos = "96" if ex["is_export"] else body.place_of_supply or (gst["state_code"] if gst else reg["state_code"])
     terms = body.payment_terms_days if body.payment_terms_days is not None else party["payment_terms_days"]
     ctx = tax.Context(doc_type=ex["doc_type"], supplier_state=reg["state_code"], place_of_supply=pos, doc_date=body.doc_date,
-                      buyer_gstin=gst["gstin"] if gst else None, aato=f["value_num"] if f else None,
+                      buyer_gstin=gst["gstin"] if gst else None, aato=basis,
                       deducts_194q=party["deducts_tds_194q"], payment_terms_days=terms,
                       supplier_is_mse=cls in ("micro", "small"), original_doc_date=original_date, gst_adjusted=body.gst_adjusted,
                       is_export=ex["is_export"], zero_rated=ex["zero_rated"], lut=ex["lut"],
@@ -236,6 +235,23 @@ def get_document(entity_id: uuid.UUID, doc_id: uuid.UUID, response: Response, p:
         doc = load_document(cur, entity_id, doc_id)
     response.headers["ETag"] = etag_of(doc)
     return doc
+
+
+def _status_out(s: dict) -> dict:
+    return {"limit": money(s["limit"]), "financial_year": s["financial_year"], "applies_today": s["applies_today"], "level": s["level"],
+            "applies_from": s["applies_from"].isoformat() if s["applies_from"] else None, "crossed_in": s["crossed_in"],
+            "this_year": {"turnover": money(s["this_year"]["turnover"]), "percent_of_limit": str(s["this_year"]["percent_of_limit"])},
+            "years": [{"financial_year": y["financial_year"], "books": money(y["books"]) if y["books"] is not None else None,
+                       "declared": money(y["declared"]) if y["declared"] is not None else None, "used": money(y["used"]), "above_limit": y["above_limit"]} for y in s["years"]]}
+
+
+@router.get(E + "/einvoice-status", tags=["Sales & billing"])
+def einvoice_status(entity_id: uuid.UUID, p: Principal = Auth):
+    """Whether e-invoicing applies, from which year, and the turnover it rests on. It starts the financial year after turnover first went above ₹5 Cr
+    and stays on. A year's figure is the one declared as an `aato` fact dated in it, else what the books show."""
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "sales:read")
+        return _status_out(turnover.status(cur, entity_id))
 
 
 @router.get(E + "/sales-documents/{doc_id}/pdf", tags=["Sales & billing"])
