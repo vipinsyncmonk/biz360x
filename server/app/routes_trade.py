@@ -5,7 +5,10 @@ worked out in the database from the foreign amount and the exchange rate, and th
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import datetime as dt
+import re
 import uuid
 from decimal import Decimal
 from typing import Literal
@@ -14,11 +17,12 @@ from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ledger, trade
+from . import boe_parse, ledger, storage, trade
 from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, require, tx
 from .routes_finance import txn_out
 from .routes_orders import js, offset_of, page
 from .routes_sales import check_shipment_total, reconcile_shipments
+from .routes_vault import link_document, store_document
 
 router = APIRouter()
 E = "/entities/{entity_id}"
@@ -376,6 +380,9 @@ class BoeIn(BaseModel):
     other_duty: Money = Field(default=Decimal(0), ge=0, max_digits=15, decimal_places=2)
     status: BOE_STATUS = "filed"
     duty_paid_on: dt.date | None = None
+    document_id: uuid.UUID | None = None                              # the customs PDF already in the vault (from /bills-of-entry/read)
+    new_supplier_name: str | None = Field(default=None, min_length=2, max_length=200)    # add this overseas supplier when supplier_party_id is not given
+    new_supplier_country: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
 
 
 class BoePatch(BaseModel):
@@ -390,7 +397,8 @@ class BoePatch(BaseModel):
 
 BOE_SQL = """SELECT b.id, b.boe_number, b.boe_date, b.port_code, b.currency, b.cif_foreign, b.exchange_rate::text AS exchange_rate, b.cif_inr, b.bcd, b.sws, b.igst, b.other_duty, b.duty_total,
                     b.status, b.duty_paid_on, b.supplier_party_id, p.legal_name AS supplier_name, b.purchase_bill_id,
-                    CASE WHEN b.status IN ('duty_paid', 'cleared') THEN b.igst ELSE 0 END AS igst_credit
+                    CASE WHEN b.status IN ('duty_paid', 'cleared') THEN b.igst ELSE 0 END AS igst_credit,
+                    (SELECT l.document_id FROM document_links l WHERE l.subject = 'bills_of_entry' AND l.subject_id = b.id ORDER BY l.document_id LIMIT 1) AS document_id
                FROM bills_of_entry b LEFT JOIN parties p ON p.id = b.supplier_party_id"""
 
 
@@ -413,6 +421,92 @@ def _check_boe_links(cur, entity_id, supplier, bill) -> None:
             raise ApiError(400, "validation_failed", "Unknown purchase bill", errors=[{"field": "purchase_bill_id", "message": "not one of this company's bills"}])
 
 
+COMPANY_WORDS = {"co", "company", "ltd", "limited", "inc", "incorporated", "corp", "corporation", "llc", "pte", "gmbh", "sa", "bv", "ag", "pvt", "private", "plc", "kk"}
+
+
+def _name_key(name: str) -> str:
+    """A supplier's name without punctuation or company suffixes, so "FURUNO ELECTRIC CO., LTD" and "Furuno Electric Co Ltd" are the same."""
+    return " ".join(w for w in re.sub(r"[^a-z0-9]+", " ", name.lower()).split() if w not in COMPANY_WORDS)
+
+
+def _find_vendor(cur, entity_id, name: str):
+    key = _name_key(name)
+    if not key:
+        return None
+    cur.execute("SELECT id, legal_name FROM parties WHERE entity_id = %s AND is_vendor AND status <> 'archived'", (entity_id,))
+    return next((r for r in cur.fetchall() if _name_key(r["legal_name"]) == key), None)
+
+
+def _supplier_for(cur, entity_id, name: str, country: str | None, currency: str):
+    """The vendor with this name, added as an overseas supplier when the company does not have one yet."""
+    found = _find_vendor(cur, entity_id, name)
+    if found:
+        return found["id"]
+    overseas = bool(country and country != "IN")
+    cur.execute("INSERT INTO parties (entity_id, legal_name, is_customer, is_vendor, country, currency) VALUES (%s, %s, false, true, coalesce(%s, 'IN'), %s) RETURNING id",
+                (entity_id, name.strip(), country, currency))
+    pid = cur.fetchone()["id"]
+    if overseas:
+        cur.execute("INSERT INTO party_gst_registrations (party_id, gstin, state_code, taxpayer_type, is_default) VALUES (%s, NULL, '96', 'overseas', true)", (pid,))
+    audit(cur, entity_id, "party.created", "parties", pid, after={"legal_name": name.strip(), "country": country, "currency": currency, "from": "bill_of_entry"})
+    emit(cur, entity_id, "party.created", "parties", pid, {"legal_name": name.strip()})
+    return pid
+
+
+class BoeFile(BaseModel):
+    file_name: str = Field(min_length=1, max_length=255)
+    content_base64: str = Field(min_length=8)
+
+
+def _text(v) -> str | None:
+    return None if v is None else str(v)
+
+
+@router.post(E + "/bills-of-entry/read", tags=["Export & import"])
+def read_bill_of_entry(entity_id: uuid.UUID, body: BoeFile, p: Principal = Auth):
+    """Read the customs PDF, keep it in the vault and return the figures for a person to check. Nothing is recorded until they confirm
+    with POST /bills-of-entry (passing document_id)."""
+    try:
+        data = base64.b64decode(body.content_base64, validate=True)
+    except (binascii.Error, ValueError):
+        raise ApiError(400, "validation_failed", "The file was not sent correctly", errors=[{"field": "content_base64", "message": "not valid base64"}])
+    if len(data) > storage.MAX_BYTES:
+        raise ApiError(400, "validation_failed", f"Files are limited to {storage.MAX_BYTES // (1024 * 1024)} MB")
+    if not data.startswith(b"%PDF"):
+        raise ApiError(422, "not_a_bill_of_entry", "Upload the bill of entry as the PDF customs issued", "Photos and scans cannot be read yet; enter the figures by hand.")
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "trade:write")
+        require(cur, entity_id, "documents:write")
+        try:
+            b = boe_parse.parse_boe(boe_parse.read_pdf_text(data))
+        except boe_parse.NotABillOfEntry as e:
+            raise ApiError(422, "not_a_bill_of_entry", str(e), "Upload the assessed copy of the bill of entry from ICEGATE, as a PDF with selectable text.")
+        warnings = list(b["warnings"])
+        cur.execute("SELECT kind::text, number FROM entity_registrations WHERE entity_id = %s AND kind IN ('gstin', 'iec') AND status = 'active'", (entity_id,))
+        regs = cur.fetchall()
+        mine = {k: sorted(r["number"] for r in regs if r["kind"] == k) for k in ("gstin", "iec")}
+        if b["importer_gstin"] and mine["gstin"] and b["importer_gstin"] not in mine["gstin"]:
+            warnings.append(f"This bill of entry is made out to GSTIN {b['importer_gstin']}{' (' + b['importer_name'] + ')' if b['importer_name'] else ''}, which is not one of this company's registrations. Check it is the right company before recording.")
+        elif b["importer_iec"] and mine["iec"] and b["importer_iec"] not in mine["iec"]:
+            warnings.append(f"This bill of entry is made out to IEC {b['importer_iec']}, not this company's {mine['iec'][0]}. Check it is the right company before recording.")
+        cur.execute("SELECT id FROM bills_of_entry WHERE entity_id = %s AND port_code = %s AND boe_number = %s AND boe_date = %s", (entity_id, b["port_code"], b["boe_number"], b["boe_date"]))
+        existing = cur.fetchone()
+        supplier = _find_vendor(cur, entity_id, b["supplier_name"]) if b["supplier_name"] else None
+        links = [("bills_of_entry", existing["id"], "evidence")] if existing else []
+        doc = store_document(cur, entity_id, folder="purchases", title=f"Bill of entry {b['boe_number']} · {b['boe_date']:%d %b %Y}", file_name=body.file_name, mime="application/pdf",
+                             data=data, source="upload", links=links, period_label=f"{b['boe_date']:%Y-%m}")
+        return {
+            "document_id": doc, "existing_boe_id": existing["id"] if existing else None, "warnings": warnings,
+            "boe_number": b["boe_number"], "boe_date": b["boe_date"].isoformat(), "port_code": b["port_code"], "currency": b["currency"],
+            "cif_foreign": _text(b["cif_foreign"]), "exchange_rate": _text(b["exchange_rate"]),
+            "bcd": str(b["bcd"].quantize(CENT)), "sws": str(b["sws"].quantize(CENT)), "igst": str(b["igst"].quantize(CENT)), "other_duty": str(b["other_duty"].quantize(CENT)),
+            "status": b["status"], "duty_paid_on": b["duty_paid_on"].isoformat() if b["duty_paid_on"] else None,
+            "supplier_name": b["supplier_name"], "supplier_country": b["supplier_country"], "supplier_party_id": supplier["id"] if supplier else None,
+            "invoice_number": b["invoice_number"], "incoterm": b["incoterm"], "challan_number": b["challan_number"],
+            "importer_name": b["importer_name"], "importer_gstin": b["importer_gstin"],
+        }
+
+
 @router.post(E + "/bills-of-entry", status_code=201, tags=["Export & import"])
 def create_bill_of_entry(entity_id: uuid.UUID, body: BoeIn, p: Principal = Auth):
     with tx(p.user_id) as cur:
@@ -422,11 +516,18 @@ def create_bill_of_entry(entity_id: uuid.UUID, body: BoeIn, p: Principal = Auth)
         if body.status in ("duty_paid", "cleared") and not body.duty_paid_on:
             raise ApiError(400, "validation_failed", "Say when the duty was paid", errors=[{"field": "duty_paid_on", "message": "required once duty is paid"}])
         _check_boe_links(cur, entity_id, body.supplier_party_id, body.purchase_bill_id)
+        if body.document_id:
+            cur.execute("SELECT 1 FROM documents WHERE id = %s AND entity_id = %s", (body.document_id, entity_id))
+            if not cur.fetchone():
+                raise ApiError(400, "validation_failed", "Unknown document", errors=[{"field": "document_id", "message": "not a document in this company's vault"}])
+        supplier = body.supplier_party_id or (_supplier_for(cur, entity_id, body.new_supplier_name, body.new_supplier_country, body.currency) if body.new_supplier_name else None)
         cur.execute("""INSERT INTO bills_of_entry (entity_id, supplier_party_id, purchase_bill_id, boe_number, boe_date, port_code, currency, cif_foreign, exchange_rate, bcd, sws, igst, other_duty, status, duty_paid_on)
                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                    (entity_id, body.supplier_party_id, body.purchase_bill_id, body.boe_number, body.boe_date, body.port_code, body.currency, body.cif_foreign, body.exchange_rate,
+                    (entity_id, supplier, body.purchase_bill_id, body.boe_number, body.boe_date, body.port_code, body.currency, body.cif_foreign, body.exchange_rate,
                      body.bcd, body.sws, body.igst, body.other_duty, body.status, body.duty_paid_on))
         bid = cur.fetchone()["id"]
+        if body.document_id:
+            link_document(cur, body.document_id, "bills_of_entry", bid, "evidence")
         audit(cur, entity_id, "bill_of_entry.recorded", "bills_of_entry", bid, after={"boe_number": body.boe_number, "igst": body.igst})
         emit(cur, entity_id, "bill_of_entry.recorded", "bills_of_entry", bid, {"boe_number": body.boe_number})
         return _boe_out(cur, entity_id, bid)
