@@ -60,6 +60,11 @@ SYSTEM_ACCOUNTS = {
     "rent_expense": ("5390", "Rent", "expense", "rent_expense"),
     "utilities_expense": ("5391", "Electricity, telephone and internet", "expense", "utilities_expense"),
     "insurance_expense": ("5392", "Insurance", "expense", "insurance_expense"),
+    # fixed assets
+    "fixed_assets": ("1500", "Fixed assets at cost", "asset", "fixed_assets"),
+    "accumulated_depreciation": ("1550", "Accumulated depreciation", "asset", "accumulated_depreciation"),
+    "depreciation_expense": ("5300", "Depreciation", "expense", "depreciation_expense"),
+    "asset_disposal_gain_loss": ("4960", "Profit or loss on sale of assets", "income", "asset_disposal"),
 }
 
 

@@ -70,6 +70,9 @@ tags:
   description: Shipping bills and the realisation of export proceeds, bills of entry and the duty paid on them, the LUT, RoDTEP
     and drawback claims. A person records what customs and the bank issued; nothing calls ICEGATE, DGFT or a bank. Proceeds
     recorded with the rupees the bank credited settle the export invoice and post the foreign exchange gain or loss.
+- name: Fixed assets
+  description: The register of what the company owns, monthly depreciation posted to the ledger, and the sale of an asset.
+    Companies Act (books) depreciation; the lives are a starter list for a CA to review.
 - name: Portals & jobs
   description: Government / bank connections, OTP sessions, sync jobs and the job resource
 - name: Copilot
@@ -10104,6 +10107,262 @@ paths:
         '429':
           $ref: '#/components/responses/TooMany'
       x-permission: trade:read
+  /entities/{entityId}/fixed-asset-categories:
+    get:
+      tags:
+      - Fixed assets
+      operationId: listFixedAssetCategories
+      summary: The categories with their usual life and residual value
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixedAssetCategoryList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+  /entities/{entityId}/fixed-assets:
+    get:
+      tags:
+      - Fixed assets
+      operationId: listFixedAssets
+      summary: List fixed assets with totals for those in use
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - in_use
+          - disposed
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixedAssetList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+    post:
+      tags:
+      - Fixed assets
+      operationId: createFixedAsset
+      summary: Register a fixed asset
+      description: With booking `reclassify` the cost is moved to Fixed assets in the same transaction (a locked period refuses
+        it).
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixedAsset'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixedAsset'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/fixed-assets/{id}:
+    get:
+      tags:
+      - Fixed assets
+      operationId: getFixedAsset
+      summary: Get a fixed asset with its depreciation schedule
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: through
+        in: query
+        schema:
+          type: string
+          format: date
+        description: Show the schedule up to this date; the default is the end of this financial year
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixedAsset'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+  /entities/{entityId}/fixed-assets/{id}/dispose:
+    post:
+      tags:
+      - Fixed assets
+      operationId: disposeFixedAsset
+      summary: Sell or write off an asset
+      description: Depreciation up to the month before must already be posted (`depreciation_pending`). The part month is
+        charged, and the gain or loss against the book value is posted. GST on the sale is not posted.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisposeFixedAsset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixedAsset'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/depreciation/preview:
+    get:
+      tags:
+      - Fixed assets
+      operationId: previewDepreciation
+      summary: What running depreciation up to a month would post
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: period
+        in: query
+        schema:
+          type: string
+          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])$
+        description: YYYY-MM, this month or earlier
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepreciationPreview'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+  /entities/{entityId}/depreciation/run:
+    post:
+      tags:
+      - Fixed assets
+      operationId: runDepreciation
+      summary: Post depreciation up to a month
+      description: One journal per month not yet posted, covering all assets. Running a month that is already posted posts
+        nothing.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepreciationRun'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepreciationRunResult'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
   /entities/{entityId}/portal-connections:
     get:
       tags:
@@ -18986,6 +19245,281 @@ components:
           $ref: '#/components/schemas/ClaimTotals'
         imports:
           $ref: '#/components/schemas/ImportTotals'
+    FixedAssetCategory:
+      type: object
+      properties:
+        category:
+          type: string
+        label:
+          type: string
+        life_months:
+          type: integer
+          description: Useful life under Schedule II
+        income_tax_rate_pct:
+          type: integer
+          description: Block rate, for reference only
+        residual_pct:
+          $ref: '#/components/schemas/Money'
+    FixedAssetCategoryList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FixedAssetCategory'
+    DepreciationRow:
+      type: object
+      properties:
+        month:
+          type: string
+          format: date
+        amount:
+          $ref: '#/components/schemas/Money'
+        book_value_after:
+          $ref: '#/components/schemas/Money'
+        posted:
+          type: boolean
+    FixedAsset:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        asset_no:
+          type: string
+          readOnly: true
+        name:
+          type: string
+        category:
+          type: string
+          enum:
+          - building
+          - plant_machinery
+          - furniture
+          - office_equipment
+          - computers
+          - servers_networks
+          - vehicles
+          - electrical
+          - software
+          - other
+        location:
+          oneOf:
+          - type: string
+          - type: 'null'
+        serial_no:
+          oneOf:
+          - type: string
+          - type: 'null'
+        party_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        purchase_bill_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        bill_of_entry_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        document_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        acquired_on:
+          type: string
+          format: date
+        put_to_use_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        cost:
+          $ref: '#/components/schemas/Money'
+          description: 'What is capitalised: price, duty, freight and installation, without GST that is claimed as credit'
+        residual_value:
+          $ref: '#/components/schemas/Money'
+          description: Defaults to 5% of cost (nothing for software)
+        method:
+          type: string
+          enum:
+          - slm
+          - wdv
+        life_months:
+          oneOf:
+          - type: integer
+          - type: 'null'
+        rate_pct:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        booking:
+          type: string
+          enum:
+          - reclassify
+          - already_booked
+          - opening
+          description: reclassify moves the cost from Purchases and expenses to Fixed assets; already_booked only records
+            it; opening is an asset from earlier books
+        opening_accumulated:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        opening_through:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - in_use
+          - disposed
+          readOnly: true
+        disposed_on:
+          oneOf:
+          - type: string
+            format: date
+            readOnly: true
+          - type: 'null'
+        disposal_proceeds:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+            readOnly: true
+          - type: 'null'
+        accumulated_depreciation:
+          $ref: '#/components/schemas/Money'
+          readOnly: true
+        book_value:
+          $ref: '#/components/schemas/Money'
+          readOnly: true
+        gain_or_loss:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+            readOnly: true
+          - type: 'null'
+        schedule:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepreciationRow'
+          readOnly: true
+          description: 'On the single-asset read: months posted and the coming months to the end of the financial year'
+      required:
+      - name
+      - category
+      - acquired_on
+      - cost
+    FixedAssetTotals:
+      type: object
+      properties:
+        cost:
+          $ref: '#/components/schemas/Money'
+        accumulated_depreciation:
+          $ref: '#/components/schemas/Money'
+        book_value:
+          $ref: '#/components/schemas/Money'
+    FixedAssetList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FixedAsset'
+        totals:
+          $ref: '#/components/schemas/FixedAssetTotals'
+    DisposeFixedAsset:
+      type: object
+      properties:
+        disposed_on:
+          type: string
+          format: date
+        proceeds:
+          $ref: '#/components/schemas/Money'
+        proceeds_account_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+      required:
+      - disposed_on
+      - proceeds
+    DepreciationAsset:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+        asset_no:
+          type: string
+        name:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        book_value_after:
+          $ref: '#/components/schemas/Money'
+    DepreciationMonth:
+      type: object
+      properties:
+        month:
+          type: string
+          format: date
+        total:
+          $ref: '#/components/schemas/Money'
+        assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepreciationAsset'
+    DepreciationPreview:
+      type: object
+      properties:
+        period:
+          type: string
+        total:
+          $ref: '#/components/schemas/Money'
+        months:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepreciationMonth'
+    DepreciationRun:
+      type: object
+      properties:
+        period:
+          type: string
+          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])$
+      required:
+      - period
+    DepreciationJournal:
+      type: object
+      properties:
+        month:
+          type: string
+          format: date
+        journal_entry_id:
+          type: string
+          format: uuid
+        entry_no:
+          type: string
+        total:
+          $ref: '#/components/schemas/Money'
+        assets:
+          type: integer
+    DepreciationRunResult:
+      type: object
+      properties:
+        period:
+          type: string
+        total:
+          $ref: '#/components/schemas/Money'
+        journals:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepreciationJournal'
     PortalConnection:
       type: object
       properties:

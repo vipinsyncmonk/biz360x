@@ -3771,6 +3771,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/fixed-asset-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The categories with their usual life and residual value */
+        get: operations["listFixedAssetCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/fixed-assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List fixed assets with totals for those in use */
+        get: operations["listFixedAssets"];
+        put?: never;
+        /**
+         * Register a fixed asset
+         * @description With booking `reclassify` the cost is moved to Fixed assets in the same transaction (a locked period refuses it).
+         */
+        post: operations["createFixedAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/fixed-assets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a fixed asset with its depreciation schedule */
+        get: operations["getFixedAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/fixed-assets/{id}/dispose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sell or write off an asset
+         * @description Depreciation up to the month before must already be posted (`depreciation_pending`). The part month is charged, and the gain or loss against the book value is posted. GST on the sale is not posted.
+         */
+        post: operations["disposeFixedAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/depreciation/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What running depreciation up to a month would post */
+        get: operations["previewDepreciation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/depreciation/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post depreciation up to a month
+         * @description One journal per month not yet posted, covering all assets. Running a month that is already posted posts nothing.
+         */
+        post: operations["runDepreciation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/portal-connections": {
         parameters: {
             query?: never;
@@ -7130,6 +7242,117 @@ export interface components {
             realisation?: components["schemas"]["RealisationTotals"];
             claims?: components["schemas"]["ClaimTotals"];
             imports?: components["schemas"]["ImportTotals"];
+        };
+        FixedAssetCategory: {
+            category?: string;
+            label?: string;
+            /** @description Useful life under Schedule II */
+            life_months?: number;
+            /** @description Block rate, for reference only */
+            income_tax_rate_pct?: number;
+            residual_pct?: components["schemas"]["Money"];
+        };
+        FixedAssetCategoryList: {
+            data?: components["schemas"]["FixedAssetCategory"][];
+        };
+        DepreciationRow: {
+            /** Format: date */
+            month?: string;
+            amount?: components["schemas"]["Money"];
+            book_value_after?: components["schemas"]["Money"];
+            posted?: boolean;
+        };
+        FixedAsset: {
+            /** Format: uuid */
+            readonly id?: string;
+            readonly asset_no?: string;
+            name: string;
+            /** @enum {string} */
+            category: "building" | "plant_machinery" | "furniture" | "office_equipment" | "computers" | "servers_networks" | "vehicles" | "electrical" | "software" | "other";
+            location?: string | null;
+            serial_no?: string | null;
+            party_id?: string | null;
+            purchase_bill_id?: string | null;
+            bill_of_entry_id?: string | null;
+            document_id?: string | null;
+            /** Format: date */
+            acquired_on: string;
+            put_to_use_on?: string | null;
+            /** @description What is capitalised: price, duty, freight and installation, without GST that is claimed as credit */
+            cost: components["schemas"]["Money"];
+            /** @description Defaults to 5% of cost (nothing for software) */
+            residual_value?: components["schemas"]["Money"];
+            /** @enum {string} */
+            method?: "slm" | "wdv";
+            life_months?: number | null;
+            rate_pct?: components["schemas"]["Money"] | null;
+            /**
+             * @description reclassify moves the cost from Purchases and expenses to Fixed assets; already_booked only records it; opening is an asset from earlier books
+             * @enum {string}
+             */
+            booking?: "reclassify" | "already_booked" | "opening";
+            opening_accumulated?: components["schemas"]["Money"] | null;
+            opening_through?: string | null;
+            /** @enum {string} */
+            readonly status?: "in_use" | "disposed";
+            disposed_on?: string | null;
+            disposal_proceeds?: components["schemas"]["Money"] | null;
+            readonly accumulated_depreciation?: components["schemas"]["Money"];
+            readonly book_value?: components["schemas"]["Money"];
+            gain_or_loss?: components["schemas"]["Money"] | null;
+            /** @description On the single-asset read: months posted and the coming months to the end of the financial year */
+            readonly schedule?: components["schemas"]["DepreciationRow"][];
+        };
+        FixedAssetTotals: {
+            cost?: components["schemas"]["Money"];
+            accumulated_depreciation?: components["schemas"]["Money"];
+            book_value?: components["schemas"]["Money"];
+        };
+        FixedAssetList: {
+            data?: components["schemas"]["FixedAsset"][];
+            totals?: components["schemas"]["FixedAssetTotals"];
+        };
+        DisposeFixedAsset: {
+            /** Format: date */
+            disposed_on: string;
+            proceeds: components["schemas"]["Money"];
+            proceeds_account_id?: string | null;
+        };
+        DepreciationAsset: {
+            /** Format: uuid */
+            asset_id?: string;
+            asset_no?: string;
+            name?: string;
+            amount?: components["schemas"]["Money"];
+            book_value_after?: components["schemas"]["Money"];
+        };
+        DepreciationMonth: {
+            /** Format: date */
+            month?: string;
+            total?: components["schemas"]["Money"];
+            assets?: components["schemas"]["DepreciationAsset"][];
+        };
+        DepreciationPreview: {
+            period?: string;
+            total?: components["schemas"]["Money"];
+            months?: components["schemas"]["DepreciationMonth"][];
+        };
+        DepreciationRun: {
+            period: string;
+        };
+        DepreciationJournal: {
+            /** Format: date */
+            month?: string;
+            /** Format: uuid */
+            journal_entry_id?: string;
+            entry_no?: string;
+            total?: components["schemas"]["Money"];
+            assets?: number;
+        };
+        DepreciationRunResult: {
+            period?: string;
+            total?: components["schemas"]["Money"];
+            journals?: components["schemas"]["DepreciationJournal"][];
         };
         PortalConnection: {
             /** Format: uuid */
@@ -17085,6 +17308,243 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listFixedAssetCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedAssetCategoryList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listFixedAssets: {
+        parameters: {
+            query?: {
+                status?: "in_use" | "disposed";
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedAssetList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    createFixedAsset: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FixedAsset"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedAsset"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getFixedAsset: {
+        parameters: {
+            query?: {
+                /** @description Show the schedule up to this date; the default is the end of this financial year */
+                through?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedAsset"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    disposeFixedAsset: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisposeFixedAsset"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedAsset"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    previewDepreciation: {
+        parameters: {
+            query?: {
+                /** @description YYYY-MM, this month or earlier */
+                period?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepreciationPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    runDepreciation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepreciationRun"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepreciationRunResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             429: components["responses"]["TooMany"];
         };
     };

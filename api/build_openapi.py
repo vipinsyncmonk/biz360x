@@ -1115,6 +1115,46 @@ schema("TradeSummary", {
 _op("get", E + "/trade/summary", "Export & import", "getTradeSummary", "Where exports and imports stand this financial year", "trade:read", resp=ref("TradeSummary"),
     desc="Exports and imports are counted from 1 April. The LUT is read from the company's LUT registration.")
 
+# =================================================================== FIXED ASSETS
+tag("Fixed assets", "The register of what the company owns, monthly depreciation posted to the ledger, and the sale of an asset. Companies Act (books) depreciation; the lives are a starter list for a CA to review.")
+schema("FixedAssetCategory", {"category": S(), "label": S(), "life_months": I(description="Useful life under Schedule II"), "income_tax_rate_pct": I(description="Block rate, for reference only"), "residual_pct": MONEY})
+_op("get", E + "/fixed-asset-categories", "Fixed assets", "listFixedAssetCategories", "The categories with their usual life and residual value", "finance:read",
+    resp=schema("FixedAssetCategoryList", {"data": ARR(ref("FixedAssetCategory"))}))
+schema("DepreciationRow", {"month": DATE, "amount": MONEY, "book_value_after": MONEY, "posted": B()})
+ASSET_CATEGORY = ENUM("building", "plant_machinery", "furniture", "office_equipment", "computers", "servers_networks", "vehicles", "electrical", "software", "other")
+schema("FixedAsset", {
+    "id": RO_UUID, "asset_no": S(readOnly=True), "name": S(), "category": ASSET_CATEGORY, "location": NULLABLE(S()), "serial_no": NULLABLE(S()),
+    "party_id": NULLABLE(UUID), "purchase_bill_id": NULLABLE(UUID), "bill_of_entry_id": NULLABLE(UUID), "document_id": NULLABLE(UUID),
+    "acquired_on": DATE, "put_to_use_on": NULLABLE(DATE),
+    "cost": {**MONEY, "description": "What is capitalised: price, duty, freight and installation, without GST that is claimed as credit"},
+    "residual_value": {**MONEY, "description": "Defaults to 5% of cost (nothing for software)"},
+    "method": ENUM("slm", "wdv"), "life_months": NULLABLE(I()), "rate_pct": NULLABLE(MONEY),
+    "booking": ENUM("reclassify", "already_booked", "opening", description="reclassify moves the cost from Purchases and expenses to Fixed assets; already_booked only records it; opening is an asset from earlier books"),
+    "opening_accumulated": NULLABLE(MONEY), "opening_through": NULLABLE(DATE),
+    "status": ENUM("in_use", "disposed", readOnly=True), "disposed_on": NULLABLE(DATE_RO), "disposal_proceeds": NULLABLE({**MONEY, "readOnly": True}),
+    "accumulated_depreciation": {**MONEY, "readOnly": True}, "book_value": {**MONEY, "readOnly": True},
+    "gain_or_loss": NULLABLE({**MONEY, "readOnly": True}),
+    "schedule": {**ARR(ref("DepreciationRow")), "readOnly": True, "description": "On the single-asset read: months posted and the coming months to the end of the financial year"}},
+    required=("name", "category", "acquired_on", "cost"))
+_op("get", E + "/fixed-assets", "Fixed assets", "listFixedAssets", "List fixed assets with totals for those in use", "finance:read",
+    params=[q("status", ENUM("in_use", "disposed"))],
+    resp=schema("FixedAssetList", {"data": ARR(ref("FixedAsset")), "totals": schema("FixedAssetTotals", {"cost": MONEY, "accumulated_depreciation": MONEY, "book_value": MONEY})}))
+_op("post", E + "/fixed-assets", "Fixed assets", "createFixedAsset", "Register a fixed asset", "finance:write", body=ref("FixedAsset"), resp=ref("FixedAsset"), status="201", idem=True,
+    desc="With booking `reclassify` the cost is moved to Fixed assets in the same transaction (a locked period refuses it).")
+_op("get", E + "/fixed-assets/{id}", "Fixed assets", "getFixedAsset", "Get a fixed asset with its depreciation schedule", "finance:read", resp=ref("FixedAsset"),
+    params=[q("through", DATE, "Show the schedule up to this date; the default is the end of this financial year")])
+action(E + "/fixed-assets/{id}/dispose", "Fixed assets", "disposeFixedAsset", "Sell or write off an asset", "finance:write", idem=True, resp=ref("FixedAsset"),
+       body=schema("DisposeFixedAsset", {"disposed_on": DATE, "proceeds": MONEY, "proceeds_account_id": NULLABLE(UUID)}, required=("disposed_on", "proceeds")),
+       desc="Depreciation up to the month before must already be posted (`depreciation_pending`). The part month is charged, and the gain or loss against the book value is posted. GST on the sale is not posted.")
+schema("DepreciationPreview", {"period": S(), "total": MONEY, "months": ARR(schema("DepreciationMonth", {"month": DATE, "total": MONEY,
+       "assets": ARR(schema("DepreciationAsset", {"asset_id": UUID, "asset_no": S(), "name": S(), "amount": MONEY, "book_value_after": MONEY}))}))})
+_op("get", E + "/depreciation/preview", "Fixed assets", "previewDepreciation", "What running depreciation up to a month would post", "finance:read",
+    params=[q("period", S(pattern="^[0-9]{4}-(0[1-9]|1[0-2])$"), "YYYY-MM, this month or earlier")], resp=ref("DepreciationPreview"))
+action(E + "/depreciation/run", "Fixed assets", "runDepreciation", "Post depreciation up to a month", "finance:write", idem=True,
+       body=schema("DepreciationRun", {"period": S(pattern="^[0-9]{4}-(0[1-9]|1[0-2])$")}, required=("period",)),
+       resp=schema("DepreciationRunResult", {"period": S(), "total": MONEY, "journals": ARR(schema("DepreciationJournal", {"month": DATE, "journal_entry_id": UUID, "entry_no": S(), "total": MONEY, "assets": I()}))}),
+       desc="One journal per month not yet posted, covering all assets. Running a month that is already posted posts nothing.")
+
 # =================================================================== PORTALS & JOBS
 tag("Portals & jobs", "Government / bank connections, OTP sessions, sync jobs and the job resource")
 schema("PortalConnection", {"id": RO_UUID, "portal": ENUM("gstn", "irp", "eway", "mca", "income_tax", "traces", "epfo", "esic", "professional_tax", "udyam", "account_aggregator", "bank_api", "treds", "digilocker"),
