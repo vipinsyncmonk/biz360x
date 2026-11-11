@@ -7,3 +7,4 @@ pytest>=8.3
 httpx>=0.28
 cryptography>=43
 reportlab>=4.2
+pypdf>=5.0

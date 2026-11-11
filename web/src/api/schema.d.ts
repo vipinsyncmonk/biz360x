@@ -3734,6 +3734,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/bills-of-entry/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read a customs bill of entry PDF and keep it in the vault
+         * @description Reads the assessed copy PDF from ICEGATE (it needs a text layer; scans are refused with 422 not_a_bill_of_entry), stores it in the vault under Purchases, and returns what it found. Nothing is recorded: show the figures to a person, then POST /bills-of-entry with document_id. warnings lists anything to check (a different company's GSTIN, a value that differs from the invoice). existing_boe_id is set when this bill is already recorded; the file is then linked to it.
+         */
+        post: operations["readBillOfEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/bills-of-entry/{id}": {
         parameters: {
             query?: never;
@@ -7074,10 +7094,48 @@ export interface components {
             purchase_bill_id?: string | null;
             /** @description IGST paid on the import, available as input tax credit once the duty is paid */
             readonly igst_credit?: components["schemas"]["Money"];
+            /** @description The customs PDF in the document vault. Pass the id from readBillOfEntry when recording; it is linked to the bill of entry. */
+            document_id?: string | null;
+            /** @description Add this overseas supplier when supplier_party_id is not given. A supplier with the same name (ignoring Co., Ltd and punctuation) is reused. */
+            new_supplier_name?: string;
+            new_supplier_country?: string;
         };
         BillOfEntryPage: {
             data: components["schemas"]["BillOfEntry"][];
             next_cursor: string | null;
+        };
+        BillOfEntryFile: {
+            file_name: string;
+            /** @description The PDF, base64 encoded */
+            content_base64: string;
+        };
+        BillOfEntryRead: {
+            /** Format: uuid */
+            document_id: string;
+            existing_boe_id?: string | null;
+            warnings: string[];
+            boe_number: string;
+            /** Format: date */
+            boe_date: string;
+            port_code: string;
+            currency?: string | null;
+            cif_foreign?: string | null;
+            exchange_rate?: string | null;
+            bcd: components["schemas"]["Money"];
+            sws: components["schemas"]["Money"];
+            igst: components["schemas"]["Money"];
+            other_duty: components["schemas"]["Money"];
+            /** @enum {string} */
+            status: "filed" | "assessed" | "duty_paid" | "cleared";
+            duty_paid_on?: string | null;
+            supplier_name?: string | null;
+            supplier_country?: string | null;
+            supplier_party_id?: string | null;
+            invoice_number?: string | null;
+            incoterm?: string | null;
+            challan_number?: string | null;
+            importer_name?: string | null;
+            importer_gstin?: string | null;
         };
         BillOfEntryUpdate: {
             /** @enum {string} */
@@ -17014,6 +17072,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BillOfEntry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    readBillOfEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillOfEntryFile"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillOfEntryRead"];
                 };
             };
             400: components["responses"]["BadRequest"];

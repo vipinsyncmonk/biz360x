@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  blankBoe, blankRealisation, blankSb, boeBody, boeProblem, claimsBody, claimsForm, claimsPending, claimsProblem, clockText, lutText, previewInr, previewText, realisationBody, realisationProblem, receivedText,
+  type BoeRead, boeFormFrom, readSummary, blankBoe, blankRealisation, blankSb, boeBody, boeProblem, claimsBody, claimsForm, claimsPending, claimsProblem, clockText, lutText, previewInr, previewText, realisationBody, realisationProblem, receivedText,
   sbBody, sbProblem,
 } from "./trade";
 
@@ -81,6 +81,27 @@ describe("exports and imports", () => {
     expect(claimsProblem({ ...f, rodtepClaimed: "abc" })).toMatch(/RoDTEP claimed/);
     expect(claimsBody({ ...f, brc: " BRC/1 " })).toEqual({ rodtep_claimed: "12000.50", rodtep_credited: "4000.25", drawback_claimed: "0.00", drawback_received: "0.00", brc_ref: "BRC/1" });
     expect(claimsBody(f).brc_ref).toBeNull();
+  });
+
+  it("fills the bill of entry form from what was read from the customs PDF", () => {
+    const read: BoeRead = {
+      document_id: "doc1", existing_boe_id: null, warnings: [], boe_number: "2260434", boe_date: "2025-05-24", port_code: "INBLR4", currency: "USD", cif_foreign: "2272.80", exchange_rate: "86.4",
+      bcd: "2134.50", sws: "213.50", igst: "35769.00", other_duty: "1.00", status: "assessed", duty_paid_on: null, supplier_name: "FURUNO ELECTRIC CO., LTD", supplier_country: "JP", supplier_party_id: null,
+      invoice_number: "FECS25-I-050M", incoterm: "CIF", challan_number: "2055012136", importer_name: null, importer_gstin: null,
+    };
+    const f = boeFormFrom(read);
+    expect(boeProblem(f, TODAY)).toBeNull();
+    expect(boeBody(f)).toEqual({
+      boe_number: "2260434", boe_date: "2025-05-24", port_code: "INBLR4", currency: "USD", cif_foreign: "2272.80", exchange_rate: "86.4", bcd: "2134.50", sws: "213.50", igst: "35769.00", other_duty: "1.00",
+      status: "assessed", document_id: "doc1", new_supplier_name: "FURUNO ELECTRIC CO., LTD", new_supplier_country: "JP",
+    });
+    expect(readSummary(read)).toBe("USD 2272.80 · at 86.4 · invoice FECS25-I-050M · CIF · challan 2055012136");
+    expect(boeBody({ ...f, addSupplier: false })).not.toHaveProperty("new_supplier_name");                       // the person unticked it
+    expect(boeBody(boeFormFrom({ ...read, supplier_party_id: "p1" }))).toMatchObject({ supplier_party_id: "p1" });      // a supplier already on file is linked, not added
+    expect(boeBody(boeFormFrom({ ...read, supplier_party_id: "p1" }))).not.toHaveProperty("new_supplier_name");
+    expect(boeBody(boeFormFrom({ ...read, status: "cleared", duty_paid_on: "2025-05-25" }))).toMatchObject({ status: "cleared", duty_paid_on: "2025-05-25" });
+    expect(boeFormFrom({ ...read, cif_foreign: null, exchange_rate: null })).toMatchObject({ cif: "", rate: "" });          // what could not be read is left for the person to enter
+    expect(boeProblem(boeFormFrom({ ...read, cif_foreign: null }), TODAY)).toMatch(/CIF value/);
   });
 
   it("checks a bill of entry and marks it paid only when a payment date is given", () => {

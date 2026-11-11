@@ -9,7 +9,7 @@ import { ACTION_LABEL, canCompute, canFile, fileBody, isOpen, lastMonth, matchAc
 import { SKIP_REASON, addClientHref, chaseLabel, chaseSummary, chaseTargets, orgFromSearch } from "./group";
 import { badEmails, blankRoom, expiryNote, parseEmails, roomBody, roomForm, roomProblem, viewerNote } from "./rooms";
 import { AUTHORITY_LABEL, blankNotice, canDraft, deskTotals, noticeBody, noticeMoves, noticeProblem, replyState } from "./notices";
-import { MAX_UPLOAD_BYTES, editBody, editProblem, mimeOf, registerBody, sameOriginUrl, sha256Hex, shareable, titleFromFile, toHex, uploadProblem } from "./vault";
+import { MAX_UPLOAD_BYTES, editBody, editProblem, mimeOf, registerBody, sameOriginUrl, sha256Hex, shareable, titleFromFile, toBase64, toHex, uploadProblem } from "./vault";
 import { blankContract, blankMeeting, blankResolution, contractBody, contractProblem, gapWarning, heldProblem, istDate, istTime, meetingBody, meetingReady, meetingState, nextResolutionNumber, resolutionActions, resolutionBody, resolutionReady, termKeyFrom, termKeyOk, termReady, CONTRACT_NEXT } from "./board";
 import { blankConn, blankHook, canRenew, connBody, connReady, deliveryState, eventsLabel, hookBody, hookProblem, jobStage, otpReady } from "./integrations";
 import { annualOf, blankEmployee, defaultComponents, draftFromRows, employeeBody, employeeProblem, inputProblem, inputsBody, inputsProblem, monthlyEarnings, structureBody, structureProblem } from "./payroll";
@@ -658,6 +658,11 @@ describe("vault upload", () => {
     const bytes = new TextEncoder().encode("abc");
     expect(await sha256Hex(bytes.buffer as ArrayBuffer)).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     expect(toHex(new Uint8Array([0, 15, 255]))).toBe("000fff");
+  });
+  it("sends a file inside JSON as base64, including one larger than a single chunk", () => {
+    expect(toBase64(new TextEncoder().encode("%PDF-1.4").buffer as ArrayBuffer)).toBe("JVBERi0xLjQ=");
+    const big = new Uint8Array(100_000).map((_, i) => i % 251);
+    expect(Uint8Array.from(atob(toBase64(big.buffer as ArrayBuffer)), (c) => c.charCodeAt(0))).toEqual(big);
   });
   it("knows a file type when the browser does not", () => {
     expect(mimeOf("a.pdf", "")).toBe("application/pdf");

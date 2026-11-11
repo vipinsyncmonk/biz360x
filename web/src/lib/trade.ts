@@ -10,7 +10,7 @@ export interface ShippingBill {
 }
 export interface BillOfEntry {
   id: string; boe_number: string; boe_date: string; port_code: string; currency: string; cif_foreign: string; exchange_rate: string; cif_inr: string; bcd: string; sws: string; igst: string; other_duty: string;
-  duty_total: string; status: string; duty_paid_on: string | null; supplier_name: string | null; igst_credit: string;
+  duty_total: string; status: string; duty_paid_on: string | null; supplier_name: string | null; igst_credit: string; document_id: string | null;
 }
 export interface Summary {
   as_of: string; financial_year_from: string; iec: string | null; lut: { state: string; valid_until: string | null; days_left: number | null };
@@ -124,8 +124,30 @@ export const claimsBody = (f: ClaimsForm) => ({
 });
 
 // ---- bill of entry form
-export interface BoeForm { number: string; date: string; port: string; currency: string; cif: string; rate: string; bcd: string; sws: string; igst: string; other: string; paidOn: string }
-export const blankBoe = (): BoeForm => ({ number: "", date: "", port: "", currency: "USD", cif: "", rate: "", bcd: "0", sws: "0", igst: "0", other: "0", paidOn: "" });
+export interface BoeForm {
+  number: string; date: string; port: string; currency: string; cif: string; rate: string; bcd: string; sws: string; igst: string; other: string; paidOn: string;
+  status: string; documentId: string; supplierId: string; supplierName: string; supplierCountry: string; addSupplier: boolean;
+}
+export const blankBoe = (): BoeForm => ({ number: "", date: "", port: "", currency: "USD", cif: "", rate: "", bcd: "0", sws: "0", igst: "0", other: "0", paidOn: "",
+  status: "filed", documentId: "", supplierId: "", supplierName: "", supplierCountry: "", addSupplier: false });
+
+/** What the server read from a customs PDF (POST /bills-of-entry/read). The PDF is already in the vault; nothing is recorded yet. */
+export interface BoeRead {
+  document_id: string; existing_boe_id: string | null; warnings: string[]; boe_number: string; boe_date: string; port_code: string; currency: string | null; cif_foreign: string | null; exchange_rate: string | null;
+  bcd: string; sws: string; igst: string; other_duty: string; status: string; duty_paid_on: string | null; supplier_name: string | null; supplier_country: string | null; supplier_party_id: string | null;
+  invoice_number: string | null; incoterm: string | null; challan_number: string | null; importer_name: string | null; importer_gstin: string | null;
+}
+/** The form, filled from what was read. A supplier the company already has is linked; a new one is offered, ticked. */
+export const boeFormFrom = (r: BoeRead): BoeForm => ({
+  ...blankBoe(), number: r.boe_number, date: r.boe_date, port: r.port_code, currency: r.currency ?? "USD", cif: r.cif_foreign ?? "", rate: r.exchange_rate ?? "",
+  bcd: r.bcd, sws: r.sws, igst: r.igst, other: r.other_duty, paidOn: r.duty_paid_on ?? "", status: r.status, documentId: r.document_id,
+  supplierId: r.supplier_party_id ?? "", supplierName: r.supplier_name ?? "", supplierCountry: r.supplier_country ?? "", addSupplier: !r.supplier_party_id && !!r.supplier_name,
+});
+/** One line saying what was read, so the person knows what to check. */
+export const readSummary = (r: BoeRead): string => [
+  r.cif_foreign && r.currency ? `${r.currency} ${r.cif_foreign}` : null, r.exchange_rate ? `at ${r.exchange_rate}` : null,
+  r.invoice_number ? `invoice ${r.invoice_number}` : null, r.incoterm, r.challan_number ? `challan ${r.challan_number}` : null,
+].filter(Boolean).join(" · ");
 export function boeProblem(f: BoeForm, today: string): string | null {
   if (!/^[0-9A-Za-z/-]{1,20}$/.test(f.number.trim())) return "Enter the bill of entry number as printed";
   if (!f.date) return "Enter the bill of entry date";
@@ -140,5 +162,8 @@ export function boeProblem(f: BoeForm, today: string): string | null {
 }
 export const boeBody = (f: BoeForm) => ({
   boe_number: f.number.trim().toUpperCase(), boe_date: f.date, port_code: f.port.trim().toUpperCase(), currency: f.currency.trim().toUpperCase(), cif_foreign: f.cif.trim(), exchange_rate: f.rate.trim(),
-  bcd: f.bcd.trim(), sws: f.sws.trim(), igst: f.igst.trim(), other_duty: f.other.trim(), ...(f.paidOn ? { status: "duty_paid", duty_paid_on: f.paidOn } : {}),
+  bcd: f.bcd.trim(), sws: f.sws.trim(), igst: f.igst.trim(), other_duty: f.other.trim(),
+  ...(f.paidOn ? { status: f.status === "cleared" ? "cleared" : "duty_paid", duty_paid_on: f.paidOn } : f.status === "assessed" ? { status: "assessed" } : {}),
+  ...(f.documentId ? { document_id: f.documentId } : {}),
+  ...(f.supplierId ? { supplier_party_id: f.supplierId } : f.addSupplier && f.supplierName.trim() ? { new_supplier_name: f.supplierName.trim(), ...(f.supplierCountry ? { new_supplier_country: f.supplierCountry } : {}) } : {}),
 });

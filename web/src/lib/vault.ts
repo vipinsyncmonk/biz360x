@@ -43,6 +43,14 @@ export const registerBody = (file: { name: string; size: number }, mime: string,
   ...(m.period.trim() ? { period_label: m.period.trim() } : {}), ...(m.validUntil ? { valid_until: m.validUntil } : {}),
 });
 
+/** A file's bytes as base64, for the endpoints that take a file inside a JSON body. */
+export function toBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
 /** The upload address names the API's own host. The browser talks to the API through its own origin, so keep only the path. */
 export function sameOriginUrl(url: string | null | undefined, apiBase = "/api"): string | null {
   if (!url) return null;
