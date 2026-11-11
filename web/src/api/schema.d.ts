@@ -2500,6 +2500,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/bank-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rules for booking bank lines */
+        get: operations["listBankRules"];
+        put?: never;
+        /**
+         * Teach a rule for booking bank lines
+         * @description One live rule per set of conditions: a second rule with the same conditions replaces the account of the first.
+         */
+        post: operations["createBankRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/bank-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a rule */
+        delete: operations["deleteBankRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/bank-transactions/{id}/classify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Book a bank line to an account
+         * @description Posts a journal: money out is a debit to the account and a credit to the bank, money in the reverse. 409 when the line is already booked or matched; 400 when the account is the bank's own. With `remember` a rule is saved, and with `apply_to_similar` every other open line it matches is booked in the same transaction.
+         */
+        post: operations["classifyBankTransaction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/bank-transactions/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest the other side of the open bank lines again
+         * @description Order: a document the app already holds (a vendor payment, a challan, a payroll run), then a rule the company made, then the starter list. Nothing is posted.
+         */
+        post: operations["suggestBankTransactions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/bank-transactions": {
         parameters: {
             query?: never;
@@ -6105,14 +6183,23 @@ export interface components {
         BankMatchSuggestion: {
             /** Format: uuid */
             readonly id?: string;
-            target_kind?: string;
+            /**
+             * @description ledger_account: book the line to that account (accepting posts a journal). vendor_payment, tax_challan and payroll_run: the app booked it when it was paid, so accepting only links the line.
+             * @enum {string}
+             */
+            target_kind?: "receipt" | "vendor_payment" | "journal_entry" | "payroll_run" | "tax_challan" | "shipping_bill" | "ledger_account";
             /** Format: uuid */
             target_id?: string;
-            /** @example Invoice NI/KA/184 */
+            /**
+             * @example Invoice NI/KA/184
+             * @example Book to 5390 Rent
+             */
             label?: string;
             amount?: components["schemas"]["Money"];
             confidence?: number;
+            /** @description Where it came from: rule (a rule the company made), starter (the starter list), virtual_account, invoice_number, vendor_payment_utr and so on */
             rule?: string;
+            reason?: string | null;
             /** @enum {string} */
             status?: "suggested" | "accepted" | "rejected";
             export?: components["schemas"]["ExportMatchHint"] | null;
@@ -6130,7 +6217,49 @@ export interface components {
             counterparty_name?: string | null;
             /** @enum {string} */
             match_status?: "unmatched" | "suggested" | "matched" | "ignored";
+            mode?: ("upi" | "neft" | "rtgs" | "imps" | "auto_debit" | "transfer" | "cheque" | "card" | "cash" | "charges" | "interest" | "other") | null;
+            counterparty_key?: string | null;
+            remark?: string | null;
+            journal_entry_id?: string | null;
             suggestions?: components["schemas"]["BankMatchSuggestion"][];
+        };
+        /** @description Lines that match every condition the rule states are suggested for the account. Conditions: a counterparty, a keyword, a mode; at least one is needed. */
+        BankRule: {
+            /** Format: uuid */
+            readonly id?: string;
+            /** @enum {string} */
+            direction?: "debit" | "credit" | "any";
+            counterparty_key?: string | null;
+            keyword?: string | null;
+            mode?: ("upi" | "neft" | "rtgs" | "imps" | "auto_debit" | "transfer" | "cheque" | "card" | "cash" | "charges" | "interest" | "other") | null;
+            /** Format: uuid */
+            account_id: string;
+            readonly account_code?: string;
+            readonly account_name?: string;
+            party_id?: string | null;
+            memo?: string | null;
+            readonly hits?: number;
+            last_hit_on?: string | null;
+            /** Format: date-time */
+            readonly created_at?: string;
+        };
+        BankClassifyRequest: {
+            /** Format: uuid */
+            account_id: string;
+            party_id?: string | null;
+            memo?: string | null;
+            remember?: ("counterparty" | "keyword") | null;
+            keyword?: string | null;
+            /** @description With remember: also book every other open line the rule matches, in the same transaction */
+            apply_to_similar?: boolean;
+        };
+        BankClassifyResult: {
+            rule_id?: string | null;
+            /** @description How many other lines the rule booked */
+            also_booked: number;
+        } & components["schemas"]["BankTransaction"];
+        BankSuggestResult: {
+            suggested: number;
         };
         BankTransactionPage: {
             data: components["schemas"]["BankTransaction"][];
@@ -13560,6 +13689,164 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BankFeedResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listBankRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankRule"][];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    createBankRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BankRule"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankRule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    deleteBankRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    classifyBankTransaction: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BankClassifyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankClassifyResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    suggestBankTransactions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankSuggestResult"];
                 };
             };
             400: components["responses"]["BadRequest"];

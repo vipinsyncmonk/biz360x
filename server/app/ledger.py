@@ -52,6 +52,14 @@ SYSTEM_ACCOUNTS = {
     "round_off": ("4900", "Round off", "income", "round_off"),
     "forex_gain_loss": ("4950", "Foreign exchange gain or loss", "income", "forex_gain_loss"),
     "bank_charges": ("5910", "Bank charges", "expense", "bank_charges"),
+    # accounts the bank statement needs (codes kept in their own band so they do not collide with a company's own chart)
+    "fixed_deposits": ("1590", "Fixed deposits", "asset", "fixed_deposit"),
+    "credit_card_payable": ("2590", "Credit card payable", "liability", "credit_card_payable"),
+    "director_loan": ("2690", "Directors' loan account", "liability", "director_loan"),
+    "interest_income": ("4390", "Interest income", "income", "interest_income"),
+    "rent_expense": ("5390", "Rent", "expense", "rent_expense"),
+    "utilities_expense": ("5391", "Electricity, telephone and internet", "expense", "utilities_expense"),
+    "insurance_expense": ("5392", "Insurance", "expense", "insurance_expense"),
 }
 
 

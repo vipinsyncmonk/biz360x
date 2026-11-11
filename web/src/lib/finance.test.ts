@@ -27,3 +27,35 @@ describe("a bank credit taken as export proceeds", () => {
     expect(exportHintText({ ...hint, proposed_foreign: null })).toBe("Looks like money from abroad");
   });
 });
+
+import { blankClassify, classifyBody, classifyProblem, ruleText, similarLines, type BankRule, type BankTxn } from "./finance";
+
+const line = (over: Partial<BankTxn>): BankTxn => ({ id: "t", txn_date: "2026-04-02", amount: "-2500.00", description: "UPI/1/UPI Pay/8792003390@ibl//x/", counterparty_name: null, match_status: "unmatched", suggestions: [], counterparty_key: "8792003390@ibl", ...over });
+
+describe("booking a bank line", () => {
+  it("finds the other open lines to the same counterparty moving money the same way", () => {
+    const a = line({ id: "a" });
+    const rows = [a, line({ id: "b" }), line({ id: "c", counterparty_key: "someone@upi" }), line({ id: "d", match_status: "matched" }), line({ id: "e", amount: "900.00" }), line({ id: "f", match_status: "suggested" })];
+    expect(similarLines(rows, a).map((x) => x.id)).toEqual(["b", "f"]);
+    expect(similarLines(rows, line({ counterparty_key: null }))).toEqual([]);
+  });
+  it("needs an account, and a counterparty or a word that is really in the narration to remember", () => {
+    const t = line({});
+    expect(classifyProblem(blankClassify(), t)).toMatch(/account/);
+    expect(classifyProblem(blankClassify("acc"), t)).toBeNull();
+    expect(classifyProblem({ ...blankClassify("acc"), remember: "counterparty" }, line({ counterparty_key: null }))).toMatch(/no counterparty/);
+    expect(classifyProblem({ ...blankClassify("acc"), remember: "keyword" }, t)).toMatch(/word/);
+    expect(classifyProblem({ ...blankClassify("acc"), remember: "keyword", keyword: "bescom" }, t)).toMatch(/not in this line/);
+    expect(classifyProblem({ ...blankClassify("acc"), remember: "keyword", keyword: "UPI Pay" }, t)).toBeNull();
+  });
+  it("sends only what was chosen", () => {
+    expect(classifyBody(blankClassify("acc"))).toEqual({ account_id: "acc" });
+    expect(classifyBody({ ...blankClassify("acc"), memo: " welfare ", remember: "counterparty", applySimilar: true })).toEqual({ account_id: "acc", memo: "welfare", remember: "counterparty", apply_to_similar: true });
+    expect(classifyBody({ ...blankClassify("acc"), remember: "keyword", keyword: " rent " })).toEqual({ account_id: "acc", remember: "keyword", keyword: "rent" });
+  });
+  it("describes a rule in words", () => {
+    const r: BankRule = { id: "r", direction: "debit", counterparty_key: "8792003390@ibl", keyword: null, mode: null, account_id: "a", account_code: "5500", account_name: "Staff welfare", hits: 2 };
+    expect(ruleText(r)).toBe("Payments to or from 8792003390@ibl");
+    expect(ruleText({ ...r, direction: "any", counterparty_key: null, keyword: "rent", mode: "neft" })).toBe("Lines mentioning “rent” by neft");
+  });
+});
