@@ -10039,6 +10039,48 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: trade:write
+  /entities/{entityId}/bills-of-entry/read:
+    post:
+      tags:
+      - Export & import
+      operationId: readBillOfEntry
+      summary: Read a customs bill of entry PDF and keep it in the vault
+      description: 'Reads the assessed copy PDF from ICEGATE (it needs a text layer; scans are refused with 422 not_a_bill_of_entry),
+        stores it in the vault under Purchases, and returns what it found. Nothing is recorded: show the figures to a person,
+        then POST /bills-of-entry with document_id. warnings lists anything to check (a different company''s GSTIN, a value
+        that differs from the invoice). existing_boe_id is set when this bill is already recorded; the file is then linked
+        to it.'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BillOfEntryFile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillOfEntryRead'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: trade:write
   /entities/{entityId}/bills-of-entry/{id}:
     patch:
       tags:
@@ -19119,6 +19161,22 @@ components:
           $ref: '#/components/schemas/Money'
           readOnly: true
           description: IGST paid on the import, available as input tax credit once the duty is paid
+        document_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: The customs PDF in the document vault. Pass the id from readBillOfEntry when recording; it is linked
+            to the bill of entry.
+        new_supplier_name:
+          type: string
+          writeOnly: true
+          description: Add this overseas supplier when supplier_party_id is not given. A supplier with the same name (ignoring
+            Co., Ltd and punctuation) is reused.
+        new_supplier_country:
+          type: string
+          writeOnly: true
+          pattern: ^[A-Z]{2}$
       required:
       - boe_number
       - boe_date
@@ -19140,6 +19198,115 @@ components:
       required:
       - data
       - next_cursor
+    BillOfEntryFile:
+      type: object
+      properties:
+        file_name:
+          type: string
+        content_base64:
+          type: string
+          description: The PDF, base64 encoded
+      required:
+      - file_name
+      - content_base64
+    BillOfEntryRead:
+      type: object
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        existing_boe_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        warnings:
+          type: array
+          items:
+            type: string
+        boe_number:
+          type: string
+        boe_date:
+          type: string
+          format: date
+        port_code:
+          type: string
+        currency:
+          oneOf:
+          - type: string
+          - type: 'null'
+        cif_foreign:
+          oneOf:
+          - type: string
+          - type: 'null'
+        exchange_rate:
+          oneOf:
+          - type: string
+          - type: 'null'
+        bcd:
+          $ref: '#/components/schemas/Money'
+        sws:
+          $ref: '#/components/schemas/Money'
+        igst:
+          $ref: '#/components/schemas/Money'
+        other_duty:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+          enum:
+          - filed
+          - assessed
+          - duty_paid
+          - cleared
+        duty_paid_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        supplier_name:
+          oneOf:
+          - type: string
+          - type: 'null'
+        supplier_country:
+          oneOf:
+          - type: string
+          - type: 'null'
+        supplier_party_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        invoice_number:
+          oneOf:
+          - type: string
+          - type: 'null'
+        incoterm:
+          oneOf:
+          - type: string
+          - type: 'null'
+        challan_number:
+          oneOf:
+          - type: string
+          - type: 'null'
+        importer_name:
+          oneOf:
+          - type: string
+          - type: 'null'
+        importer_gstin:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - document_id
+      - warnings
+      - boe_number
+      - boe_date
+      - port_code
+      - bcd
+      - sws
+      - igst
+      - other_duty
+      - status
     BillOfEntryUpdate:
       type: object
       properties:

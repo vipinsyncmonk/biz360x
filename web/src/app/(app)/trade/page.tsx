@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { api, unwrap } from "@/lib/api";
+import { sameOriginUrl } from "@/lib/vault";
 import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -24,9 +25,13 @@ export default function Trade() {
   const summary = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/trade/summary", { params: p })) as unknown as Summary, id);
   const bills = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/shipping-bills", { params: { ...p, query: { limit: 200 } } })).data as unknown as ShippingBill[], id);
   const boes = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/bills-of-entry", { params: { ...p, query: { limit: 200 } } })).data as unknown as BillOfEntry[], id);
+  const boeDocs = useLoad(async () => {
+    const docs = unwrap(await api.GET("/entities/{entityId}/documents", { params: { ...p, query: { subject: "bills_of_entry", limit: 200 } } })).data as unknown as Array<{ id: string; download_url: string | null }>;
+    return Object.fromEntries(docs.filter((d) => d.download_url).map((d) => [d.id, sameOriginUrl(d.download_url) ?? d.download_url!]));
+  }, id);
   const invoices = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/sales-documents", { params: { ...p, query: { doc_type: "export_invoice", status: "issued", limit: 100 } } })).data as unknown as ExportInvoice[], id);
 
-  const reload = () => { summary.reload(); bills.reload(); boes.reload(); setOpen(null); setAdding(false); setRegistering(null); };
+  const reload = () => { summary.reload(); bills.reload(); boes.reload(); boeDocs.reload(); setOpen(null); setAdding(false); setRegistering(null); };
   const s = summary.data;
   const lut = s ? (LUT_STATE[s.lut.state] ?? LUT_STATE.none!) : null;
   const toggle = (kind: NonNullable<Open>["kind"], rowId: string) => setOpen(open && open.kind === kind && open.id === rowId ? null : { kind, id: rowId });
@@ -116,7 +121,7 @@ export default function Trade() {
               return (
                 <div key={b.id} style={{ borderTop: "1px solid var(--line-2)" }}>
                   <div style={{ padding: "14px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, alignItems: "start" }}>
-                    <span style={{ fontWeight: 600 }}>BoE {b.boe_number}<span className="t13" style={{ display: "block", fontWeight: 400 }}>{shortDate(b.boe_date)} · {b.port_code}</span></span>
+                    <span style={{ fontWeight: 600 }}>BoE {b.boe_number}<span className="t13" style={{ display: "block", fontWeight: 400 }}>{shortDate(b.boe_date)} · {b.port_code}</span>{b.document_id && boeDocs.data?.[b.document_id] && <a className="t13" style={{ display: "block" }} href={boeDocs.data[b.document_id]} aria-label={`View bill of entry ${b.boe_number} (PDF)`}>View PDF</a>}</span>
                     <span>{b.supplier_name ?? "Supplier not linked"}<span className="t13 mono" style={{ display: "block" }}>{b.currency} {b.cif_foreign} · {money(b.cif_inr)}</span></span>
                     <span>Duty {money(b.duty_total)}<span className="t13" style={{ display: "block" }}>BCD {money(b.bcd)} · SWS {money(b.sws)} · IGST {money(b.igst)}{Number(b.other_duty) > 0 ? ` · other ${money(b.other_duty)}` : ""}</span></span>
                     <span><Pill tone={st.tone}>{st.label}</Pill><span className="t13" style={{ display: "block" }}>{b.duty_paid_on ? `Paid ${shortDate(b.duty_paid_on)} · IGST credit ${formatInr(b.igst_credit, { decimals: false })}` : "IGST credit once the duty is paid"}</span></span>

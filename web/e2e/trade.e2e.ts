@@ -105,6 +105,36 @@ test.describe.serial("exports and imports", () => {
     expect(problems()).toEqual([]);
   });
 
+  test("uploading the customs PDF fills the bill of entry, keeps the file in the vault and links it", async () => {
+    await page.goto("/trade");
+    await page.getByRole("tab", { name: "Imports" }).click();
+    await page.getByRole("button", { name: "+ Bill of entry" }).click();
+    await page.getByLabel(/Upload the bill of entry/).setInputFiles("e2e/fixtures/bill-of-entry.pdf");
+    await expect(page.getByLabel("Bill of entry no.")).toHaveValue("7700456");                       // read from the PDF
+    await expect(page.getByLabel("Port code")).toHaveValue("INBLR4");
+    await expect(page.getByLabel("CIF value (foreign)")).toHaveValue("2272.80");
+    await expect(page.getByLabel("Customs exchange rate")).toHaveValue("86.4");
+    await expect(page.getByLabel("Basic customs duty (₹)")).toHaveValue("2134.50");
+    await expect(page.getByLabel("IGST (₹)")).toHaveValue("35769.00");
+    await expect(page.getByRole("alert").filter({ hasText: "not one of this company's registrations" })).toBeVisible();      // a different company's GSTIN is flagged
+    await page.getByLabel(/Add TESTCO ELECTRIC CO., LTD/).check();
+    await page.getByRole("button", { name: "Record bill of entry" }).click();
+    const row = page.locator("section", { hasText: "Bills of entry" }).locator("div", { hasText: "BoE 7700456" }).last();
+    await expect(page.getByText("BoE 7700456")).toBeVisible();
+    await expect(page.getByText("TESTCO ELECTRIC CO., LTD")).toBeVisible();
+    await expect(row.getByText("Assessed")).toBeVisible();
+    const pdf = page.getByRole("link", { name: "View bill of entry 7700456 (PDF)" });
+    await expect(pdf).toBeVisible();
+    const res = await page.request.get((await pdf.getAttribute("href"))!);                           // the stored file comes back
+    expect(res.status()).toBe(200);
+    expect((await res.body()).subarray(0, 4).toString()).toBe("%PDF");
+    await page.getByRole("button", { name: "+ Bill of entry" }).click();                             // uploading it again says it is already recorded
+    await page.getByLabel(/Upload the bill of entry/).setInputFiles("e2e/fixtures/bill-of-entry.pdf");
+    await expect(page.getByText(/already recorded/)).toBeVisible();
+    await page.getByRole("button", { name: "Done" }).click();
+    expect(problems()).toEqual([]);
+  });
+
   test("the screen fits a phone", async () => {
     await page.setViewportSize({ width: 375, height: 812 });
     for (const tab of ["Exports", "Imports"]) {

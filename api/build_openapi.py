@@ -1099,9 +1099,22 @@ schema("BillOfEntry", {
     "id": RO_UUID, "boe_number": CODE20, "boe_date": DATE, "port_code": PORT_CODE, "currency": CCY, "cif_foreign": MONEY, "exchange_rate": S(), "cif_inr": {**MONEY, "readOnly": True},
     "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "duty_total": {**MONEY, "readOnly": True},
     "status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": NULLABLE(DATE), "supplier_party_id": NULLABLE(UUID), "supplier_name": NULLABLE(S(readOnly=True)),
-    "purchase_bill_id": NULLABLE(UUID), "igst_credit": {**MONEY, "readOnly": True, "description": "IGST paid on the import, available as input tax credit once the duty is paid"}},
+    "purchase_bill_id": NULLABLE(UUID), "igst_credit": {**MONEY, "readOnly": True, "description": "IGST paid on the import, available as input tax credit once the duty is paid"},
+    "document_id": {**NULLABLE(UUID), "description": "The customs PDF in the document vault. Pass the id from readBillOfEntry when recording; it is linked to the bill of entry."},
+    "new_supplier_name": S(writeOnly=True, description="Add this overseas supplier when supplier_party_id is not given. A supplier with the same name (ignoring Co., Ltd and punctuation) is reused."),
+    "new_supplier_country": S(writeOnly=True, pattern="^[A-Z]{2}$")},
        required=("boe_number", "boe_date", "port_code", "currency", "cif_foreign", "exchange_rate"))
 collection(E + "/bills-of-entry", "Export & import", "BillOfEntry", "trade", summary_plural="BillsOfEntry")
+action(E + "/bills-of-entry/read", "Export & import", "readBillOfEntry", "Read a customs bill of entry PDF and keep it in the vault", "trade:write",
+       body=schema("BillOfEntryFile", {"file_name": S(), "content_base64": S(description="The PDF, base64 encoded")}, required=("file_name", "content_base64")),
+       resp=schema("BillOfEntryRead", {
+           "document_id": UUID, "existing_boe_id": NULLABLE(UUID), "warnings": ARR(S()),
+           "boe_number": S(), "boe_date": DATE, "port_code": S(), "currency": NULLABLE(S()), "cif_foreign": NULLABLE(S()), "exchange_rate": NULLABLE(S()),
+           "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": NULLABLE(DATE),
+           "supplier_name": NULLABLE(S()), "supplier_country": NULLABLE(S()), "supplier_party_id": NULLABLE(UUID), "invoice_number": NULLABLE(S()), "incoterm": NULLABLE(S()),
+           "challan_number": NULLABLE(S()), "importer_name": NULLABLE(S()), "importer_gstin": NULLABLE(S())},
+           required=("document_id", "warnings", "boe_number", "boe_date", "port_code", "bcd", "sws", "igst", "other_duty", "status")),
+       desc="Reads the assessed copy PDF from ICEGATE (it needs a text layer; scans are refused with 422 not_a_bill_of_entry), stores it in the vault under Purchases, and returns what it found. Nothing is recorded: show the figures to a person, then POST /bills-of-entry with document_id. warnings lists anything to check (a different company's GSTIN, a value that differs from the invoice). existing_boe_id is set when this bill is already recorded; the file is then linked to it.")
 _op("patch", E + "/bills-of-entry/{id}", "Export & import", "updateBillOfEntry", "Record assessment, duty paid and the purchase bill it belongs to", "trade:write",
     body=schema("BillOfEntryUpdate", {"status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": DATE, "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "purchase_bill_id": UUID}),
     resp=ref("BillOfEntry"))

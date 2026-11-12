@@ -1,9 +1,10 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { api, newIdempotencyKey, unwrap } from "@/lib/api";
 import { formatInr, isoDate } from "@/lib/format";
+import { MAX_UPLOAD_BYTES, toBase64 } from "@/lib/vault";
 import {
-  BoeForm, ClaimsForm, CURRENCIES, ExportInvoice, RealisationForm, SbForm, ShippingBill, blankBoe, blankRealisation, blankSb, boeBody, boeProblem, claimsBody, claimsForm, claimsProblem,
+  BoeForm, BoeRead, ClaimsForm, CURRENCIES, ExportInvoice, RealisationForm, SbForm, ShippingBill, blankBoe, blankRealisation, blankSb, boeBody, boeFormFrom, boeProblem, readSummary, claimsBody, claimsForm, claimsProblem,
   previewText, realisationBody, realisationProblem, sbBody, sbProblem,
 } from "@/lib/trade";
 import { ErrorNote } from "./ui";
@@ -115,15 +116,44 @@ export function EditClaims({ entityId, bill, onDone, onCancel }: { entityId: str
   );
 }
 
-/** Record a bill of entry as customs issued it, with the duty it assessed. */
+/** Record a bill of entry as customs issued it, with the duty it assessed. The customs PDF can be uploaded instead of typing: it is read, kept in the vault, and the form is filled for checking. */
 export function AddBoe({ entityId, onDone, onCancel }: { entityId: string; onDone: () => void; onCancel: () => void }) {
   const [f, setF] = useState<BoeForm>(blankBoe());
+  const [read, setRead] = useState<{ file: string; data: BoeRead } | null>(null);
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState<unknown>(null);
+  const input = useRef<HTMLInputElement>(null);
   const set = (p: Partial<BoeForm>) => setF({ ...f, ...p });
   const today = isoDate(new Date());
   const preview = previewText(f.cif, f.rate);
+
+  async function upload(file: File) {
+    setReading(true); setReadError(null); setRead(null);
+    try {
+      if (file.size > MAX_UPLOAD_BYTES) throw new Error(`Files are limited to ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB`);
+      const data = unwrap(await api.POST("/entities/{entityId}/bills-of-entry/read", { params: { path: { entityId } }, body: { file_name: file.name, content_base64: toBase64(await file.arrayBuffer()) } as never })) as unknown as BoeRead;
+      setRead({ file: file.name, data });
+      setF(boeFormFrom(data));
+    } catch (e) { setReadError(e); } finally { setReading(false); if (input.current) input.current.value = ""; }
+  }
+
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <h2 style={{ margin: 0 }}>Record a bill of entry</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="field"><label htmlFor="be-file">Upload the bill of entry (PDF from ICEGATE)</label>
+          <input id="be-file" ref={input} type="file" accept="application/pdf,.pdf" className="input" style={{ height: "auto", padding: 8 }} disabled={reading} onChange={(e) => { const x = e.target.files?.[0]; if (x) void upload(x); }} /></div>
+        {reading && <span className="t13" role="status">Reading the bill of entry…</span>}
+        <ErrorNote error={readError} />
+        {read && (
+          <div role="status" className="t13" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span>Read {read.file}: {readSummary(read.data) || "the bill of entry"}. It is saved in the document vault under Purchases. Check the figures below, then record it.</span>
+            {read.data.existing_boe_id && <span style={{ color: "var(--amber)" }}>This bill of entry is already recorded; the PDF has been added to it. There is nothing more to record.</span>}
+            {read.data.warnings.map((w) => <span key={w} role="alert" style={{ color: "var(--amber)" }}>{w}</span>)}
+          </div>
+        )}
+      </div>
+      {read?.data.existing_boe_id ? <span style={{ display: "flex", gap: 10 }}><button type="button" className="btn primary" onClick={onDone}>Done</button></span> : (
       <Shell label="Record bill of entry" problem={boeProblem(f, today)} started={!!(f.number || f.cif)} onCancel={onCancel} onSubmit={async () => { unwrap(await api.POST("/entities/{entityId}/bills-of-entry", { params: { path: { entityId } }, body: boeBody(f) as never })); onDone(); }}>
         <div style={grid}>
           <Field id="be-no" label="Bill of entry no."><input id="be-no" className="input mono" value={f.number} onChange={(e) => set({ number: e.target.value })} /></Field>
@@ -139,8 +169,12 @@ export function AddBoe({ entityId, onDone, onCancel }: { entityId: string; onDon
           <Field id="be-paid" label="Duty paid on (if paid)"><input id="be-paid" type="date" className="input" max={today} value={f.paidOn} onChange={(e) => set({ paidOn: e.target.value })} /></Field>
         </div>
         <datalist id="ccy">{CURRENCIES.map((c) => <option key={c} value={c} />)}</datalist>
+        {f.supplierName && (f.supplierId
+          ? <span className="t13">Supplier: {f.supplierName}, already one of your suppliers.</span>
+          : <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}><input type="checkbox" checked={f.addSupplier} onChange={(e) => set({ addSupplier: e.target.checked })} />Add {f.supplierName}{f.supplierCountry ? ` (${f.supplierCountry})` : ""} as a supplier</label>)}
         <span className="t13">{preview ? `${preview} CIF at that rate. ` : ""}IGST paid on an import is input tax credit once the duty is paid.</span>
       </Shell>
+      )}
     </div>
   );
 }
