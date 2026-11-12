@@ -3903,6 +3903,139 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/warehouses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List warehouses
+         * @description The first stock movement creates the default warehouse (MAIN) when there is none.
+         */
+        get: operations["listWarehouses"];
+        put?: never;
+        /** Add a warehouse */
+        post: operations["createWarehouse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/inventory/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inventory settings */
+        get: operations["getInventorySettings"];
+        /** Allow or refuse negative stock */
+        put: operations["updateInventorySettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/stock-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tracked items with stock on hand and its value */
+        get: operations["listStockItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/stock-movements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stock movements, newest first */
+        get: operations["listStockMovements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/stock-adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record opening stock, a stock count or a write-off
+         * @description The journal is posted in the same transaction: a count or write-off against Stock adjustments at the average cost, opening stock against Opening balance equity. `insufficient_stock` (409) when a write-off would take stock below zero and the company does not allow it; `item_not_tracked` (409) for an item that is not kept in stock; `period_locked` (409) for a date in a locked period.
+         */
+        post: operations["adjustStock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/stock-transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move stock from one warehouse to another
+         * @description The cost moves with the stock, so the value of stock does not change and nothing is posted to the ledger.
+         */
+        post: operations["transferStock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/stock-valuation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stock valuation as of a date
+         * @description Quantity and value from the movements dated up to the day, at weighted average cost.
+         */
+        get: operations["getStockValuation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/portal-connections": {
         parameters: {
             query?: never;
@@ -4510,6 +4643,23 @@ export interface webhooks {
         put?: never;
         /** Invoice / note issued (IRN may follow) */
         post: operations["webhook_sales_document_issued"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "stock.adjusted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Opening stock, a stock count or a write-off was recorded */
+        post: operations["webhook_stock_adjusted"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7411,6 +7561,180 @@ export interface components {
             period?: string;
             total?: components["schemas"]["Money"];
             journals?: components["schemas"]["DepreciationJournal"][];
+        };
+        Warehouse: {
+            /** Format: uuid */
+            readonly id?: string;
+            code: string;
+            name: string;
+            /** @description Bills receive into it and invoices ship from it */
+            is_default?: boolean;
+            readonly is_active?: boolean;
+        };
+        WarehouseList: {
+            data?: components["schemas"]["Warehouse"][];
+        };
+        InventorySettings: {
+            /** @description Whether a sale may take stock below zero. Off unless the company turns it on. */
+            allow_negative_stock: boolean;
+            /** @enum {string} */
+            readonly valuation_method?: "weighted_average";
+        };
+        StockLevel: {
+            /** Format: uuid */
+            warehouse_id?: string;
+            code?: string;
+            name?: string;
+            /**
+             * @description A quantity with three decimals
+             * @example 12.000
+             */
+            qty?: string;
+        };
+        StockItem: {
+            /** Format: uuid */
+            item_id?: string;
+            sku?: string;
+            name?: string;
+            uqc?: string;
+            hsn_sac?: components["schemas"]["HsnSac"];
+            is_active?: boolean;
+            sale_rate?: components["schemas"]["Money"] | null;
+            /**
+             * @description On hand in all warehouses
+             * @example 12.000
+             */
+            qty?: string;
+            /**
+             * @description What one unit will leave stock at
+             * @example 115.0000
+             */
+            average_cost?: string;
+            value?: components["schemas"]["Money"];
+            last_moved_on?: string | null;
+            levels?: components["schemas"]["StockLevel"][];
+        };
+        StockTotals: {
+            value?: components["schemas"]["Money"];
+            items?: number;
+            out_of_stock?: number;
+        };
+        StockItemList: {
+            data?: components["schemas"]["StockItem"][];
+            totals?: components["schemas"]["StockTotals"];
+            allow_negative_stock?: boolean;
+            /** @enum {string} */
+            valuation_method?: "weighted_average";
+        };
+        StockMovement: {
+            id?: number;
+            /** Format: uuid */
+            item_id?: string;
+            sku?: string;
+            item_name?: string;
+            uqc?: string;
+            /** Format: uuid */
+            warehouse_id?: string;
+            warehouse_code?: string;
+            /** Format: date */
+            date?: string;
+            /**
+             * @description A quantity with three decimals
+             * @example 12.000
+             */
+            qty_in?: string;
+            /**
+             * @description A quantity with three decimals
+             * @example 12.000
+             */
+            qty_out?: string;
+            /**
+             * @description Rupees per unit, four decimals
+             * @example 115.0000
+             */
+            unit_cost?: string;
+            /** @description Signed: what the movement added to or took from the value of stock */
+            value?: components["schemas"]["Money"];
+            /** @enum {string} */
+            source_kind?: "purchase_bill" | "sales_document" | "adjustment" | "opening" | "transfer" | "bill_of_entry";
+            source_id?: string | null;
+            reference?: string | null;
+            reason?: string | null;
+            note?: string | null;
+            journal_entry_id?: string | null;
+            entry_no?: string | null;
+            /** Format: date-time */
+            readonly created_at?: string;
+        };
+        StockMovementPage: {
+            data: components["schemas"]["StockMovement"][];
+            next_cursor: string | null;
+        };
+        StockChange: {
+            movements?: components["schemas"]["StockMovement"][];
+            item?: components["schemas"]["StockItem"];
+            /**
+             * @description Opening stock only: how it was booked
+             * @enum {string}
+             */
+            booking?: "post" | "in_opening_balances";
+        };
+        StockAdjustment: {
+            /** Format: uuid */
+            item_id: string;
+            warehouse_id?: string | null;
+            /** @enum {string} */
+            kind: "opening" | "count" | "write_off";
+            /** Format: date */
+            date: string;
+            qty?: string | null;
+            counted_qty?: string | null;
+            unit_cost?: string | null;
+            booking?: ("post" | "in_opening_balances") | null;
+            reason?: string | null;
+            note?: string | null;
+        };
+        StockTransfer: {
+            /** Format: uuid */
+            item_id: string;
+            /** Format: uuid */
+            from_warehouse_id: string;
+            /** Format: uuid */
+            to_warehouse_id: string;
+            /** Format: date */
+            date: string;
+            qty: string;
+            note?: string | null;
+        };
+        StockValuationItem: {
+            /** Format: uuid */
+            item_id?: string;
+            sku?: string;
+            name?: string;
+            uqc?: string;
+            /**
+             * @description A quantity with three decimals
+             * @example 12.000
+             */
+            qty?: string;
+            /**
+             * @description Rupees per unit, four decimals
+             * @example 115.0000
+             */
+            average_cost?: string;
+            value?: components["schemas"]["Money"];
+        };
+        StockValuation: {
+            /** Format: date */
+            as_of?: string;
+            /** @enum {string} */
+            valuation_method?: "weighted_average";
+            items?: components["schemas"]["StockValuationItem"][];
+            total_value?: components["schemas"]["Money"];
+            /** @description The Inventory account on the same date */
+            ledger_balance?: components["schemas"]["Money"];
+            /** @description Ledger less stock. Not zero when stock was booked to another account or Inventory was posted to by hand */
+            difference?: components["schemas"]["Money"];
         };
         PortalConnection: {
             /** Format: uuid */
@@ -17640,6 +17964,302 @@ export interface operations {
             429: components["responses"]["TooMany"];
         };
     };
+    listWarehouses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WarehouseList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    createWarehouse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Warehouse"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Warehouse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getInventorySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventorySettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    updateInventorySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InventorySettings"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventorySettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listStockItems: {
+        parameters: {
+            query?: {
+                /** @description Free-text search */
+                q?: components["parameters"]["Q"];
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockItemList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listStockMovements: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor from `next_cursor` */
+                cursor?: components["parameters"]["Cursor"];
+                item_id?: string;
+                warehouse_id?: string;
+                source_kind?: "purchase_bill" | "sales_document" | "adjustment" | "opening" | "transfer" | "bill_of_entry";
+                from?: components["parameters"]["From"];
+                to?: components["parameters"]["To"];
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockMovementPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    adjustStock: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique per logical operation. Replays within 24 h return the first response. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StockAdjustment"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockChange"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    transferStock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StockTransfer"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockChange"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getStockValuation: {
+        parameters: {
+            query?: {
+                /** @description Today when left out */
+                as_of?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockValuation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
     listPortalConnections: {
         parameters: {
             query?: {
@@ -18965,6 +19585,33 @@ export interface operations {
         };
     };
     webhook_sales_document_issued: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_stock_adjusted: {
         parameters: {
             query?: never;
             header: {

@@ -1168,6 +1168,59 @@ action(E + "/depreciation/run", "Fixed assets", "runDepreciation", "Post depreci
        resp=schema("DepreciationRunResult", {"period": S(), "total": MONEY, "journals": ARR(schema("DepreciationJournal", {"month": DATE, "journal_entry_id": UUID, "entry_no": S(), "total": MONEY, "assets": I()}))}),
        desc="One journal per month not yet posted, covering all assets. Running a month that is already posted posts nothing.")
 
+# =================================================================== INVENTORY
+tag("Inventory", "Stock of the items marked as tracked: what is on hand and what it is worth, every movement, counts, write-offs, opening stock and the valuation as of a date. "
+                 "Weighted average cost per item. A booked purchase bill brings stock in and an issued invoice takes it out; those happen by themselves.")
+QTY = S(pattern=r"^-?[0-9]+\.[0-9]{3}$", description="A quantity with three decimals", examples=["12.000"])
+UNIT_COST = S(pattern=r"^[0-9]+\.[0-9]{4}$", description="Rupees per unit, four decimals", examples=["115.0000"])
+schema("Warehouse", {"id": RO_UUID, "code": S(pattern="^[A-Za-z0-9-]{1,12}$"), "name": S(), "is_default": B(description="Bills receive into it and invoices ship from it"), "is_active": B(readOnly=True)},
+       required=("code", "name"))
+_op("get", E + "/warehouses", "Inventory", "listWarehouses", "List warehouses", "finance:read", resp=schema("WarehouseList", {"data": ARR(ref("Warehouse"))}),
+    desc="The first stock movement creates the default warehouse (MAIN) when there is none.")
+_op("post", E + "/warehouses", "Inventory", "createWarehouse", "Add a warehouse", "finance:write", body=ref("Warehouse"), resp=ref("Warehouse"), status="201")
+schema("InventorySettings", {"allow_negative_stock": B(description="Whether a sale may take stock below zero. Off unless the company turns it on."),
+                             "valuation_method": ENUM("weighted_average", readOnly=True)}, required=("allow_negative_stock",))
+_op("get", E + "/inventory/settings", "Inventory", "getInventorySettings", "Inventory settings", "finance:read", resp=ref("InventorySettings"))
+_op("put", E + "/inventory/settings", "Inventory", "updateInventorySettings", "Allow or refuse negative stock", "finance:approve", body=ref("InventorySettings"), resp=ref("InventorySettings"))
+schema("StockLevel", {"warehouse_id": UUID, "code": S(), "name": S(), "qty": QTY})
+schema("StockItem", {"item_id": UUID, "sku": S(), "name": S(), "uqc": S(), "hsn_sac": HSN, "is_active": B(), "sale_rate": NULLABLE(MONEY),
+                     "qty": {**QTY, "description": "On hand in all warehouses"}, "average_cost": {**UNIT_COST, "description": "What one unit will leave stock at"},
+                     "value": MONEY, "last_moved_on": NULLABLE(DATE), "levels": ARR(ref("StockLevel"))})
+_op("get", E + "/stock-items", "Inventory", "listStockItems", "Tracked items with stock on hand and its value", "finance:read", params=[P("Q")],
+    resp=schema("StockItemList", {"data": ARR(ref("StockItem")), "totals": schema("StockTotals", {"value": MONEY, "items": I(), "out_of_stock": I()}),
+                                  "allow_negative_stock": B(), "valuation_method": ENUM("weighted_average")}))
+STOCK_SOURCE = ENUM("purchase_bill", "sales_document", "adjustment", "opening", "transfer", "bill_of_entry")
+schema("StockMovement", {"id": I(), "item_id": UUID, "sku": S(), "item_name": S(), "uqc": S(), "warehouse_id": UUID, "warehouse_code": S(), "date": DATE,
+                         "qty_in": QTY, "qty_out": QTY, "unit_cost": UNIT_COST,
+                         "value": {**MONEY, "description": "Signed: what the movement added to or took from the value of stock"},
+                         "source_kind": STOCK_SOURCE, "source_id": NULLABLE(UUID), "reference": NULLABLE(S(description="The bill, document or bill of entry number")),
+                         "reason": NULLABLE(S()), "note": NULLABLE(S()), "journal_entry_id": NULLABLE(UUID), "entry_no": NULLABLE(S()), "created_at": RO_TS})
+_op("get", E + "/stock-movements", "Inventory", "listStockMovements", "Stock movements, newest first", "finance:read",
+    params=[P("Limit"), P("Cursor"), q("item_id", UUID), q("warehouse_id", UUID), q("source_kind", STOCK_SOURCE), P("From"), P("To")], resp=page_of("StockMovement"))
+schema("StockChange", {"movements": ARR(ref("StockMovement")), "item": ref("StockItem"),
+                       "booking": ENUM("post", "in_opening_balances", description="Opening stock only: how it was booked")})
+action(E + "/stock-adjustments", "Inventory", "adjustStock", "Record opening stock, a stock count or a write-off", "finance:write", idem=True, status="201", resp=ref("StockChange"),
+       body=schema("StockAdjustment", {
+           "item_id": UUID, "warehouse_id": NULLABLE({**UUID, "description": "The default warehouse when left out"}), "kind": ENUM("opening", "count", "write_off"), "date": DATE,
+           "qty": NULLABLE({"type": "string", "description": "opening and write_off: the quantity"}),
+           "counted_qty": NULLABLE({"type": "string", "description": "count: what is physically there in the warehouse"}),
+           "unit_cost": NULLABLE({"type": "string", "description": "opening: what one unit cost. count: only when stock is found and the item has no cost on record"}),
+           "booking": NULLABLE(ENUM("post", "in_opening_balances", description="opening: `post` books Dr Inventory, Cr Opening balance equity; `in_opening_balances` only records the stock because the opening trial balance already carries its value. Left out, it is `in_opening_balances` when an opening trial balance has been imported and `post` when not.")),
+           "reason": NULLABLE(S(maxLength=200, description="Required for a count and a write-off")), "note": NULLABLE(S(maxLength=500))}, required=("item_id", "kind", "date")),
+       desc="The journal is posted in the same transaction: a count or write-off against Stock adjustments at the average cost, opening stock against Opening balance equity. "
+            "`insufficient_stock` (409) when a write-off would take stock below zero and the company does not allow it; `item_not_tracked` (409) for an item that is not kept in stock; "
+            "`period_locked` (409) for a date in a locked period.")
+action(E + "/stock-transfers", "Inventory", "transferStock", "Move stock from one warehouse to another", "finance:write", status="201", resp=ref("StockChange"),
+       body=schema("StockTransfer", {"item_id": UUID, "from_warehouse_id": UUID, "to_warehouse_id": UUID, "date": DATE, "qty": S(), "note": NULLABLE(S(maxLength=500))},
+                   required=("item_id", "from_warehouse_id", "to_warehouse_id", "date", "qty")),
+       desc="The cost moves with the stock, so the value of stock does not change and nothing is posted to the ledger.")
+_op("get", E + "/stock-valuation", "Inventory", "getStockValuation", "Stock valuation as of a date", "finance:read", params=[q("as_of", DATE, "Today when left out")],
+    resp=schema("StockValuation", {"as_of": DATE, "valuation_method": ENUM("weighted_average"),
+                                   "items": ARR(schema("StockValuationItem", {"item_id": UUID, "sku": S(), "name": S(), "uqc": S(), "qty": QTY, "average_cost": UNIT_COST, "value": MONEY})),
+                                   "total_value": MONEY, "ledger_balance": {**MONEY, "description": "The Inventory account on the same date"},
+                                   "difference": {**MONEY, "description": "Ledger less stock. Not zero when stock was booked to another account or Inventory was posted to by hand"}}),
+    desc="Quantity and value from the movements dated up to the day, at weighted average cost.")
+
 # =================================================================== PORTALS & JOBS
 tag("Portals & jobs", "Government / bank connections, OTP sessions, sync jobs and the job resource")
 schema("PortalConnection", {"id": RO_UUID, "portal": ENUM("gstn", "irp", "eway", "mca", "income_tax", "traces", "epfo", "esic", "professional_tax", "udyam", "account_aggregator", "bank_api", "treds", "digilocker"),
@@ -1265,6 +1318,7 @@ EVENTS = {
     "notice.received": "A notice arrived from an authority",
     "threshold.crossed": "A fact crossed a rule threshold",
     "sales_document.issued": "Invoice / note issued (IRN may follow)",
+    "stock.adjusted": "Opening stock, a stock count or a write-off was recorded",
     "sales_document.irn_generated": "IRP returned the IRN and signed QR",
     "sales_document.paid": "Fully settled",
     "receipt.created": "Money received and allocated",

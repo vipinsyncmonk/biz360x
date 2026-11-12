@@ -73,6 +73,10 @@ tags:
 - name: Fixed assets
   description: The register of what the company owns, monthly depreciation posted to the ledger, and the sale of an asset.
     Companies Act (books) depreciation; the lives are a starter list for a CA to review.
+- name: Inventory
+  description: 'Stock of the items marked as tracked: what is on hand and what it is worth, every movement, counts, write-offs,
+    opening stock and the valuation as of a date. Weighted average cost per item. A booked purchase bill brings stock in and
+    an issued invoice takes it out; those happen by themselves.'
 - name: Portals & jobs
   description: Government / bank connections, OTP sessions, sync jobs and the job resource
 - name: Copilot
@@ -10405,6 +10409,329 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: finance:write
+  /entities/{entityId}/warehouses:
+    get:
+      tags:
+      - Inventory
+      operationId: listWarehouses
+      summary: List warehouses
+      description: The first stock movement creates the default warehouse (MAIN) when there is none.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarehouseList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+    post:
+      tags:
+      - Inventory
+      operationId: createWarehouse
+      summary: Add a warehouse
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Warehouse'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Warehouse'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/inventory/settings:
+    get:
+      tags:
+      - Inventory
+      operationId: getInventorySettings
+      summary: Inventory settings
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventorySettings'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+    put:
+      tags:
+      - Inventory
+      operationId: updateInventorySettings
+      summary: Allow or refuse negative stock
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventorySettings'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventorySettings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:approve
+  /entities/{entityId}/stock-items:
+    get:
+      tags:
+      - Inventory
+      operationId: listStockItems
+      summary: Tracked items with stock on hand and its value
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Q'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockItemList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+  /entities/{entityId}/stock-movements:
+    get:
+      tags:
+      - Inventory
+      operationId: listStockMovements
+      summary: Stock movements, newest first
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      - name: item_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: warehouse_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: source_kind
+        in: query
+        schema:
+          type: string
+          enum:
+          - purchase_bill
+          - sales_document
+          - adjustment
+          - opening
+          - transfer
+          - bill_of_entry
+      - $ref: '#/components/parameters/From'
+      - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockMovementPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+  /entities/{entityId}/stock-adjustments:
+    post:
+      tags:
+      - Inventory
+      operationId: adjustStock
+      summary: Record opening stock, a stock count or a write-off
+      description: 'The journal is posted in the same transaction: a count or write-off against Stock adjustments at the average
+        cost, opening stock against Opening balance equity. `insufficient_stock` (409) when a write-off would take stock below
+        zero and the company does not allow it; `item_not_tracked` (409) for an item that is not kept in stock; `period_locked`
+        (409) for a date in a locked period.'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockAdjustment'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockChange'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/stock-transfers:
+    post:
+      tags:
+      - Inventory
+      operationId: transferStock
+      summary: Move stock from one warehouse to another
+      description: The cost moves with the stock, so the value of stock does not change and nothing is posted to the ledger.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockTransfer'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockChange'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/stock-valuation:
+    get:
+      tags:
+      - Inventory
+      operationId: getStockValuation
+      summary: Stock valuation as of a date
+      description: Quantity and value from the movements dated up to the day, at weighted average cost.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: as_of
+        in: query
+        schema:
+          type: string
+          format: date
+        description: Today when left out
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockValuation'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
   /entities/{entityId}/portal-connections:
     get:
       tags:
@@ -11744,6 +12071,33 @@ webhooks:
     post:
       summary: Invoice / note issued (IRN may follow)
       operationId: webhook_sales_document_issued
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  stock.adjusted:
+    post:
+      summary: Opening stock, a stock count or a write-off was recorded
+      operationId: webhook_stock_adjusted
       parameters:
       - name: Biz360X-Signature
         in: header
@@ -19687,6 +20041,380 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DepreciationJournal'
+    Warehouse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          type: string
+          pattern: ^[A-Za-z0-9-]{1,12}$
+        name:
+          type: string
+        is_default:
+          type: boolean
+          description: Bills receive into it and invoices ship from it
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - code
+      - name
+    WarehouseList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warehouse'
+    InventorySettings:
+      type: object
+      properties:
+        allow_negative_stock:
+          type: boolean
+          description: Whether a sale may take stock below zero. Off unless the company turns it on.
+        valuation_method:
+          type: string
+          enum:
+          - weighted_average
+          readOnly: true
+      required:
+      - allow_negative_stock
+    StockLevel:
+      type: object
+      properties:
+        warehouse_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        qty:
+          type: string
+          pattern: ^-?[0-9]+\.[0-9]{3}$
+          description: A quantity with three decimals
+          examples:
+          - '12.000'
+    StockItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        uqc:
+          type: string
+        hsn_sac:
+          $ref: '#/components/schemas/HsnSac'
+        is_active:
+          type: boolean
+        sale_rate:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        qty:
+          type: string
+          pattern: ^-?[0-9]+\.[0-9]{3}$
+          description: On hand in all warehouses
+          examples:
+          - '12.000'
+        average_cost:
+          type: string
+          pattern: ^[0-9]+\.[0-9]{4}$
+          description: What one unit will leave stock at
+          examples:
+          - '115.0000'
+        value:
+          $ref: '#/components/schemas/Money'
+        last_moved_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockLevel'
+    StockTotals:
+      type: object
+      properties:
+        value:
+          $ref: '#/components/schemas/Money'
+        items:
+          type: integer
+        out_of_stock:
+          type: integer
+    StockItemList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockItem'
+        totals:
+          $ref: '#/components/schemas/StockTotals'
+        allow_negative_stock:
+          type: boolean
+        valuation_method:
+          type: string
+          enum:
+          - weighted_average
+    StockMovement:
+      type: object
+      properties:
+        id:
+          type: integer
+        item_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        item_name:
+          type: string
+        uqc:
+          type: string
+        warehouse_id:
+          type: string
+          format: uuid
+        warehouse_code:
+          type: string
+        date:
+          type: string
+          format: date
+        qty_in:
+          type: string
+          pattern: ^-?[0-9]+\.[0-9]{3}$
+          description: A quantity with three decimals
+          examples:
+          - '12.000'
+        qty_out:
+          type: string
+          pattern: ^-?[0-9]+\.[0-9]{3}$
+          description: A quantity with three decimals
+          examples:
+          - '12.000'
+        unit_cost:
+          type: string
+          pattern: ^[0-9]+\.[0-9]{4}$
+          description: Rupees per unit, four decimals
+          examples:
+          - '115.0000'
+        value:
+          $ref: '#/components/schemas/Money'
+          description: 'Signed: what the movement added to or took from the value of stock'
+        source_kind:
+          type: string
+          enum:
+          - purchase_bill
+          - sales_document
+          - adjustment
+          - opening
+          - transfer
+          - bill_of_entry
+        source_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        reference:
+          oneOf:
+          - type: string
+            description: The bill, document or bill of entry number
+          - type: 'null'
+        reason:
+          oneOf:
+          - type: string
+          - type: 'null'
+        note:
+          oneOf:
+          - type: string
+          - type: 'null'
+        journal_entry_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        entry_no:
+          oneOf:
+          - type: string
+          - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    StockMovementPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockMovement'
+        next_cursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - data
+      - next_cursor
+    StockChange:
+      type: object
+      properties:
+        movements:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockMovement'
+        item:
+          $ref: '#/components/schemas/StockItem'
+        booking:
+          type: string
+          enum:
+          - post
+          - in_opening_balances
+          description: 'Opening stock only: how it was booked'
+    StockAdjustment:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        warehouse_id:
+          oneOf:
+          - type: string
+            format: uuid
+            description: The default warehouse when left out
+          - type: 'null'
+        kind:
+          type: string
+          enum:
+          - opening
+          - count
+          - write_off
+        date:
+          type: string
+          format: date
+        qty:
+          oneOf:
+          - type: string
+            description: 'opening and write_off: the quantity'
+          - type: 'null'
+        counted_qty:
+          oneOf:
+          - type: string
+            description: 'count: what is physically there in the warehouse'
+          - type: 'null'
+        unit_cost:
+          oneOf:
+          - type: string
+            description: 'opening: what one unit cost. count: only when stock is found and the item has no cost on record'
+          - type: 'null'
+        booking:
+          oneOf:
+          - type: string
+            enum:
+            - post
+            - in_opening_balances
+            description: 'opening: `post` books Dr Inventory, Cr Opening balance equity; `in_opening_balances` only records
+              the stock because the opening trial balance already carries its value. Left out, it is `in_opening_balances`
+              when an opening trial balance has been imported and `post` when not.'
+          - type: 'null'
+        reason:
+          oneOf:
+          - type: string
+            maxLength: 200
+            description: Required for a count and a write-off
+          - type: 'null'
+        note:
+          oneOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+      required:
+      - item_id
+      - kind
+      - date
+    StockTransfer:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        from_warehouse_id:
+          type: string
+          format: uuid
+        to_warehouse_id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        qty:
+          type: string
+        note:
+          oneOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+      required:
+      - item_id
+      - from_warehouse_id
+      - to_warehouse_id
+      - date
+      - qty
+    StockValuationItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        uqc:
+          type: string
+        qty:
+          type: string
+          pattern: ^-?[0-9]+\.[0-9]{3}$
+          description: A quantity with three decimals
+          examples:
+          - '12.000'
+        average_cost:
+          type: string
+          pattern: ^[0-9]+\.[0-9]{4}$
+          description: Rupees per unit, four decimals
+          examples:
+          - '115.0000'
+        value:
+          $ref: '#/components/schemas/Money'
+    StockValuation:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date
+        valuation_method:
+          type: string
+          enum:
+          - weighted_average
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockValuationItem'
+        total_value:
+          $ref: '#/components/schemas/Money'
+        ledger_balance:
+          $ref: '#/components/schemas/Money'
+          description: The Inventory account on the same date
+        difference:
+          $ref: '#/components/schemas/Money'
+          description: Ledger less stock. Not zero when stock was booked to another account or Inventory was posted to by
+            hand
     PortalConnection:
       type: object
       properties:
