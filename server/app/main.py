@@ -22,6 +22,7 @@ from .routes_trade import router as trade_routes
 from .routes_bankrules import router as bank_rules_routes
 from .routes_assets import router as asset_routes
 from .routes_inventory import router as inventory_routes
+from .routes_hr import router as hr_routes
 from .routes_msme import router as msme_routes
 from .routes_copilot import router as copilot
 from .routes_compliance import router as compliance
@@ -66,7 +67,7 @@ def health():
     return JSONResponse({"ok": True})
 
 
-_ROUTERS = (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal, portals, integrations, billing, settings, copilot, capital, msme_routes, history, trade_routes, bank_rules_routes, asset_routes, inventory_routes)
+_ROUTERS = (platform, compliance, engine_routes, sales, orders, finance, receivables, purchases, gst, payroll, vault, legal, portals, integrations, billing, settings, copilot, capital, msme_routes, history, trade_routes, bank_rules_routes, asset_routes, inventory_routes, hr_routes)
 for r in _ROUTERS:
     app.include_router(r, prefix="/v1")
 ratelimit.register_heavy_routes(_ROUTERS, "/v1")

@@ -2966,6 +2966,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/hr/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The HR policy in force today
+         * @description A company that has saved none sees the starter policy (`is_default`). The starter values need the company's and a CA's review.
+         */
+        get: operations["getHrPolicy"];
+        /**
+         * Save the HR policy from a date
+         * @description A policy takes effect from today or later and is never changed for the past.
+         */
+        put: operations["saveHrPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/leave-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Leave types */
+        get: operations["listLeaveTypes"];
+        put?: never;
+        /** Add a leave type, or change the one with the same code */
+        post: operations["saveLeaveType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/payroll/ctc-breakup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a yearly CTC becomes under the policy
+         * @description Saves nothing. Basic and HRA follow the policy, the employer's PF, ESI and gratuity are taken out when the policy says the CTC includes them, and the special allowance is the rest.
+         */
+        get: operations["previewCtcBreakup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/onboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enter a new hire with a CTC
+         * @description Creates the employee as `onboarding` (outside payroll), the salary structure from the policy and the checklist from the policy.
+         */
+        post: operations["onboardEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A new hire's checklist */
+        get: operations["getOnboarding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/onboarding/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Tick or untick a checklist item
+         * @description Items read from the record (PAN, bank account, salary, handbook) cannot be ticked by hand (409).
+         */
+        put: operations["setOnboardingTask"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish onboarding
+         * @description Every required item must be done (`onboarding_incomplete`). The person becomes active and is paid from the joining date.
+         */
+        post: operations["activateEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/holidays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Company holidays */
+        get: operations["listHolidays"];
+        put?: never;
+        /** Add a holiday */
+        post: operations["createHoliday"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/holidays/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a holiday */
+        delete: operations["deleteHoliday"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/leave-requests": {
         parameters: {
             query?: never;
@@ -2978,6 +3152,249 @@ export interface paths {
         put?: never;
         /** Create leave request */
         post: operations["createLeaveRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/leave-requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a leave request
+         * @description Its unpaid days go into the open payroll run of each month it touches.
+         */
+        post: operations["approveLeaveRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/leave-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a leave request */
+        post: operations["rejectLeaveRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/leave-requests/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw a leave request
+         * @description Refused (409) when its unpaid days were already deducted in an approved payroll.
+         */
+        post: operations["cancelLeaveRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/leave-balances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Leave earned, taken and left, per person */
+        get: operations["listLeaveBalances"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/leave-adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add days to a balance or take them off
+         * @description What a person carried in when the company started here, a carry-forward, or a correction.
+         */
+        post: operations["adjustLeaveBalance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/payroll-runs/{id}/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a payroll run still needs
+         * @description `blockers` stop the run from being computed (no salary set); `warnings` are worth a look first (onboarding not finished, no bank account, no PAN, leave awaiting a decision).
+         */
+        get: operations["getPayrollReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/payroll-runs/{id}/inputs/from-leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bring approved unpaid leave into the run's inputs
+         * @description Starting a run and deciding a leave request do this by themselves; this does it again on request. Figures typed for the month are kept.
+         */
+        post: operations["pullLeaveIntoPayroll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/payslips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A person's payslips from approved runs */
+        get: operations["listEmployeePayslips"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/payslips/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One payslip with its lines and the year so far */
+        get: operations["getPayslip"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/payslips/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The payslip as a PDF
+         * @description `application/pdf`. A payslip from a run that is not approved carries a DRAFT mark.
+         */
+        get: operations["getPayslipPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/hr/policy-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The handbook: the current version of each document */
+        get: operations["listHrPolicyDocuments"];
+        put?: never;
+        /**
+         * Publish a handbook document or its next version
+         * @description A published version is never edited; people acknowledge the new one afresh.
+         */
+        post: operations["publishHrPolicyDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/hr/policy-documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A handbook document with who has acknowledged it */
+        get: operations["getHrPolicyDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/hr/policy-documents/{id}/acknowledgements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record that a person has read and accepted it */
+        post: operations["acknowledgeHrPolicyDocument"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4660,6 +5077,91 @@ export interface webhooks {
         put?: never;
         /** Opening stock, a stock count or a write-off was recorded */
         post: operations["webhook_stock_adjusted"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "employee.onboarding_started": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A new hire was entered with a CTC */
+        post: operations["webhook_employee_onboarding_started"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "employee.activated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Onboarding finished; the person is on payroll */
+        post: operations["webhook_employee_activated"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "leave.requested": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A leave request waits for a decision */
+        post: operations["webhook_leave_requested"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "leave.decided": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A leave request was approved, rejected or withdrawn */
+        post: operations["webhook_leave_decided"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "hr_policy.changed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The HR policy or a handbook document changed */
+        post: operations["webhook_hr_policy_changed"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6598,6 +7100,7 @@ export interface components {
             in_wages: boolean;
             taxable?: boolean;
         };
+        /** @description Leave `components` out and they are worked out from the CTC by the HR policy. */
         SalaryStructure: {
             /** Format: uuid */
             readonly id?: string;
@@ -6605,7 +7108,7 @@ export interface components {
             effective_from: string;
             effective_to?: string | null;
             ctc_annual: components["schemas"]["Money"];
-            components: components["schemas"]["SalaryComponent"][];
+            components?: components["schemas"]["SalaryComponent"][];
         };
         BankDetails: {
             account_no?: string;
@@ -6769,23 +7272,390 @@ export interface components {
             data: components["schemas"]["Committee"][];
             next_cursor: string | null;
         };
+        LeaveType: {
+            /** Format: uuid */
+            readonly id?: string;
+            code: string;
+            name: string;
+            annual_quota?: string | null;
+            /**
+             * @description Granted at the start of the leave year, or earned month by month
+             * @enum {string}
+             */
+            accrual?: "yearly" | "monthly";
+            /** @description false: every day of it is loss of pay */
+            paid?: boolean;
+            /**
+             * @description Leave days as text, in half days: 2, 0.5, 7.5
+             * @example 2
+             */
+            carry_forward_max?: string;
+            encashable?: boolean;
+            is_active?: boolean;
+        };
+        HrChecklistItem: {
+            key: string;
+            title: string;
+            required?: boolean;
+            auto?: ("pan" | "bank" | "salary" | "handbook") | null;
+        };
+        HrSalaryPolicy: {
+            /** @description Basic pay as a share of the CTC */
+            basic_pct_of_ctc: string;
+            hra_pct_of_basic: string;
+            employer_pf_in_ctc?: boolean;
+            /** @description PF on the whole basic, not capped at the wage ceiling */
+            pf_on_full_basic?: boolean;
+            employer_esi_in_ctc?: boolean;
+            gratuity_in_ctc?: boolean;
+        };
+        HrLeavePolicy: {
+            /** @enum {string} */
+            leave_year?: "financial" | "calendar";
+            /** @description Weekdays off, 0 for Monday to 6 for Sunday */
+            week_off?: number[];
+            /** @description Leave beyond the balance is taken as loss of pay; when false it is refused */
+            lop_when_exhausted?: boolean;
+        };
+        HrPayrollPolicy: {
+            inputs_cutoff_day?: number;
+            pay_day?: number;
+            probation_months?: number;
+            notice_days?: number;
+        };
+        HrOnboardingPolicy: {
+            checklist: components["schemas"]["HrChecklistItem"][];
+        };
+        HrPolicy: {
+            effective_from: string | null;
+            readonly is_default?: boolean;
+            next_change_on?: string | null;
+            salary: components["schemas"]["HrSalaryPolicy"];
+            leave: components["schemas"]["HrLeavePolicy"];
+            payroll: components["schemas"]["HrPayrollPolicy"];
+            onboarding: components["schemas"]["HrOnboardingPolicy"];
+            readonly leave_types?: components["schemas"]["LeaveType"][];
+        };
+        LeaveTypeList: {
+            data?: components["schemas"]["LeaveType"][];
+        };
+        CtcComponent: {
+            code?: string;
+            monthly_amount?: components["schemas"]["Money"];
+            annual_amount?: components["schemas"]["Money"];
+            /** @enum {string} */
+            kind?: "earning" | "employer_contribution" | "reimbursement";
+            in_wages?: boolean;
+            taxable?: boolean;
+        };
+        CtcBreakup: {
+            ctc_annual?: components["schemas"]["Money"];
+            components?: components["schemas"]["CtcComponent"][];
+            monthly_ctc?: components["schemas"]["Money"];
+            monthly_gross?: components["schemas"]["Money"];
+            employer_contributions?: components["schemas"]["Money"];
+            employee_pf?: components["schemas"]["Money"];
+            employee_esi?: components["schemas"]["Money"];
+            /** @description Gross less the employee's PF and ESI; income tax and professional tax come off this */
+            take_home_before_tax?: components["schemas"]["Money"];
+            wage_pct?: number | null;
+        };
+        OnboardingTask: {
+            key?: string;
+            title?: string;
+            required?: boolean;
+            auto?: string | null;
+            done?: boolean;
+        };
+        Onboarding: {
+            employee?: components["schemas"]["Employee"];
+            checklist?: components["schemas"]["OnboardingTask"][];
+            /** @description Required items still to do */
+            open_required?: string[];
+            /** @description Every required item is done and the person can be activated */
+            ready?: boolean;
+            done?: number;
+            total?: number;
+        };
+        OnboardEmployee: {
+            full_name: string;
+            employee_code?: string | null;
+            /** Format: date */
+            date_of_joining: string;
+            work_state: components["schemas"]["StateCode"];
+            ctc_annual: components["schemas"]["Money"];
+            designation?: string | null;
+            department?: string | null;
+            email?: string | null;
+            pan?: components["schemas"]["Pan"] | null;
+            uan?: string | null;
+            employment_type?: string;
+            /** @enum {string} */
+            tax_regime?: "new" | "old";
+            bank_account?: components["schemas"]["BankDetails"] | null;
+        };
+        OnboardingTaskDone: {
+            done: boolean;
+        };
+        Holiday: {
+            /** Format: uuid */
+            readonly id?: string;
+            /** Format: date */
+            date: string;
+            name: string;
+        };
+        HolidayList: {
+            data?: components["schemas"]["Holiday"][];
+        };
         LeaveRequest: {
             /** Format: uuid */
             readonly id?: string;
             /** Format: uuid */
             employee_id: string;
+            readonly employee_name?: string;
+            readonly employee_code?: string;
+            /** @description The leave type's code */
             leave_type: string;
+            readonly leave_type_name?: string;
             /** Format: date */
             from: string;
             /** Format: date */
             to: string;
-            days?: number;
+            half_day?: boolean;
+            reason?: string | null;
+            /**
+             * @description Working days in the range: not the weekly off, not a holiday
+             * @example 2
+             */
+            readonly days?: string;
+            /**
+             * @description The days of it that are not paid
+             * @example 2
+             */
+            readonly lop_days?: string;
             /** @enum {string} */
             readonly status?: "pending" | "approved" | "rejected" | "cancelled";
+            /** Format: date-time */
+            readonly requested_at?: string;
+            decided_at?: string | null;
+            decision_note?: string | null;
+            payroll_note?: string | null;
         };
         LeaveRequestPage: {
             data: components["schemas"]["LeaveRequest"][];
             next_cursor: string | null;
+        };
+        LeaveDecision: {
+            note?: string | null;
+        };
+        LeaveBalance: {
+            leave_type?: string;
+            name?: string;
+            paid?: boolean;
+            annual_quota?: string | null;
+            accrual?: string;
+            earned?: string | null;
+            /**
+             * @description Leave days as text, in half days: 2, 0.5, 7.5
+             * @example 2
+             */
+            adjustments?: string;
+            /**
+             * @description Leave days as text, in half days: 2, 0.5, 7.5
+             * @example 2
+             */
+            taken?: string;
+            /**
+             * @description Leave days as text, in half days: 2, 0.5, 7.5
+             * @example 2
+             */
+            pending?: string;
+            /**
+             * @description Leave days as text, in half days: 2, 0.5, 7.5
+             * @example 2
+             */
+            unpaid_taken?: string;
+            available?: string | null;
+        };
+        EmployeeLeave: {
+            /** Format: uuid */
+            employee_id?: string;
+            employee_code?: string;
+            employee_name?: string;
+            balances?: components["schemas"]["LeaveBalance"][];
+        };
+        LeaveBalances: {
+            /** Format: date */
+            as_of?: string;
+            /** Format: date */
+            leave_year_start?: string;
+            /** Format: date */
+            leave_year_end?: string;
+            data?: components["schemas"]["EmployeeLeave"][];
+        };
+        LeaveAdjustment: {
+            /** Format: uuid */
+            employee_id: string;
+            leave_type: string;
+            /** @description Negative to take days off */
+            days: string;
+            /** @enum {string} */
+            kind?: "opening" | "carry_forward" | "correction";
+            as_of?: string | null;
+            note?: string | null;
+        };
+        LeaveAdjustmentResult: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            employee_id?: string;
+            /** Format: date */
+            leave_year_start?: string;
+            balance?: components["schemas"]["LeaveBalance"];
+        };
+        EmployeeRef: {
+            /** Format: uuid */
+            employee_id?: string;
+            employee_code?: string;
+            name?: string;
+        };
+        ReadinessItem: {
+            code?: string;
+            title?: string;
+            employees?: components["schemas"]["EmployeeRef"][];
+        };
+        LopFromLeave: {
+            /** Format: uuid */
+            employee_id?: string;
+            employee_code?: string;
+            name?: string;
+            /**
+             * @description Leave days as text, in half days: 2, 0.5, 7.5
+             * @example 2
+             */
+            lop_days?: string;
+        };
+        PayrollReadiness: {
+            /** Format: uuid */
+            run_id?: string;
+            /** Format: date */
+            period_month?: string;
+            status?: string;
+            ready?: boolean;
+            headcount?: number;
+            blockers?: components["schemas"]["ReadinessItem"][];
+            warnings?: components["schemas"]["ReadinessItem"][];
+            joiners?: components["schemas"]["EmployeeRef"][];
+            leavers?: components["schemas"]["EmployeeRef"][];
+            lop_from_leave?: components["schemas"]["LopFromLeave"][];
+        };
+        LopRow: {
+            /** Format: uuid */
+            employee_id?: string;
+            /**
+             * @description Leave days as text, in half days: 2, 0.5, 7.5
+             * @example 2
+             */
+            lop_days?: string;
+        };
+        LopPulled: {
+            data?: components["schemas"]["LopRow"][];
+        };
+        PayslipLine: {
+            code?: string;
+            label?: string;
+            /** @enum {string} */
+            kind?: "earning" | "deduction" | "employer_contribution";
+            amount?: components["schemas"]["Money"];
+        };
+        PayslipYtd: {
+            gross?: components["schemas"]["Money"];
+            tds?: components["schemas"]["Money"];
+            pf?: components["schemas"]["Money"];
+            net?: components["schemas"]["Money"];
+        };
+        PayslipDetail: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            run_id?: string;
+            /** Format: date */
+            period_month?: string;
+            run_status?: string;
+            /** @description From an approved run; a payslip that is not final is a draft */
+            final?: boolean;
+            paid_on?: string | null;
+            /** Format: uuid */
+            employee_id?: string;
+            employee_code?: string;
+            employee_name?: string;
+            designation?: string | null;
+            department?: string | null;
+            pan_last4?: string | null;
+            uan?: string | null;
+            /** Format: date */
+            date_of_joining?: string;
+            paid_days?: number;
+            lop_days?: number;
+            gross?: components["schemas"]["Money"];
+            wages?: components["schemas"]["Money"];
+            pf_wage?: components["schemas"]["Money"];
+            pf_employee?: components["schemas"]["Money"];
+            pf_employer_epf?: components["schemas"]["Money"];
+            pf_employer_eps?: components["schemas"]["Money"];
+            esi_applicable?: boolean;
+            esi_employee?: components["schemas"]["Money"];
+            esi_employer?: components["schemas"]["Money"];
+            professional_tax?: components["schemas"]["Money"];
+            tds?: components["schemas"]["Money"];
+            other_deductions?: components["schemas"]["Money"];
+            net_pay?: components["schemas"]["Money"];
+            pdf_url?: string;
+            lines?: components["schemas"]["PayslipLine"][];
+            year_to_date?: components["schemas"]["PayslipYtd"];
+        };
+        EmployeePayslips: {
+            data?: components["schemas"]["PayslipDetail"][];
+        };
+        PolicyAck: {
+            /** Format: uuid */
+            employee_id?: string;
+            employee_name?: string;
+            employee_code?: string;
+            /** Format: date */
+            acknowledged_on?: string;
+        };
+        PolicyWaiting: {
+            /** Format: uuid */
+            employee_id?: string;
+            employee_name?: string;
+            employee_code?: string;
+        };
+        HrPolicyDocument: {
+            /** Format: uuid */
+            readonly id?: string;
+            slug?: string | null;
+            title: string;
+            /** @enum {string} */
+            category?: "general" | "leave" | "conduct" | "posh" | "payroll" | "it_security" | "travel" | "exit";
+            body: string;
+            requires_ack?: boolean;
+            readonly version?: number;
+            readonly is_current?: boolean;
+            /** Format: date-time */
+            readonly published_at?: string;
+            readonly acknowledged?: number;
+            readonly people?: number;
+            readonly acknowledgements?: components["schemas"]["PolicyAck"][];
+            readonly waiting?: components["schemas"]["PolicyWaiting"][];
+        };
+        HrPolicyDocumentList: {
+            data?: components["schemas"]["HrPolicyDocument"][];
+        };
+        PolicyAckIn: {
+            /** Format: uuid */
+            employee_id: string;
+            acknowledged_on?: string | null;
         };
         ContractTerm: {
             /**
@@ -15373,6 +16243,385 @@ export interface operations {
             429: components["responses"]["TooMany"];
         };
     };
+    getHrPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HrPolicy"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    saveHrPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HrPolicy"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HrPolicy"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listLeaveTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveTypeList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    saveLeaveType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaveType"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveType"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    previewCtcBreakup: {
+        parameters: {
+            query?: {
+                /** @description The yearly CTC in rupees */
+                ctc_annual?: string;
+                as_of?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CtcBreakup"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    onboardEmployee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardEmployee"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Onboarding"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getOnboarding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Onboarding"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    setOnboardingTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingTaskDone"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Onboarding"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    activateEmployee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Onboarding"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listHolidays: {
+        parameters: {
+            query?: {
+                year?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HolidayList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    createHoliday: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Holiday"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Holiday"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    deleteHoliday: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
     listLeaveRequests: {
         parameters: {
             query?: {
@@ -15381,8 +16630,10 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
                 /** @description Field name; prefix `-` for descending */
                 sort?: components["parameters"]["Sort"];
-                status?: string;
+                status?: "pending" | "approved" | "rejected" | "cancelled";
                 employee_id?: string;
+                from?: components["parameters"]["From"];
+                to?: components["parameters"]["To"];
             };
             header?: never;
             path: {
@@ -15433,6 +16684,457 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeaveRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    approveLeaveRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaveDecision"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    rejectLeaveRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaveDecision"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    cancelLeaveRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaveDecision"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listLeaveBalances: {
+        parameters: {
+            query?: {
+                employee_id?: string;
+                as_of?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveBalances"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    adjustLeaveBalance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaveAdjustment"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveAdjustmentResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getPayrollReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayrollReadiness"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    pullLeaveIntoPayroll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LopPulled"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listEmployeePayslips: {
+        parameters: {
+            query?: {
+                fy?: components["schemas"]["FyLabel"];
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeePayslips"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getPayslip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayslipDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getPayslipPdf: {
+        parameters: {
+            query?: {
+                download?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listHrPolicyDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HrPolicyDocumentList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    publishHrPolicyDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HrPolicyDocument"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HrPolicyDocument"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getHrPolicyDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HrPolicyDocument"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    acknowledgeHrPolicyDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PolicyAckIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HrPolicyDocument"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -19612,6 +21314,141 @@ export interface operations {
         };
     };
     webhook_stock_adjusted: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_employee_onboarding_started: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_employee_activated: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_leave_requested: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_leave_decided: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_hr_policy_changed: {
         parameters: {
             query?: never;
             header: {
