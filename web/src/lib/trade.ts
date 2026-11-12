@@ -11,11 +11,13 @@ export interface ShippingBill {
 export interface BillOfEntry {
   id: string; boe_number: string; boe_date: string; port_code: string; currency: string; cif_foreign: string; exchange_rate: string; cif_inr: string; bcd: string; sws: string; igst: string; other_duty: string;
   duty_total: string; status: string; duty_paid_on: string | null; supplier_name: string | null; igst_credit: string; document_id: string | null;
+  free_of_charge: boolean; igst_credit_status: CreditStatus;
 }
+export type CreditStatus = "eligible" | "blocked" | "undecided";
 export interface Summary {
   as_of: string; financial_year_from: string; iec: string | null; lut: { state: string; valid_until: string | null; days_left: number | null };
   exports: { bills: number; value_inr: string; drafts: number }; realisation: { outstanding_bills: number; outstanding_inr: string; overdue_bills: number; overdue_inr: string; awaiting_export: number };
-  claims: { rodtep_pending: string; drawback_pending: string }; imports: { bills: number; duty_inr: string; igst_credit_inr: string };
+  claims: { rodtep_pending: string; drawback_pending: string }; imports: { bills: number; duty_inr: string; igst_credit_inr: string; igst_undecided_inr: string; igst_not_claimed_inr: string };
 }
 export interface ExportInvoice { id: string; number: string | null; doc_date: string; buyer_legal_name: string | null; grand_total: string }
 
@@ -127,9 +129,10 @@ export const claimsBody = (f: ClaimsForm) => ({
 export interface BoeForm {
   number: string; date: string; port: string; currency: string; cif: string; rate: string; bcd: string; sws: string; igst: string; other: string; paidOn: string;
   status: string; documentId: string; supplierId: string; supplierName: string; supplierCountry: string; addSupplier: boolean;
+  freeOfCharge: boolean; creditStatus: CreditStatus;
 }
 export const blankBoe = (): BoeForm => ({ number: "", date: "", port: "", currency: "USD", cif: "", rate: "", bcd: "0", sws: "0", igst: "0", other: "0", paidOn: "",
-  status: "filed", documentId: "", supplierId: "", supplierName: "", supplierCountry: "", addSupplier: false });
+  status: "filed", documentId: "", supplierId: "", supplierName: "", supplierCountry: "", addSupplier: false, freeOfCharge: false, creditStatus: "eligible" });
 
 /** What the server read from a customs PDF (POST /bills-of-entry/read). The PDF is already in the vault; nothing is recorded yet. */
 export interface BoeRead {
@@ -164,6 +167,20 @@ export const boeBody = (f: BoeForm) => ({
   boe_number: f.number.trim().toUpperCase(), boe_date: f.date, port_code: f.port.trim().toUpperCase(), currency: f.currency.trim().toUpperCase(), cif_foreign: f.cif.trim(), exchange_rate: f.rate.trim(),
   bcd: f.bcd.trim(), sws: f.sws.trim(), igst: f.igst.trim(), other_duty: f.other.trim(),
   ...(f.paidOn ? { status: f.status === "cleared" ? "cleared" : "duty_paid", duty_paid_on: f.paidOn } : f.status === "assessed" ? { status: "assessed" } : {}),
+  free_of_charge: f.freeOfCharge, igst_credit_status: f.creditStatus,
   ...(f.documentId ? { document_id: f.documentId } : {}),
   ...(f.supplierId ? { supplier_party_id: f.supplierId } : f.addSupplier && f.supplierName.trim() ? { new_supplier_name: f.supplierName.trim(), ...(f.supplierCountry ? { new_supplier_country: f.supplierCountry } : {}) } : {}),
 });
+
+/** The choices for the IGST on an import, and what each one means. A free sample starts undecided so the person has to look at it. */
+export const CREDIT_CHOICES: Array<[CreditStatus, string]> = [
+  ["undecided", "Not decided yet"], ["eligible", "Claim it as input credit"], ["blocked", "Do not claim it (add it to the cost)"],
+];
+export function creditImplication(status: CreditStatus, igst: string, free: boolean): string {
+  const amount = formatInr(igst, { decimals: false });
+  const base = status === "eligible" ? `The ${amount} of IGST is claimed as input tax credit and shows in your GST credit.`
+    : status === "blocked" ? `The ${amount} of IGST is not claimed. It becomes part of the cost of the goods.`
+    : `The ${amount} of IGST is not counted as credit until you decide.`;
+  const law = free ? " Credit is not allowed on goods given away as free samples (section 17(5)(h) of the CGST Act); samples you keep and use in your business can carry it." : "";
+  return base + law + (free ? " Your CA is asked to review this." : "");
+}

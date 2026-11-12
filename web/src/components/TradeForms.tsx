@@ -4,7 +4,7 @@ import { api, newIdempotencyKey, unwrap } from "@/lib/api";
 import { formatInr, isoDate } from "@/lib/format";
 import { MAX_UPLOAD_BYTES, toBase64 } from "@/lib/vault";
 import {
-  BoeForm, BoeRead, ClaimsForm, CURRENCIES, ExportInvoice, RealisationForm, SbForm, ShippingBill, blankBoe, blankRealisation, blankSb, boeBody, boeFormFrom, boeProblem, readSummary, claimsBody, claimsForm, claimsProblem,
+  BillOfEntry, BoeForm, BoeRead, CREDIT_CHOICES, ClaimsForm, CURRENCIES, CreditStatus, creditImplication, ExportInvoice, RealisationForm, SbForm, ShippingBill, blankBoe, blankRealisation, blankSb, boeBody, boeFormFrom, boeProblem, readSummary, claimsBody, claimsForm, claimsProblem,
   previewText, realisationBody, realisationProblem, sbBody, sbProblem,
 } from "@/lib/trade";
 import { ErrorNote } from "./ui";
@@ -172,7 +172,16 @@ export function AddBoe({ entityId, onDone, onCancel }: { entityId: string; onDon
         {f.supplierName && (f.supplierId
           ? <span className="t13">Supplier: {f.supplierName}, already one of your suppliers.</span>
           : <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}><input type="checkbox" checked={f.addSupplier} onChange={(e) => set({ addSupplier: e.target.checked })} />Add {f.supplierName}{f.supplierCountry ? ` (${f.supplierCountry})` : ""} as a supplier</label>)}
-        <span className="t13">{preview ? `${preview} CIF at that rate. ` : ""}IGST paid on an import is input tax credit once the duty is paid.</span>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
+          <input type="checkbox" checked={f.freeOfCharge} onChange={(e) => set({ freeOfCharge: e.target.checked, creditStatus: e.target.checked ? "undecided" : "eligible" })} />
+          Free of charge (a sample): nothing to pay the supplier, but the duty and IGST are paid
+        </label>
+        <Field id="be-credit" label="IGST on this import">
+          <select id="be-credit" className="input" style={{ height: 40, maxWidth: 360 }} value={f.creditStatus} onChange={(e) => set({ creditStatus: e.target.value as CreditStatus })}>
+            {CREDIT_CHOICES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+          </select>
+        </Field>
+        <span className="t13" role="status">{preview ? `${preview} CIF at that rate. ` : ""}{creditImplication(f.creditStatus, f.igst || "0", f.freeOfCharge)}</span>
       </Shell>
       )}
     </div>
@@ -189,6 +198,21 @@ export function PayDuty({ entityId, id, number, onDone, onCancel }: { entityId: 
       unwrap(await api.PATCH("/entities/{entityId}/bills-of-entry/{id}", { params: { path: { entityId, id } }, body: { status: "duty_paid", duty_paid_on: date } as never })); onDone();
     }}>
       <Field id={`pd-${id}`} label={`Duty on ${number} paid on`}><input id={`pd-${id}`} type="date" className="input" style={{ height: 40, maxWidth: 220 }} max={today} value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+    </Shell>
+  );
+}
+
+/** Decide whether the IGST on an import is claimed. The wording says what each choice means; for a free sample it also says the CA is asked to review. */
+export function DecideCredit({ entityId, boe, onDone, onCancel }: { entityId: string; boe: BillOfEntry; onDone: () => void; onCancel: () => void }) {
+  const [status, setStatus] = useState<CreditStatus>(boe.igst_credit_status);
+  return (
+    <Shell compact label="Save the decision" problem={status === boe.igst_credit_status ? "Choose a different answer to change it" : null} started={status !== boe.igst_credit_status} onCancel={onCancel} onSubmit={async () => {
+      unwrap(await api.PATCH("/entities/{entityId}/bills-of-entry/{id}", { params: { path: { entityId, id: boe.id } }, body: { igst_credit_status: status } as never })); onDone();
+    }}>
+      <Field id={`dc-${boe.id}`} label={`IGST on ${boe.boe_number}`}>
+        <select id={`dc-${boe.id}`} className="input" style={{ height: 40, maxWidth: 360 }} value={status} onChange={(e) => setStatus(e.target.value as CreditStatus)}>{CREDIT_CHOICES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select>
+      </Field>
+      <span className="t13" role="status">{creditImplication(status, boe.igst, boe.free_of_charge)}</span>
     </Shell>
   );
 }

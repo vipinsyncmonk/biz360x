@@ -112,3 +112,17 @@ def test_the_decision_is_audited_and_a_viewer_cannot_make_it(client, db):
     v = login(client, VIEWER)
     assert client.patch(url(f"/bills-of-entry/{S['sample']}"), headers=v, json={"igst_credit_status": "blocked"}).status_code == 403
     assert client.get(url("/bills-of-entry"), headers=v).status_code == 200
+
+
+def test_a_free_import_and_each_change_of_its_decision_open_a_task_for_the_ca(client, db):
+    tasks = [r["title"] for r in db.execute("SELECT title FROM tasks WHERE entity_id = %s AND source = 'advisor' ORDER BY created_at", (EN,)).fetchall()]
+    assert "CA to review: IGST credit on free-of-charge import BoE 7000002 is not decided yet" in tasks
+    assert "CA to review: IGST credit on free-of-charge import BoE 7000002 is not claimed (a cost)" in tasks
+    assert "CA to review: IGST credit on free-of-charge import BoE 7000002 is claimed as credit" in tasks
+    assert "CA to review: IGST credit on free-of-charge import BoE 7000003 is not claimed (a cost)" in tasks
+    assert not any("7000001" in t for t in tasks)                                              # an ordinary import is not flagged
+    o = login(client, OWNER)
+    before = db.execute("SELECT count(*) AS n FROM tasks WHERE entity_id = %s AND source = 'advisor'", (EN,)).fetchone()["n"]
+    client.patch(url(f"/bills-of-entry/{S['sample']}"), headers=o, json={"igst_credit_status": "eligible"})     # no change: no new task
+    assert db.execute("SELECT count(*) AS n FROM tasks WHERE entity_id = %s AND source = 'advisor'", (EN,)).fetchone()["n"] == before
+    assert db.execute("SELECT count(*) AS n FROM event_outbox WHERE entity_id = %s AND type = 'bill_of_entry.ca_review_needed'", (EN,)).fetchone()["n"] >= 4

@@ -415,6 +415,20 @@ def _boe_out(cur, entity_id, bid) -> dict:
     return js(b)
 
 
+CREDIT_WORDS = {"eligible": "claimed as credit", "blocked": "not claimed (a cost)", "undecided": "not decided yet"}
+
+
+def _flag_for_ca(cur, entity_id, bid, number, status) -> None:
+    """A free-of-charge import needs a CA's eye: whether its IGST may be claimed depends on how the goods are used (section 17(5)(h)).
+    Opens a task for the advisor and raises an event, so it shows on the compliance desk and can be sent on."""
+    title = f"CA to review: IGST credit on free-of-charge import BoE {number} is {CREDIT_WORDS[status]}"
+    cur.execute("SELECT 1 FROM tasks WHERE entity_id = %s AND title = %s AND status = 'open'", (entity_id, title))
+    if cur.fetchone():
+        return
+    cur.execute("INSERT INTO tasks (entity_id, title, due_on, source) VALUES (%s, %s, %s, 'advisor')", (entity_id, title, dt.date.today() + dt.timedelta(days=7)))
+    emit(cur, entity_id, "bill_of_entry.ca_review_needed", "bills_of_entry", bid, {"boe_number": number, "igst_credit_status": status})
+
+
 def _check_boe_links(cur, entity_id, supplier, bill) -> None:
     if supplier:
         cur.execute("SELECT 1 FROM parties WHERE id = %s AND entity_id = %s", (supplier, entity_id))
@@ -536,6 +550,8 @@ def create_bill_of_entry(entity_id: uuid.UUID, body: BoeIn, p: Principal = Auth)
         bid = cur.fetchone()["id"]
         if body.document_id:
             link_document(cur, body.document_id, "bills_of_entry", bid, "evidence")
+        if body.free_of_charge:
+            _flag_for_ca(cur, entity_id, bid, body.boe_number, credit)
         audit(cur, entity_id, "bill_of_entry.recorded", "bills_of_entry", bid, after={"boe_number": body.boe_number, "igst": body.igst, "free_of_charge": body.free_of_charge, "igst_credit_status": credit})
         emit(cur, entity_id, "bill_of_entry.recorded", "bills_of_entry", bid, {"boe_number": body.boe_number})
         return _boe_out(cur, entity_id, bid)
@@ -554,7 +570,7 @@ def list_bills_of_entry(entity_id: uuid.UUID, p: Principal = Auth, limit: int = 
 def update_bill_of_entry(entity_id: uuid.UUID, boe_id: uuid.UUID, body: BoePatch, p: Principal = Auth):
     with tx(p.user_id) as cur:
         require(cur, entity_id, "trade:write")
-        cur.execute("SELECT status, duty_paid_on, free_of_charge, igst_credit_status, purchase_bill_id FROM bills_of_entry WHERE id = %s AND entity_id = %s FOR UPDATE", (boe_id, entity_id))
+        cur.execute("SELECT boe_number, status, duty_paid_on, free_of_charge, igst_credit_status, purchase_bill_id FROM bills_of_entry WHERE id = %s AND entity_id = %s FOR UPDATE", (boe_id, entity_id))
         b = cur.fetchone()
         if not b:
             raise ApiError(404, "not_found", "Not found")
@@ -573,6 +589,9 @@ def update_bill_of_entry(entity_id: uuid.UUID, boe_id: uuid.UUID, body: BoePatch
         sets = ", ".join(f"{k} = %s" for k in changes)
         cur.execute(f"UPDATE bills_of_entry SET {sets} WHERE id = %s", (*changes.values(), boe_id))
         audit(cur, entity_id, "bill_of_entry.updated", "bills_of_entry", boe_id, before={"status": b["status"], "free_of_charge": b["free_of_charge"], "igst_credit_status": b["igst_credit_status"]}, after=js(changes))
+        now_free, now_status = changes.get("free_of_charge", b["free_of_charge"]), changes.get("igst_credit_status", b["igst_credit_status"])
+        if now_free and (now_status != b["igst_credit_status"] or not b["free_of_charge"]):
+            _flag_for_ca(cur, entity_id, boe_id, b["boe_number"], now_status)
         return _boe_out(cur, entity_id, boe_id)
 
 
