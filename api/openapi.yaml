@@ -10253,6 +10253,44 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: finance:write
+  /entities/{entityId}/fixed-assets/capitalisable-bills:
+    get:
+      tags:
+      - Fixed assets
+      operationId: listCapitalisableBills
+      summary: Booked purchase bills with the lines that still have something left to capitalise
+      description: Also needs purchases:read. Registering from a line (`purchase_bill_id` and `purchase_bill_line_no`) fills
+        in the supplier and the bill's document, takes the cost out of the expense account the line was booked to, and refuses
+        more than is left on the line (400 on `cost`) or a bill that is not booked (409 `bill_not_booked`).
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: q
+        in: query
+        schema:
+          type: string
+        description: Part of the bill number, supplier or line description
+      - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapitalisableBillList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
   /entities/{entityId}/fixed-assets/{id}:
     get:
       tags:
@@ -19489,6 +19527,11 @@ components:
           - type: string
             format: uuid
           - type: 'null'
+        purchase_bill_line_no:
+          oneOf:
+          - type: integer
+            description: The line of the bill the cost was taken from; needed with purchase_bill_id
+          - type: 'null'
         bill_of_entry_id:
           oneOf:
           - type: string
@@ -19600,6 +19643,63 @@ components:
             $ref: '#/components/schemas/FixedAsset'
         totals:
           $ref: '#/components/schemas/FixedAssetTotals'
+    CapitalisableLine:
+      type: object
+      properties:
+        line_no:
+          type: integer
+        description:
+          type: string
+        hsn_sac:
+          oneOf:
+          - type: string
+          - type: 'null'
+        qty:
+          type: string
+        capitalisable:
+          $ref: '#/components/schemas/Money'
+          description: Taxable value, plus GST that is not claimed as credit
+        already_registered:
+          $ref: '#/components/schemas/Money'
+        remaining:
+          $ref: '#/components/schemas/Money'
+        booked_to_asset_account:
+          type: boolean
+          description: 'The line was booked straight to an asset account: register it as already_booked'
+    CapitalisableBill:
+      type: object
+      properties:
+        bill_id:
+          type: string
+          format: uuid
+        bill_no:
+          type: string
+        bill_date:
+          type: string
+          format: date
+        party_id:
+          type: string
+          format: uuid
+        supplier_name:
+          type: string
+        document_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        grand_total:
+          $ref: '#/components/schemas/Money'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapitalisableLine'
+    CapitalisableBillList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapitalisableBill'
     DisposeFixedAsset:
       type: object
       properties:

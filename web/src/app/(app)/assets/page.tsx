@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { api, unwrap } from "@/lib/api";
-import { Asset, AssetCategory, methodText, monthLabel } from "@/lib/assets";
+import { Asset, AssetCategory, BoeSource, CapBill, methodText, monthLabel } from "@/lib/assets";
 import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -22,6 +22,9 @@ export default function Assets() {
   const register = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/fixed-assets", { params: { ...p, query: { status: tab } } })) as unknown as Register, id ? `${id}|${tab}` : null);
   const totals = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/fixed-assets", { params: { ...p, query: { status: "in_use" } } })).totals as unknown as Register["totals"], id);
   const cats = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/fixed-asset-categories", { params: p })).data as unknown as AssetCategory[], id);
+  const adding = !!id && panel === "add";
+  const bills = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/fixed-assets/capitalisable-bills", { params: p })).data as unknown as CapBill[], adding ? `${id}|bills` : null);
+  const boes = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/bills-of-entry", { params: { ...p, query: { limit: 200 } } })).data as unknown as BoeSource[], adding ? `${id}|boes` : null);
   const detail = useLoad(async () => (open?.kind === "schedule" ? (unwrap(await api.GET("/entities/{entityId}/fixed-assets/{id}", { params: { path: { entityId: id!, id: open.id } } })) as unknown as Asset) : null), id && open?.kind === "schedule" ? `${id}|${open.id}` : null);
 
   const reload = () => { register.reload(); totals.reload(); setPanel(null); setOpen(null); };
@@ -49,9 +52,9 @@ export default function Assets() {
         <Tile label="Depreciation so far" value={t ? formatInr(t.accumulated_depreciation, { decimals: false }) : "…"} note="Posted to the books" />
         <Tile label="Book value" value={t ? formatInr(t.book_value, { decimals: false }) : "…"} note="Cost less depreciation" />
       </section>
-      <ErrorNote error={register.error ?? totals.error ?? cats.error} />
+      <ErrorNote error={register.error ?? totals.error ?? cats.error ?? bills.error ?? boes.error} />
 
-      {id && panel === "add" && <section className="card card-pad" aria-label="Register an asset"><AddAsset entityId={id} categories={cats.data ?? []} onDone={reload} onCancel={() => setPanel(null)} /></section>}
+      {id && panel === "add" && <section className="card card-pad" aria-label="Register an asset"><AddAsset entityId={id} categories={cats.data ?? []} bills={bills.data ?? []} boes={boes.data ?? []} onDone={reload} onCancel={() => setPanel(null)} /></section>}
       {id && panel === "run" && <section className="card card-pad" aria-label="Run depreciation"><RunDepreciation entityId={id} onDone={reload} onCancel={() => setPanel(null)} /></section>}
 
       <div className="seg" role="tablist" aria-label="In use or disposed" style={{ alignSelf: "flex-start" }}>
@@ -66,7 +69,7 @@ export default function Assets() {
           : rows.map((a) => (
             <div key={a.id} style={{ borderTop: "1px solid var(--line-2)" }}>
               <div style={{ padding: "14px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, alignItems: "start" }}>
-                <span style={{ fontWeight: 600 }}>{a.name}<span className="t13 mono" style={{ display: "block", fontWeight: 400 }}>{a.asset_no} · {label(a.category)}{a.location ? ` · ${a.location}` : ""}</span></span>
+                <span style={{ fontWeight: 600 }}>{a.name}<span className="t13 mono" style={{ display: "block", fontWeight: 400 }}>{a.asset_no} · {label(a.category)}{a.location ? ` · ${a.location}` : ""}{a.purchase_bill_id ? " · from a purchase bill" : a.bill_of_entry_id ? " · from a bill of entry" : ""}</span></span>
                 <span>Cost {formatInr(a.cost, { decimals: false })}<span className="t13" style={{ display: "block" }}>{methodText(a)}</span></span>
                 <span>Book value {formatInr(a.book_value, { decimals: false })}<span className="t13" style={{ display: "block" }}>Depreciated {formatInr(a.accumulated_depreciation, { decimals: false })}</span></span>
                 <span>{a.status === "disposed"

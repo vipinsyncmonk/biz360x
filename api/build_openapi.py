@@ -1137,7 +1137,7 @@ schema("DepreciationRow", {"month": DATE, "amount": MONEY, "book_value_after": M
 ASSET_CATEGORY = ENUM("building", "plant_machinery", "furniture", "office_equipment", "computers", "servers_networks", "vehicles", "electrical", "software", "other")
 schema("FixedAsset", {
     "id": RO_UUID, "asset_no": S(readOnly=True), "name": S(), "category": ASSET_CATEGORY, "location": NULLABLE(S()), "serial_no": NULLABLE(S()),
-    "party_id": NULLABLE(UUID), "purchase_bill_id": NULLABLE(UUID), "bill_of_entry_id": NULLABLE(UUID), "document_id": NULLABLE(UUID),
+    "party_id": NULLABLE(UUID), "purchase_bill_id": NULLABLE(UUID), "purchase_bill_line_no": NULLABLE(I(description="The line of the bill the cost was taken from; needed with purchase_bill_id")), "bill_of_entry_id": NULLABLE(UUID), "document_id": NULLABLE(UUID),
     "acquired_on": DATE, "put_to_use_on": NULLABLE(DATE),
     "cost": {**MONEY, "description": "What is capitalised: price, duty, freight and installation, without GST that is claimed as credit"},
     "residual_value": {**MONEY, "description": "Defaults to 5% of cost (nothing for software)"},
@@ -1154,6 +1154,13 @@ _op("get", E + "/fixed-assets", "Fixed assets", "listFixedAssets", "List fixed a
     resp=schema("FixedAssetList", {"data": ARR(ref("FixedAsset")), "totals": schema("FixedAssetTotals", {"cost": MONEY, "accumulated_depreciation": MONEY, "book_value": MONEY})}))
 _op("post", E + "/fixed-assets", "Fixed assets", "createFixedAsset", "Register a fixed asset", "finance:write", body=ref("FixedAsset"), resp=ref("FixedAsset"), status="201", idem=True,
     desc="With booking `reclassify` the cost is moved to Fixed assets in the same transaction (a locked period refuses it).")
+schema("CapitalisableLine", {"line_no": I(), "description": S(), "hsn_sac": NULLABLE(S()), "qty": S(), "capitalisable": {**MONEY, "description": "Taxable value, plus GST that is not claimed as credit"},
+                             "already_registered": MONEY, "remaining": MONEY, "booked_to_asset_account": B(description="The line was booked straight to an asset account: register it as already_booked")})
+_op("get", E + "/fixed-assets/capitalisable-bills", "Fixed assets", "listCapitalisableBills", "Booked purchase bills with the lines that still have something left to capitalise", "finance:read",
+    params=[q("q", S(), "Part of the bill number, supplier or line description"), P("Limit")],
+    resp=schema("CapitalisableBillList", {"data": ARR(schema("CapitalisableBill", {"bill_id": UUID, "bill_no": S(), "bill_date": DATE, "party_id": UUID, "supplier_name": S(), "document_id": NULLABLE(UUID),
+                                                                                  "grand_total": MONEY, "lines": ARR(ref("CapitalisableLine"))}))}),
+    desc="Also needs purchases:read. Registering from a line (`purchase_bill_id` and `purchase_bill_line_no`) fills in the supplier and the bill's document, takes the cost out of the expense account the line was booked to, and refuses more than is left on the line (400 on `cost`) or a bill that is not booked (409 `bill_not_booked`).")
 _op("get", E + "/fixed-assets/{id}", "Fixed assets", "getFixedAsset", "Get a fixed asset with its depreciation schedule", "finance:read", resp=ref("FixedAsset"),
     params=[q("through", DATE, "Show the schedule up to this date; the default is the end of this financial year")])
 action(E + "/fixed-assets/{id}/dispose", "Fixed assets", "disposeFixedAsset", "Sell or write off an asset", "finance:write", idem=True, resp=ref("FixedAsset"),

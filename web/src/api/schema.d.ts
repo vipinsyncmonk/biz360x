@@ -3829,6 +3829,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entityId}/fixed-assets/capitalisable-bills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Booked purchase bills with the lines that still have something left to capitalise
+         * @description Also needs purchases:read. Registering from a line (`purchase_bill_id` and `purchase_bill_line_no`) fills in the supplier and the bill's document, takes the cost out of the expense account the line was booked to, and refuses more than is left on the line (400 on `cost`) or a bill that is not booked (409 `bill_not_booked`).
+         */
+        get: operations["listCapitalisableBills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/fixed-assets/{id}": {
         parameters: {
             query?: never;
@@ -7331,6 +7351,7 @@ export interface components {
             serial_no?: string | null;
             party_id?: string | null;
             purchase_bill_id?: string | null;
+            purchase_bill_line_no?: number | null;
             bill_of_entry_id?: string | null;
             document_id?: string | null;
             /** Format: date */
@@ -7369,6 +7390,34 @@ export interface components {
         FixedAssetList: {
             data?: components["schemas"]["FixedAsset"][];
             totals?: components["schemas"]["FixedAssetTotals"];
+        };
+        CapitalisableLine: {
+            line_no?: number;
+            description?: string;
+            hsn_sac?: string | null;
+            qty?: string;
+            /** @description Taxable value, plus GST that is not claimed as credit */
+            capitalisable?: components["schemas"]["Money"];
+            already_registered?: components["schemas"]["Money"];
+            remaining?: components["schemas"]["Money"];
+            /** @description The line was booked straight to an asset account: register it as already_booked */
+            booked_to_asset_account?: boolean;
+        };
+        CapitalisableBill: {
+            /** Format: uuid */
+            bill_id?: string;
+            bill_no?: string;
+            /** Format: date */
+            bill_date?: string;
+            /** Format: uuid */
+            party_id?: string;
+            supplier_name?: string;
+            document_id?: string | null;
+            grand_total?: components["schemas"]["Money"];
+            lines?: components["schemas"]["CapitalisableLine"][];
+        };
+        CapitalisableBillList: {
+            data?: components["schemas"]["CapitalisableBill"][];
         };
         DisposeFixedAsset: {
             /** Format: date */
@@ -17497,6 +17546,39 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listCapitalisableBills: {
+        parameters: {
+            query?: {
+                /** @description Part of the bill number, supplier or line description */
+                q?: string;
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapitalisableBillList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };

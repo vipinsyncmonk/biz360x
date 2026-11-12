@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assetBody, assetProblem, blankAsset, currentPeriod, disposeProblem, lifeText, methodText, monthLabel, moneyText, type Asset, type AssetForm } from "./assets";
+import { assetBody, assetProblem, blankAsset, boeDutyForCost, currentPeriod, disposeProblem, fromBillLine, fromBoe, lifeText, methodText, monthLabel, moneyText, type Asset, type AssetForm } from "./assets";
 
 const TODAY = "2026-11-11";
 const ok = (p: Partial<AssetForm> = {}): AssetForm => ({ ...blankAsset(), name: "Dell laptop", acquiredOn: "2026-04-01", cost: "120000", ...p });
@@ -57,5 +57,28 @@ describe("how things read", () => {
     expect([lifeText(36), lifeText(18), lifeText(8), lifeText(12)]).toEqual(["3 years", "1 year 6 months", "8 months", "1 year"]);
     expect(methodText({ method: "slm", life_months: 36 } as Asset)).toBe("Straight line · 3 years");
     expect(methodText({ method: "wdv", rate_pct: "40.00" } as Asset)).toBe("Written down value · 40.00% a year");
+  });
+});
+
+describe("filling the form from a bill", () => {
+  const bill = { bill_id: "b1", bill_no: "CM/101", bill_date: "2026-06-10", party_id: "p1", supplier_name: "Compu Mart", document_id: null, grand_total: "141600.00", lines: [] };
+  const line = { line_no: 2, description: "Dell laptops", hsn_sac: "8471", qty: "2.00", capitalisable: "120000.00", already_registered: "60000.00", remaining: "60000.00", booked_to_asset_account: false };
+  it("a bill line brings its description, the bill date, what is left of its cost and the supplier", () => {
+    expect(fromBillLine(bill, line)).toMatchObject({ name: "Dell laptops", acquiredOn: "2026-06-10", cost: "60000.00", booking: "reclassify", billId: "b1", billLine: "2", partyId: "p1" });
+  });
+  it("a line booked to an asset account is only recorded", () => {
+    expect(fromBillLine(bill, { ...line, booked_to_asset_account: true }).booking).toBe("already_booked");
+  });
+  it("the bill and line go to the server together, and a bill without a line is a problem", () => {
+    const f = { ...ok(), ...fromBillLine(bill, line) };
+    expect(assetProblem(f, TODAY)).toBeNull();
+    expect(assetBody(f)).toMatchObject({ purchase_bill_id: "b1", purchase_bill_line_no: 2, party_id: "p1", bill_of_entry_id: null, cost: "60000.00" });
+    expect(assetProblem({ ...f, billLine: "" }, TODAY)).toMatch(/line/);
+    expect(assetBody(ok())).toMatchObject({ purchase_bill_id: null, purchase_bill_line_no: null, party_id: null, bill_of_entry_id: null });
+  });
+  it("a bill of entry brings the goods value, not the duty, and says what duty is a cost", () => {
+    const boe = { id: "e1", boe_number: "2260434", boe_date: "2026-05-24", cif_inr: "196369.92", bcd: "2134.50", sws: "213.50", other_duty: "1.00", supplier_name: "Furuno", supplier_party_id: "p2" };
+    expect(fromBoe(boe)).toMatchObject({ acquiredOn: "2026-05-24", cost: "196369.92", booking: "already_booked", boeId: "e1", partyId: "p2" });
+    expect(boeDutyForCost(boe)).toBe("2349.00");                                                  // IGST is credit, so it is not part of the cost
   });
 });
