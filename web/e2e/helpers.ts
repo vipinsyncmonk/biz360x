@@ -17,6 +17,20 @@ export async function signIn(page: Page, email: string): Promise<void> {
 }
 
 /**
+ * Sign in without asking for a code: take a token straight from the API and hand the browser its refresh token. The hourly limit is 5 codes
+ * for one email, and the demo people are used up by the files that sign in through the form, so a new file uses this.
+ */
+export async function signInQuietly(page: Page, email: string): Promise<void> {
+  const r = await page.request.post("/api/v1/auth/token", { data: { grant_type: "otp", email, otp: SIGN_IN_CODE } });
+  expect(r.ok()).toBeTruthy();
+  const { refresh_token } = await r.json();
+  await page.goto("/login");
+  await page.evaluate((t) => window.sessionStorage.setItem("bzx.rt", t), refresh_token as string);
+  await page.goto("/");
+  await page.waitForURL((u) => u.pathname !== "/login");
+}
+
+/**
  * Collect what should never happen on any screen: an uncaught error in the page, or the server answering 500 or above.
  * Call `problems()` at the end of a test and expect it to be empty.
  */

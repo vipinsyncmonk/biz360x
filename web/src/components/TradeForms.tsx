@@ -9,10 +9,10 @@ import {
 } from "@/lib/trade";
 import { ErrorNote } from "./ui";
 
-const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 } as const;
-const Field = ({ id, label, children }: { id: string; label: string; children: ReactNode }) => <div className="field"><label htmlFor={id}>{label}</label>{children}</div>;
+export const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 } as const;
+export const Field = ({ id, label, children }: { id: string; label: string; children: ReactNode }) => <div className="field"><label htmlFor={id}>{label}</label>{children}</div>;
 
-function Shell({ problem, started, label, onSubmit, onCancel, children, compact }: { problem: string | null; started: boolean; label: string; onSubmit: () => Promise<void>; onCancel?: () => void; children: ReactNode; compact?: boolean }) {
+export function Shell({ problem, started, label, onSubmit, onCancel, children, compact }: { problem: string | null; started: boolean; label: string; onSubmit: () => Promise<void>; onCancel?: () => void; children: ReactNode; compact?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   async function go() {
