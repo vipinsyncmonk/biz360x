@@ -19160,7 +19160,19 @@ components:
         igst_credit:
           $ref: '#/components/schemas/Money'
           readOnly: true
-          description: IGST paid on the import, available as input tax credit once the duty is paid
+          description: 'IGST paid on the import that is claimed as input tax credit: once the duty is paid, and only when
+            igst_credit_status is eligible'
+        free_of_charge:
+          type: boolean
+          description: 'A sample: nothing to pay the supplier, so it has no purchase bill. The duty and IGST are still paid.'
+        igst_credit_status:
+          type: string
+          enum:
+          - eligible
+          - blocked
+          - undecided
+          description: 'Whether the IGST is claimed. Left out when recording: eligible, or undecided when free_of_charge.
+            Section 17(5)(h) blocks credit on goods given away as free samples; a CA decides.'
         document_id:
           oneOf:
           - type: string
@@ -19331,6 +19343,14 @@ components:
         purchase_bill_id:
           type: string
           format: uuid
+        free_of_charge:
+          type: boolean
+        igst_credit_status:
+          type: string
+          enum:
+          - eligible
+          - blocked
+          - undecided
     LutState:
       type: object
       properties:
@@ -19389,6 +19409,13 @@ components:
           $ref: '#/components/schemas/Money'
         igst_credit_inr:
           $ref: '#/components/schemas/Money'
+          description: Eligible IGST on bills whose duty is paid
+        igst_undecided_inr:
+          $ref: '#/components/schemas/Money'
+          description: IGST paid where it is not yet decided whether to claim it
+        igst_not_claimed_inr:
+          $ref: '#/components/schemas/Money'
+          description: IGST paid that is not claimed (blocked)
     TradeSummary:
       type: object
       properties:
