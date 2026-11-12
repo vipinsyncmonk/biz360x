@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ledger, tax, trade, turnover
+from . import inventory, ledger, tax, trade, turnover
 from .core import (ApiError, Auth, Principal, audit, emit, etag_of, idempotency_begin, idempotency_finish, jsonable, money,
                    require, tx)
 
@@ -417,6 +417,7 @@ def issue_core(cur, entity_id, doc_id, *, eway_bill: bool = True, payment_link: 
     cur.execute("""UPDATE sales_documents SET number = %s, series_id = %s, status = 'issued', issued_at = now(),
                           issued_by = app.current_user_id() WHERE id = %s""", (number, series["id"], doc_id))
     ledger.post_sales_document(cur, entity_id, doc_id)
+    inventory.on_document_issued(cur, entity_id, doc_id)        # tracked goods leave stock at cost (or come back, on a return)
     if d["doc_type"] == "export_invoice":
         open_draft_shipping_bill(cur, entity_id, doc_id, number)
     if d["doc_type"] == "credit_note" and d["original_document_id"]:
