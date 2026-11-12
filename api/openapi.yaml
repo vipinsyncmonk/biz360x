@@ -73,6 +73,10 @@ tags:
 - name: Fixed assets
   description: The register of what the company owns, monthly depreciation posted to the ledger, and the sale of an asset.
     Companies Act (books) depreciation; the lives are a starter list for a CA to review.
+- name: Inventory
+  description: 'Stock of the items marked as tracked: what is on hand and what it is worth, every movement, counts, write-offs,
+    opening stock and the valuation as of a date. Weighted average cost per item. A booked purchase bill brings stock in and
+    an issued invoice takes it out; those happen by themselves.'
 - name: Portals & jobs
   description: Government / bank connections, OTP sessions, sync jobs and the job resource
 - name: Copilot
@@ -7720,6 +7724,411 @@ paths:
         '429':
           $ref: '#/components/responses/TooMany'
       x-permission: payroll:read
+  /entities/{entityId}/hr/policy:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: getHrPolicy
+      summary: The HR policy in force today
+      description: A company that has saved none sees the starter policy (`is_default`). The starter values need the company's
+        and a CA's review.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrPolicy'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+    put:
+      tags:
+      - Payroll & HR
+      operationId: saveHrPolicy
+      summary: Save the HR policy from a date
+      description: A policy takes effect from today or later and is never changed for the past.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HrPolicy'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrPolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:approve
+  /entities/{entityId}/leave-types:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: listLeaveTypes
+      summary: Leave types
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveTypeList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+    post:
+      tags:
+      - Payroll & HR
+      operationId: saveLeaveType
+      summary: Add a leave type, or change the one with the same code
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveType'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveType'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:approve
+  /entities/{entityId}/payroll/ctc-breakup:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: previewCtcBreakup
+      summary: What a yearly CTC becomes under the policy
+      description: Saves nothing. Basic and HRA follow the policy, the employer's PF, ESI and gratuity are taken out when
+        the policy says the CTC includes them, and the special allowance is the rest.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: ctc_annual
+        in: query
+        schema:
+          type: string
+        description: The yearly CTC in rupees
+      - name: as_of
+        in: query
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CtcBreakup'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+  /entities/{entityId}/employees/onboard:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: onboardEmployee
+      summary: Enter a new hire with a CTC
+      description: Creates the employee as `onboarding` (outside payroll), the salary structure from the policy and the checklist
+        from the policy.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardEmployee'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Onboarding'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:write
+  /entities/{entityId}/employees/{id}/onboarding:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: getOnboarding
+      summary: A new hire's checklist
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Onboarding'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+  /entities/{entityId}/employees/{id}/onboarding/{key}:
+    put:
+      tags:
+      - Payroll & HR
+      operationId: setOnboardingTask
+      summary: Tick or untick a checklist item
+      description: Items read from the record (PAN, bank account, salary, handbook) cannot be ticked by hand (409).
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingTaskDone'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Onboarding'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:write
+  /entities/{entityId}/employees/{id}/activate:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: activateEmployee
+      summary: Finish onboarding
+      description: Every required item must be done (`onboarding_incomplete`). The person becomes active and is paid from
+        the joining date.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Onboarding'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:write
+  /entities/{entityId}/holidays:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: listHolidays
+      summary: Company holidays
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: year
+        in: query
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HolidayList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+    post:
+      tags:
+      - Payroll & HR
+      operationId: createHoliday
+      summary: Add a holiday
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Holiday'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Holiday'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:write
+  /entities/{entityId}/holidays/{id}:
+    delete:
+      tags:
+      - Payroll & HR
+      operationId: deleteHoliday
+      summary: Remove a holiday
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '204':
+          description: Done
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:write
   /entities/{entityId}/leave-requests:
     get:
       tags:
@@ -7735,11 +8144,18 @@ paths:
         in: query
         schema:
           type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          - cancelled
       - name: employee_id
         in: query
         schema:
           type: string
           format: uuid
+      - $ref: '#/components/parameters/From'
+      - $ref: '#/components/parameters/To'
       responses:
         '200':
           description: OK
@@ -7778,6 +8194,491 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LeaveRequest'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:write
+  /entities/{entityId}/leave-requests/{id}/approve:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: approveLeaveRequest
+      summary: Approve a leave request
+      description: Its unpaid days go into the open payroll run of each month it touches.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveDecision'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:approve
+  /entities/{entityId}/leave-requests/{id}/reject:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: rejectLeaveRequest
+      summary: Reject a leave request
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveDecision'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:approve
+  /entities/{entityId}/leave-requests/{id}/cancel:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: cancelLeaveRequest
+      summary: Withdraw a leave request
+      description: Refused (409) when its unpaid days were already deducted in an approved payroll.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveDecision'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:write
+  /entities/{entityId}/leave-balances:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: listLeaveBalances
+      summary: Leave earned, taken and left, per person
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: employee_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: as_of
+        in: query
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveBalances'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+  /entities/{entityId}/leave-adjustments:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: adjustLeaveBalance
+      summary: Add days to a balance or take them off
+      description: What a person carried in when the company started here, a carry-forward, or a correction.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveAdjustment'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveAdjustmentResult'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:approve
+  /entities/{entityId}/payroll-runs/{id}/readiness:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: getPayrollReadiness
+      summary: What a payroll run still needs
+      description: '`blockers` stop the run from being computed (no salary set); `warnings` are worth a look first (onboarding
+        not finished, no bank account, no PAN, leave awaiting a decision).'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollReadiness'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+  /entities/{entityId}/payroll-runs/{id}/inputs/from-leave:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: pullLeaveIntoPayroll
+      summary: Bring approved unpaid leave into the run's inputs
+      description: Starting a run and deciding a leave request do this by themselves; this does it again on request. Figures
+        typed for the month are kept.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LopPulled'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:write
+  /entities/{entityId}/employees/{id}/payslips:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: listEmployeePayslips
+      summary: A person's payslips from approved runs
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: fy
+        in: query
+        schema:
+          $ref: '#/components/schemas/FyLabel'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeePayslips'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+  /entities/{entityId}/payslips/{id}:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: getPayslip
+      summary: One payslip with its lines and the year so far
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayslipDetail'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+  /entities/{entityId}/payslips/{id}/pdf:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: getPayslipPdf
+      summary: The payslip as a PDF
+      description: '`application/pdf`. A payslip from a run that is not approved carries a DRAFT mark.'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: download
+        in: query
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+  /entities/{entityId}/hr/policy-documents:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: listHrPolicyDocuments
+      summary: 'The handbook: the current version of each document'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrPolicyDocumentList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+    post:
+      tags:
+      - Payroll & HR
+      operationId: publishHrPolicyDocument
+      summary: Publish a handbook document or its next version
+      description: A published version is never edited; people acknowledge the new one afresh.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HrPolicyDocument'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrPolicyDocument'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: payroll:approve
+  /entities/{entityId}/hr/policy-documents/{id}:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: getHrPolicyDocument
+      summary: A handbook document with who has acknowledged it
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrPolicyDocument'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: payroll:read
+  /entities/{entityId}/hr/policy-documents/{id}/acknowledgements:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: acknowledgeHrPolicyDocument
+      summary: Record that a person has read and accepted it
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyAckIn'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrPolicyDocument'
           headers:
             ETag:
               $ref: '#/components/headers/ETag'
@@ -10405,6 +11306,329 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: finance:write
+  /entities/{entityId}/warehouses:
+    get:
+      tags:
+      - Inventory
+      operationId: listWarehouses
+      summary: List warehouses
+      description: The first stock movement creates the default warehouse (MAIN) when there is none.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarehouseList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+    post:
+      tags:
+      - Inventory
+      operationId: createWarehouse
+      summary: Add a warehouse
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Warehouse'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Warehouse'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/inventory/settings:
+    get:
+      tags:
+      - Inventory
+      operationId: getInventorySettings
+      summary: Inventory settings
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventorySettings'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+    put:
+      tags:
+      - Inventory
+      operationId: updateInventorySettings
+      summary: Allow or refuse negative stock
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventorySettings'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventorySettings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:approve
+  /entities/{entityId}/stock-items:
+    get:
+      tags:
+      - Inventory
+      operationId: listStockItems
+      summary: Tracked items with stock on hand and its value
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Q'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockItemList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+  /entities/{entityId}/stock-movements:
+    get:
+      tags:
+      - Inventory
+      operationId: listStockMovements
+      summary: Stock movements, newest first
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      - name: item_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: warehouse_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: source_kind
+        in: query
+        schema:
+          type: string
+          enum:
+          - purchase_bill
+          - sales_document
+          - adjustment
+          - opening
+          - transfer
+          - bill_of_entry
+      - $ref: '#/components/parameters/From'
+      - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockMovementPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
+  /entities/{entityId}/stock-adjustments:
+    post:
+      tags:
+      - Inventory
+      operationId: adjustStock
+      summary: Record opening stock, a stock count or a write-off
+      description: 'The journal is posted in the same transaction: a count or write-off against Stock adjustments at the average
+        cost, opening stock against Opening balance equity. `insufficient_stock` (409) when a write-off would take stock below
+        zero and the company does not allow it; `item_not_tracked` (409) for an item that is not kept in stock; `period_locked`
+        (409) for a date in a locked period.'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockAdjustment'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockChange'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/stock-transfers:
+    post:
+      tags:
+      - Inventory
+      operationId: transferStock
+      summary: Move stock from one warehouse to another
+      description: The cost moves with the stock, so the value of stock does not change and nothing is posted to the ledger.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockTransfer'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockChange'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: finance:write
+  /entities/{entityId}/stock-valuation:
+    get:
+      tags:
+      - Inventory
+      operationId: getStockValuation
+      summary: Stock valuation as of a date
+      description: Quantity and value from the movements dated up to the day, at weighted average cost.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: as_of
+        in: query
+        schema:
+          type: string
+          format: date
+        description: Today when left out
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockValuation'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: finance:read
   /entities/{entityId}/portal-connections:
     get:
       tags:
@@ -11744,6 +12968,168 @@ webhooks:
     post:
       summary: Invoice / note issued (IRN may follow)
       operationId: webhook_sales_document_issued
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  stock.adjusted:
+    post:
+      summary: Opening stock, a stock count or a write-off was recorded
+      operationId: webhook_stock_adjusted
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  employee.onboarding_started:
+    post:
+      summary: A new hire was entered with a CTC
+      operationId: webhook_employee_onboarding_started
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  employee.activated:
+    post:
+      summary: Onboarding finished; the person is on payroll
+      operationId: webhook_employee_activated
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  leave.requested:
+    post:
+      summary: A leave request waits for a decision
+      operationId: webhook_leave_requested
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  leave.decided:
+    post:
+      summary: A leave request was approved, rejected or withdrawn
+      operationId: webhook_leave_decided
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  hr_policy.changed:
+    post:
+      summary: The HR policy or a handbook document changed
+      operationId: webhook_hr_policy_changed
       parameters:
       - name: Biz360X-Signature
         in: header
@@ -17009,7 +18395,7 @@ components:
       required:
       - effective_from
       - ctc_annual
-      - components
+      description: Leave `components` out and they are worked out from the CTC by the HR policy.
     BankDetails:
       type: object
       properties:
@@ -17410,6 +18796,336 @@ components:
       required:
       - data
       - next_cursor
+    LeaveType:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          type: string
+          pattern: ^[A-Za-z]{2,6}$
+        name:
+          type: string
+        annual_quota:
+          oneOf:
+          - type: string
+            description: Days a year; none for unpaid leave
+            examples:
+            - '2'
+          - type: 'null'
+        accrual:
+          type: string
+          enum:
+          - yearly
+          - monthly
+          description: Granted at the start of the leave year, or earned month by month
+        paid:
+          type: boolean
+          description: 'false: every day of it is loss of pay'
+        carry_forward_max:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+        encashable:
+          type: boolean
+        is_active:
+          type: boolean
+      required:
+      - code
+      - name
+    HrChecklistItem:
+      type: object
+      properties:
+        key:
+          type: string
+          pattern: ^[a-z0-9_]{1,30}$
+        title:
+          type: string
+        required:
+          type: boolean
+        auto:
+          oneOf:
+          - type: string
+            enum:
+            - pan
+            - bank
+            - salary
+            - handbook
+            description: Read from the employee's record instead of ticked by a person
+          - type: 'null'
+      required:
+      - key
+      - title
+    HrSalaryPolicy:
+      type: object
+      properties:
+        basic_pct_of_ctc:
+          type: string
+          description: Basic pay as a share of the CTC
+        hra_pct_of_basic:
+          type: string
+        employer_pf_in_ctc:
+          type: boolean
+        pf_on_full_basic:
+          type: boolean
+          description: PF on the whole basic, not capped at the wage ceiling
+        employer_esi_in_ctc:
+          type: boolean
+        gratuity_in_ctc:
+          type: boolean
+      required:
+      - basic_pct_of_ctc
+      - hra_pct_of_basic
+    HrLeavePolicy:
+      type: object
+      properties:
+        leave_year:
+          type: string
+          enum:
+          - financial
+          - calendar
+        week_off:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          description: Weekdays off, 0 for Monday to 6 for Sunday
+        lop_when_exhausted:
+          type: boolean
+          description: Leave beyond the balance is taken as loss of pay; when false it is refused
+    HrPayrollPolicy:
+      type: object
+      properties:
+        inputs_cutoff_day:
+          type: integer
+        pay_day:
+          type: integer
+        probation_months:
+          type: integer
+        notice_days:
+          type: integer
+    HrOnboardingPolicy:
+      type: object
+      properties:
+        checklist:
+          type: array
+          items:
+            $ref: '#/components/schemas/HrChecklistItem'
+          minItems: 1
+      required:
+      - checklist
+    HrPolicy:
+      type: object
+      properties:
+        effective_from:
+          oneOf:
+          - type: string
+            format: date
+            description: Today or later when saving. None while the company is on the starter policy
+          - type: 'null'
+        is_default:
+          type: boolean
+          readOnly: true
+        next_change_on:
+          oneOf:
+          - type: string
+            format: date
+            readOnly: true
+          - type: 'null'
+        salary:
+          $ref: '#/components/schemas/HrSalaryPolicy'
+        leave:
+          $ref: '#/components/schemas/HrLeavePolicy'
+        payroll:
+          $ref: '#/components/schemas/HrPayrollPolicy'
+        onboarding:
+          $ref: '#/components/schemas/HrOnboardingPolicy'
+        leave_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaveType'
+          readOnly: true
+      required:
+      - effective_from
+      - salary
+      - leave
+      - payroll
+      - onboarding
+    LeaveTypeList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaveType'
+    CtcComponent:
+      type: object
+      properties:
+        code:
+          type: string
+        monthly_amount:
+          $ref: '#/components/schemas/Money'
+        annual_amount:
+          $ref: '#/components/schemas/Money'
+        kind:
+          type: string
+          enum:
+          - earning
+          - employer_contribution
+          - reimbursement
+        in_wages:
+          type: boolean
+        taxable:
+          type: boolean
+    CtcBreakup:
+      type: object
+      properties:
+        ctc_annual:
+          $ref: '#/components/schemas/Money'
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/CtcComponent'
+        monthly_ctc:
+          $ref: '#/components/schemas/Money'
+        monthly_gross:
+          $ref: '#/components/schemas/Money'
+        employer_contributions:
+          $ref: '#/components/schemas/Money'
+        employee_pf:
+          $ref: '#/components/schemas/Money'
+        employee_esi:
+          $ref: '#/components/schemas/Money'
+        take_home_before_tax:
+          $ref: '#/components/schemas/Money'
+          description: Gross less the employee's PF and ESI; income tax and professional tax come off this
+        wage_pct:
+          oneOf:
+          - type: number
+            description: Basic as a share of gross earnings; the Code on Wages looks for 50
+          - type: 'null'
+    OnboardingTask:
+      type: object
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        required:
+          type: boolean
+        auto:
+          oneOf:
+          - type: string
+          - type: 'null'
+        done:
+          type: boolean
+    Onboarding:
+      type: object
+      properties:
+        employee:
+          $ref: '#/components/schemas/Employee'
+        checklist:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingTask'
+        open_required:
+          type: array
+          items:
+            type: string
+          description: Required items still to do
+        ready:
+          type: boolean
+          description: Every required item is done and the person can be activated
+        done:
+          type: integer
+        total:
+          type: integer
+    OnboardEmployee:
+      type: object
+      properties:
+        full_name:
+          type: string
+        employee_code:
+          oneOf:
+          - type: string
+            description: Left out, the next EMP- number is used
+          - type: 'null'
+        date_of_joining:
+          type: string
+          format: date
+        work_state:
+          $ref: '#/components/schemas/StateCode'
+        ctc_annual:
+          $ref: '#/components/schemas/Money'
+        designation:
+          oneOf:
+          - type: string
+          - type: 'null'
+        department:
+          oneOf:
+          - type: string
+          - type: 'null'
+        email:
+          oneOf:
+          - type: string
+          - type: 'null'
+        pan:
+          oneOf:
+          - $ref: '#/components/schemas/Pan'
+          - type: 'null'
+        uan:
+          oneOf:
+          - type: string
+          - type: 'null'
+        employment_type:
+          type: string
+        tax_regime:
+          type: string
+          enum:
+          - new
+          - old
+        bank_account:
+          oneOf:
+          - $ref: '#/components/schemas/BankDetails'
+          - type: 'null'
+      required:
+      - full_name
+      - date_of_joining
+      - work_state
+      - ctc_annual
+    OnboardingTaskDone:
+      type: object
+      properties:
+        done:
+          type: boolean
+      required:
+      - done
+    Holiday:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+      required:
+      - date
+      - name
+    HolidayList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Holiday'
     LeaveRequest:
       type: object
       properties:
@@ -17420,16 +19136,42 @@ components:
         employee_id:
           type: string
           format: uuid
+        employee_name:
+          type: string
+          readOnly: true
+        employee_code:
+          type: string
+          readOnly: true
         leave_type:
           type: string
+          description: The leave type's code
+        leave_type_name:
+          type: string
+          readOnly: true
         from:
           type: string
           format: date
         to:
           type: string
           format: date
+        half_day:
+          type: boolean
+        reason:
+          oneOf:
+          - type: string
+          - type: 'null'
         days:
-          type: number
+          type: string
+          description: 'Working days in the range: not the weekly off, not a holiday'
+          examples:
+          - '2'
+          readOnly: true
+        lop_days:
+          type: string
+          description: The days of it that are not paid
+          examples:
+          - '2'
+          readOnly: true
         status:
           type: string
           enum:
@@ -17438,6 +19180,27 @@ components:
           - rejected
           - cancelled
           readOnly: true
+        requested_at:
+          type: string
+          format: date-time
+          readOnly: true
+        decided_at:
+          oneOf:
+          - type: string
+            format: date-time
+            readOnly: true
+          - type: 'null'
+        decision_note:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
+        payroll_note:
+          oneOf:
+          - type: string
+            readOnly: true
+            description: Set when a month the leave touches already has an approved payroll
+          - type: 'null'
       required:
       - employee_id
       - leave_type
@@ -17457,6 +19220,451 @@ components:
       required:
       - data
       - next_cursor
+    LeaveDecision:
+      type: object
+      properties:
+        note:
+          oneOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+    LeaveBalance:
+      type: object
+      properties:
+        leave_type:
+          type: string
+        name:
+          type: string
+        paid:
+          type: boolean
+        annual_quota:
+          oneOf:
+          - type: string
+            description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+            examples:
+            - '2'
+          - type: 'null'
+        accrual:
+          type: string
+        earned:
+          oneOf:
+          - type: string
+            description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+            examples:
+            - '2'
+          - type: 'null'
+        adjustments:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+        taken:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+        pending:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+        unpaid_taken:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+        available:
+          oneOf:
+          - type: string
+            description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+            examples:
+            - '2'
+          - type: 'null'
+    EmployeeLeave:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        employee_code:
+          type: string
+        employee_name:
+          type: string
+        balances:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaveBalance'
+    LeaveBalances:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date
+        leave_year_start:
+          type: string
+          format: date
+        leave_year_end:
+          type: string
+          format: date
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeLeave'
+    LeaveAdjustment:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        leave_type:
+          type: string
+        days:
+          type: string
+          description: Negative to take days off
+        kind:
+          type: string
+          enum:
+          - opening
+          - carry_forward
+          - correction
+        as_of:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        note:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - employee_id
+      - leave_type
+      - days
+    LeaveAdjustmentResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        employee_id:
+          type: string
+          format: uuid
+        leave_year_start:
+          type: string
+          format: date
+        balance:
+          $ref: '#/components/schemas/LeaveBalance'
+    EmployeeRef:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        employee_code:
+          type: string
+        name:
+          type: string
+    ReadinessItem:
+      type: object
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeRef'
+    LopFromLeave:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        employee_code:
+          type: string
+        name:
+          type: string
+        lop_days:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+    PayrollReadiness:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        period_month:
+          type: string
+          format: date
+        status:
+          type: string
+        ready:
+          type: boolean
+        headcount:
+          type: integer
+        blockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessItem'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessItem'
+        joiners:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeRef'
+        leavers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeRef'
+        lop_from_leave:
+          type: array
+          items:
+            $ref: '#/components/schemas/LopFromLeave'
+    LopRow:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        lop_days:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+    LopPulled:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LopRow'
+    PayslipLine:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        kind:
+          type: string
+          enum:
+          - earning
+          - deduction
+          - employer_contribution
+        amount:
+          $ref: '#/components/schemas/Money'
+    PayslipYtd:
+      type: object
+      properties:
+        gross:
+          $ref: '#/components/schemas/Money'
+        tds:
+          $ref: '#/components/schemas/Money'
+        pf:
+          $ref: '#/components/schemas/Money'
+        net:
+          $ref: '#/components/schemas/Money'
+    PayslipDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        period_month:
+          type: string
+          format: date
+        run_status:
+          type: string
+        final:
+          type: boolean
+          description: From an approved run; a payslip that is not final is a draft
+        paid_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        employee_id:
+          type: string
+          format: uuid
+        employee_code:
+          type: string
+        employee_name:
+          type: string
+        designation:
+          oneOf:
+          - type: string
+          - type: 'null'
+        department:
+          oneOf:
+          - type: string
+          - type: 'null'
+        pan_last4:
+          oneOf:
+          - type: string
+          - type: 'null'
+        uan:
+          oneOf:
+          - type: string
+          - type: 'null'
+        date_of_joining:
+          type: string
+          format: date
+        paid_days:
+          type: number
+        lop_days:
+          type: number
+        gross:
+          $ref: '#/components/schemas/Money'
+        wages:
+          $ref: '#/components/schemas/Money'
+        pf_wage:
+          $ref: '#/components/schemas/Money'
+        pf_employee:
+          $ref: '#/components/schemas/Money'
+        pf_employer_epf:
+          $ref: '#/components/schemas/Money'
+        pf_employer_eps:
+          $ref: '#/components/schemas/Money'
+        esi_applicable:
+          type: boolean
+        esi_employee:
+          $ref: '#/components/schemas/Money'
+        esi_employer:
+          $ref: '#/components/schemas/Money'
+        professional_tax:
+          $ref: '#/components/schemas/Money'
+        tds:
+          $ref: '#/components/schemas/Money'
+        other_deductions:
+          $ref: '#/components/schemas/Money'
+        net_pay:
+          $ref: '#/components/schemas/Money'
+        pdf_url:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayslipLine'
+        year_to_date:
+          $ref: '#/components/schemas/PayslipYtd'
+      readOnly: true
+    EmployeePayslips:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayslipDetail'
+    PolicyAck:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        employee_name:
+          type: string
+        employee_code:
+          type: string
+        acknowledged_on:
+          type: string
+          format: date
+    PolicyWaiting:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        employee_name:
+          type: string
+        employee_code:
+          type: string
+    HrPolicyDocument:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        slug:
+          oneOf:
+          - type: string
+            pattern: ^[a-z0-9-]{1,60}$
+            description: Publishing with an existing slug adds its next version
+          - type: 'null'
+        title:
+          type: string
+        category:
+          type: string
+          enum:
+          - general
+          - leave
+          - conduct
+          - posh
+          - payroll
+          - it_security
+          - travel
+          - exit
+        body:
+          type: string
+        requires_ack:
+          type: boolean
+        version:
+          type: integer
+          readOnly: true
+        is_current:
+          type: boolean
+          readOnly: true
+        published_at:
+          type: string
+          format: date-time
+          readOnly: true
+        acknowledged:
+          type: integer
+          readOnly: true
+        people:
+          type: integer
+          readOnly: true
+        acknowledgements:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyAck'
+          readOnly: true
+        waiting:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyWaiting'
+          readOnly: true
+      required:
+      - title
+      - body
+    HrPolicyDocumentList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HrPolicyDocument'
+    PolicyAckIn:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        acknowledged_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+      required:
+      - employee_id
     ContractTerm:
       type: object
       properties:
@@ -19714,6 +21922,380 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DepreciationJournal'
+    Warehouse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          type: string
+          pattern: ^[A-Za-z0-9-]{1,12}$
+        name:
+          type: string
+        is_default:
+          type: boolean
+          description: Bills receive into it and invoices ship from it
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - code
+      - name
+    WarehouseList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warehouse'
+    InventorySettings:
+      type: object
+      properties:
+        allow_negative_stock:
+          type: boolean
+          description: Whether a sale may take stock below zero. Off unless the company turns it on.
+        valuation_method:
+          type: string
+          enum:
+          - weighted_average
+          readOnly: true
+      required:
+      - allow_negative_stock
+    StockLevel:
+      type: object
+      properties:
+        warehouse_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        qty:
+          type: string
+          pattern: ^-?[0-9]+\.[0-9]{3}$
+          description: A quantity with three decimals
+          examples:
+          - '12.000'
+    StockItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        uqc:
+          type: string
+        hsn_sac:
+          $ref: '#/components/schemas/HsnSac'
+        is_active:
+          type: boolean
+        sale_rate:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        qty:
+          type: string
+          pattern: ^-?[0-9]+\.[0-9]{3}$
+          description: On hand in all warehouses
+          examples:
+          - '12.000'
+        average_cost:
+          type: string
+          pattern: ^[0-9]+\.[0-9]{4}$
+          description: What one unit will leave stock at
+          examples:
+          - '115.0000'
+        value:
+          $ref: '#/components/schemas/Money'
+        last_moved_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockLevel'
+    StockTotals:
+      type: object
+      properties:
+        value:
+          $ref: '#/components/schemas/Money'
+        items:
+          type: integer
+        out_of_stock:
+          type: integer
+    StockItemList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockItem'
+        totals:
+          $ref: '#/components/schemas/StockTotals'
+        allow_negative_stock:
+          type: boolean
+        valuation_method:
+          type: string
+          enum:
+          - weighted_average
+    StockMovement:
+      type: object
+      properties:
+        id:
+          type: integer
+        item_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        item_name:
+          type: string
+        uqc:
+          type: string
+        warehouse_id:
+          type: string
+          format: uuid
+        warehouse_code:
+          type: string
+        date:
+          type: string
+          format: date
+        qty_in:
+          type: string
+          pattern: ^-?[0-9]+\.[0-9]{3}$
+          description: A quantity with three decimals
+          examples:
+          - '12.000'
+        qty_out:
+          type: string
+          pattern: ^-?[0-9]+\.[0-9]{3}$
+          description: A quantity with three decimals
+          examples:
+          - '12.000'
+        unit_cost:
+          type: string
+          pattern: ^[0-9]+\.[0-9]{4}$
+          description: Rupees per unit, four decimals
+          examples:
+          - '115.0000'
+        value:
+          $ref: '#/components/schemas/Money'
+          description: 'Signed: what the movement added to or took from the value of stock'
+        source_kind:
+          type: string
+          enum:
+          - purchase_bill
+          - sales_document
+          - adjustment
+          - opening
+          - transfer
+          - bill_of_entry
+        source_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        reference:
+          oneOf:
+          - type: string
+            description: The bill, document or bill of entry number
+          - type: 'null'
+        reason:
+          oneOf:
+          - type: string
+          - type: 'null'
+        note:
+          oneOf:
+          - type: string
+          - type: 'null'
+        journal_entry_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        entry_no:
+          oneOf:
+          - type: string
+          - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    StockMovementPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockMovement'
+        next_cursor:
+          oneOf:
+          - type: string
+          - type: 'null'
+      required:
+      - data
+      - next_cursor
+    StockChange:
+      type: object
+      properties:
+        movements:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockMovement'
+        item:
+          $ref: '#/components/schemas/StockItem'
+        booking:
+          type: string
+          enum:
+          - post
+          - in_opening_balances
+          description: 'Opening stock only: how it was booked'
+    StockAdjustment:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        warehouse_id:
+          oneOf:
+          - type: string
+            format: uuid
+            description: The default warehouse when left out
+          - type: 'null'
+        kind:
+          type: string
+          enum:
+          - opening
+          - count
+          - write_off
+        date:
+          type: string
+          format: date
+        qty:
+          oneOf:
+          - type: string
+            description: 'opening and write_off: the quantity'
+          - type: 'null'
+        counted_qty:
+          oneOf:
+          - type: string
+            description: 'count: what is physically there in the warehouse'
+          - type: 'null'
+        unit_cost:
+          oneOf:
+          - type: string
+            description: 'opening: what one unit cost. count: only when stock is found and the item has no cost on record'
+          - type: 'null'
+        booking:
+          oneOf:
+          - type: string
+            enum:
+            - post
+            - in_opening_balances
+            description: 'opening: `post` books Dr Inventory, Cr Opening balance equity; `in_opening_balances` only records
+              the stock because the opening trial balance already carries its value. Left out, it is `in_opening_balances`
+              when an opening trial balance has been imported and `post` when not.'
+          - type: 'null'
+        reason:
+          oneOf:
+          - type: string
+            maxLength: 200
+            description: Required for a count and a write-off
+          - type: 'null'
+        note:
+          oneOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+      required:
+      - item_id
+      - kind
+      - date
+    StockTransfer:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        from_warehouse_id:
+          type: string
+          format: uuid
+        to_warehouse_id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        qty:
+          type: string
+        note:
+          oneOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+      required:
+      - item_id
+      - from_warehouse_id
+      - to_warehouse_id
+      - date
+      - qty
+    StockValuationItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        uqc:
+          type: string
+        qty:
+          type: string
+          pattern: ^-?[0-9]+\.[0-9]{3}$
+          description: A quantity with three decimals
+          examples:
+          - '12.000'
+        average_cost:
+          type: string
+          pattern: ^[0-9]+\.[0-9]{4}$
+          description: Rupees per unit, four decimals
+          examples:
+          - '115.0000'
+        value:
+          $ref: '#/components/schemas/Money'
+    StockValuation:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date
+        valuation_method:
+          type: string
+          enum:
+          - weighted_average
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockValuationItem'
+        total_value:
+          $ref: '#/components/schemas/Money'
+        ledger_balance:
+          $ref: '#/components/schemas/Money'
+          description: The Inventory account on the same date
+        difference:
+          $ref: '#/components/schemas/Money'
+          description: Ledger less stock. Not zero when stock was booked to another account or Inventory was posted to by
+            hand
     PortalConnection:
       type: object
       properties:

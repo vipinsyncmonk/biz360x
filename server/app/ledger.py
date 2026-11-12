@@ -65,6 +65,12 @@ SYSTEM_ACCOUNTS = {
     "accumulated_depreciation": ("1550", "Accumulated depreciation", "asset", "accumulated_depreciation"),
     "depreciation_expense": ("5300", "Depreciation", "expense", "depreciation_expense"),
     "asset_disposal_gain_loss": ("4960", "Profit or loss on sale of assets", "income", "asset_disposal"),
+    # inventory
+    "inventory": ("1400", "Inventory", "asset", "inventory"),
+    "cost_of_goods_sold": ("5050", "Cost of goods sold", "expense", "cost_of_goods_sold"),
+    "stock_adjustments": ("5060", "Stock adjustments and write-offs", "expense", "stock_adjustments"),
+    "customs_duty_payable": ("2260", "Customs duty payable", "liability", "customs_duty_payable"),
+    "opening_balance_equity": ("3900", "Opening balance equity", "equity", "opening_balance_equity"),
 }
 
 
@@ -126,10 +132,12 @@ def receipt_lines(*, amount: Decimal, allocated: Decimal, party_id, method: str,
     return out
 
 
-def purchase_bill_lines(bill: dict, expense: list[tuple[str, Decimal]] | None = None) -> list[Line]:
+def purchase_bill_lines(bill: dict, expense: list[tuple[str, Decimal]] | None = None, nonclaimable: dict[str, Decimal] | None = None) -> list[Line]:
     """Booked purchase bill. Dr expense (plus any tax that is not claimable as ITC), Dr input GST when the bill is
     eligible; Cr payables for the amount we will pay the supplier, Cr TDS payable for what we withhold.
-    `expense` optionally splits the taxable value over account keys; it must add up to taxable_total."""
+    `expense` optionally splits the taxable value over account keys; it must add up to taxable_total (stock lines go to
+    `inventory`). `nonclaimable` says which key carries how much of the tax that cannot be claimed, so stock is valued with
+    its own tax; the rest goes to the first key it does not name (the first key, when it is not given)."""
     eligible = bill["itc_eligibility"] == "eligible"
     taxes = [("gst_input_cgst", bill["cgst_total"]), ("gst_input_sgst", bill["sgst_total"]), ("gst_input_igst", bill["igst_total"])]
     tax_total = sum((t for _, t in taxes), ZERO)
@@ -137,8 +145,15 @@ def purchase_bill_lines(bill: dict, expense: list[tuple[str, Decimal]] | None = 
     if sum((a for _, a in split), ZERO) != bill["taxable_total"]:
         raise PostingError("expense split does not add up to the taxable value")
     out: list[Line] = []
-    for i, (key, amount) in enumerate(split):
-        out.append(Line(key, debit=amount + (tax_total if (not eligible and i == 0) else ZERO)))
+    extra: dict[str, Decimal] = {}
+    if not eligible:
+        extra = dict(nonclaimable or {})
+        if set(extra) - {k for k, _ in split} or sum(extra.values(), ZERO) > tax_total or any(v < 0 for v in extra.values()):
+            raise PostingError("the split of tax that cannot be claimed does not match the bill")
+        rest = next((k for k, _ in split if k not in extra), split[0][0])       # the first account that was not given its own share
+        extra[rest] = extra.get(rest, ZERO) + tax_total - sum(extra.values(), ZERO)
+    for key, amount in split:
+        out.append(Line(key, debit=amount + extra.get(key, ZERO)))
     if eligible:
         out += [Line(k, debit=t) for k, t in taxes if t]
     tds = bill.get("tds_amount") or ZERO

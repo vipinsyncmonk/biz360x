@@ -862,7 +862,7 @@ tag("Payroll & HR", "Employees, salary structures, payroll runs, payslips, labou
 schema("SalaryComponent", {"code": S(), "monthly_amount": MONEY, "kind": ENUM("earning", "employer_contribution", "reimbursement"), "in_wages": B(), "taxable": B()},
        required=("code", "monthly_amount", "kind", "in_wages"))
 schema("SalaryStructure", {"id": RO_UUID, "effective_from": DATE, "effective_to": NULLABLE(DATE), "ctc_annual": MONEY, "components": ARR(ref("SalaryComponent"))},
-       required=("effective_from", "ctc_annual", "components"))
+       required=("effective_from", "ctc_annual"), desc="Leave `components` out and they are worked out from the CTC by the HR policy.")
 schema("Employee", {"id": RO_UUID, "employee_code": S(), "full_name": S(), "pan": PAN, "uan": NULLABLE(S()), "esic_ip_no": NULLABLE(S()),
                     "email": S(format="email"), "date_of_joining": DATE, "date_of_leaving": NULLABLE(DATE), "designation": S(), "department": S(),
                     "work_state": STATE, "employment_type": S(), "tax_regime": ENUM("new", "old"),
@@ -911,9 +911,114 @@ _op("get", E + "/committees", "Payroll & HR", "listCommittees", "Statutory commi
 action(E + "/committees", "Payroll & HR", "createCommittee", "Constitute a committee (e.g. the POSH Internal Committee)", "payroll:write", body=ref("Committee"),
        resp=ref("Committee"), status="201")
 _op("get", E + "/payroll/wage-code-check", "Payroll & HR", "getWageCodeCheck", "Employees whose wages are under 50% of pay", "payroll:read", resp=ARR(ref("WageCodeCheck")))
-schema("LeaveRequest", {"id": RO_UUID, "employee_id": UUID, "leave_type": S(), "from": DATE, "to": DATE, "days": N(), "status": ENUM("pending", "approved", "rejected", "cancelled", readOnly=True)},
+# ---- HR: policy, onboarding from a CTC, leave, holidays, the handbook, payslips for a person, run readiness
+DAYS = S(description="Leave days as text, in half days: 2, 0.5, 7.5", examples=["2"])
+schema("LeaveType", {"id": RO_UUID, "code": S(pattern="^[A-Za-z]{2,6}$"), "name": S(), "annual_quota": NULLABLE({**DAYS, "description": "Days a year; none for unpaid leave"}),
+                     "accrual": ENUM("yearly", "monthly", description="Granted at the start of the leave year, or earned month by month"),
+                     "paid": B(description="false: every day of it is loss of pay"), "carry_forward_max": DAYS, "encashable": B(), "is_active": B()}, required=("code", "name"))
+schema("HrChecklistItem", {"key": S(pattern="^[a-z0-9_]{1,30}$"), "title": S(), "required": B(),
+                           "auto": NULLABLE(ENUM("pan", "bank", "salary", "handbook", description="Read from the employee's record instead of ticked by a person"))}, required=("key", "title"))
+schema("HrPolicy", {
+    "effective_from": NULLABLE({**DATE, "description": "Today or later when saving. None while the company is on the starter policy"}),
+    "is_default": B(readOnly=True), "next_change_on": NULLABLE(DATE_RO),
+    "salary": schema("HrSalaryPolicy", {"basic_pct_of_ctc": S(description="Basic pay as a share of the CTC"), "hra_pct_of_basic": S(), "employer_pf_in_ctc": B(), "pf_on_full_basic": B(description="PF on the whole basic, not capped at the wage ceiling"),
+                                        "employer_esi_in_ctc": B(), "gratuity_in_ctc": B()}, required=("basic_pct_of_ctc", "hra_pct_of_basic")),
+    "leave": schema("HrLeavePolicy", {"leave_year": ENUM("financial", "calendar"), "week_off": ARR(I(minimum=0, maximum=6), description="Weekdays off, 0 for Monday to 6 for Sunday"),
+                                      "lop_when_exhausted": B(description="Leave beyond the balance is taken as loss of pay; when false it is refused")}),
+    "payroll": schema("HrPayrollPolicy", {"inputs_cutoff_day": I(), "pay_day": I(), "probation_months": I(), "notice_days": I()}),
+    "onboarding": schema("HrOnboardingPolicy", {"checklist": ARR(ref("HrChecklistItem"), minItems=1)}, required=("checklist",)),
+    "leave_types": {**ARR(ref("LeaveType")), "readOnly": True}}, required=("effective_from", "salary", "leave", "payroll", "onboarding"))
+_op("get", E + "/hr/policy", "Payroll & HR", "getHrPolicy", "The HR policy in force today", "payroll:read", resp=ref("HrPolicy"),
+    desc="A company that has saved none sees the starter policy (`is_default`). The starter values need the company's and a CA's review.")
+_op("put", E + "/hr/policy", "Payroll & HR", "saveHrPolicy", "Save the HR policy from a date", "payroll:approve", body=ref("HrPolicy"), resp=ref("HrPolicy"),
+    desc="A policy takes effect from today or later and is never changed for the past.")
+_op("get", E + "/leave-types", "Payroll & HR", "listLeaveTypes", "Leave types", "payroll:read", resp=schema("LeaveTypeList", {"data": ARR(ref("LeaveType"))}))
+_op("post", E + "/leave-types", "Payroll & HR", "saveLeaveType", "Add a leave type, or change the one with the same code", "payroll:approve", body=ref("LeaveType"), resp=ref("LeaveType"))
+schema("CtcComponent", {"code": S(), "monthly_amount": MONEY, "annual_amount": MONEY, "kind": ENUM("earning", "employer_contribution", "reimbursement"), "in_wages": B(), "taxable": B()})
+_op("get", E + "/payroll/ctc-breakup", "Payroll & HR", "previewCtcBreakup", "What a yearly CTC becomes under the policy", "payroll:read",
+    params=[q("ctc_annual", S(), "The yearly CTC in rupees"), q("as_of", DATE)],
+    resp=schema("CtcBreakup", {"ctc_annual": MONEY, "components": ARR(ref("CtcComponent")), "monthly_ctc": MONEY, "monthly_gross": MONEY, "employer_contributions": MONEY,
+                               "employee_pf": MONEY, "employee_esi": MONEY, "take_home_before_tax": {**MONEY, "description": "Gross less the employee's PF and ESI; income tax and professional tax come off this"},
+                               "wage_pct": NULLABLE(N(description="Basic as a share of gross earnings; the Code on Wages looks for 50"))}),
+    desc="Saves nothing. Basic and HRA follow the policy, the employer's PF, ESI and gratuity are taken out when the policy says the CTC includes them, and the special allowance is the rest.")
+schema("OnboardingTask", {"key": S(), "title": S(), "required": B(), "auto": NULLABLE(S()), "done": B()})
+schema("Onboarding", {"employee": ref("Employee"), "checklist": ARR(ref("OnboardingTask")), "open_required": ARR(S(), description="Required items still to do"),
+                      "ready": B(description="Every required item is done and the person can be activated"), "done": I(), "total": I()})
+action(E + "/employees/onboard", "Payroll & HR", "onboardEmployee", "Enter a new hire with a CTC", "payroll:write", status="201", resp=ref("Onboarding"),
+       body=schema("OnboardEmployee", {"full_name": S(), "employee_code": NULLABLE(S(description="Left out, the next EMP- number is used")), "date_of_joining": DATE, "work_state": STATE,
+                                       "ctc_annual": MONEY, "designation": NULLABLE(S()), "department": NULLABLE(S()), "email": NULLABLE(S()), "pan": NULLABLE(PAN),
+                                       "uan": NULLABLE(S()), "employment_type": S(), "tax_regime": ENUM("new", "old"), "bank_account": NULLABLE(ref("BankDetails"))},
+                   required=("full_name", "date_of_joining", "work_state", "ctc_annual")),
+       desc="Creates the employee as `onboarding` (outside payroll), the salary structure from the policy and the checklist from the policy.")
+_op("get", E + "/employees/{id}/onboarding", "Payroll & HR", "getOnboarding", "A new hire's checklist", "payroll:read", resp=ref("Onboarding"))
+_op("put", E + "/employees/{id}/onboarding/{key}", "Payroll & HR", "setOnboardingTask", "Tick or untick a checklist item", "payroll:write",
+    params=[{"name": "key", "in": "path", "required": True, "schema": S()}], body=schema("OnboardingTaskDone", {"done": B()}, required=("done",)), resp=ref("Onboarding"),
+    desc="Items read from the record (PAN, bank account, salary, handbook) cannot be ticked by hand (409).")
+action(E + "/employees/{id}/activate", "Payroll & HR", "activateEmployee", "Finish onboarding", "payroll:write", resp=ref("Onboarding"),
+       desc="Every required item must be done (`onboarding_incomplete`). The person becomes active and is paid from the joining date.")
+schema("Holiday", {"id": RO_UUID, "date": DATE, "name": S()}, required=("date", "name"))
+_op("get", E + "/holidays", "Payroll & HR", "listHolidays", "Company holidays", "payroll:read", params=[q("year", I())], resp=schema("HolidayList", {"data": ARR(ref("Holiday"))}))
+_op("post", E + "/holidays", "Payroll & HR", "createHoliday", "Add a holiday", "payroll:write", body=ref("Holiday"), resp=ref("Holiday"), status="201")
+_op("delete", E + "/holidays/{id}", "Payroll & HR", "deleteHoliday", "Remove a holiday", "payroll:write", status="204")
+schema("LeaveRequest", {"id": RO_UUID, "employee_id": UUID, "employee_name": S(readOnly=True), "employee_code": S(readOnly=True), "leave_type": S(description="The leave type's code"),
+                        "leave_type_name": S(readOnly=True), "from": DATE, "to": DATE, "half_day": B(), "reason": NULLABLE(S()),
+                        "days": {**DAYS, "readOnly": True, "description": "Working days in the range: not the weekly off, not a holiday"},
+                        "lop_days": {**DAYS, "readOnly": True, "description": "The days of it that are not paid"},
+                        "status": ENUM("pending", "approved", "rejected", "cancelled", readOnly=True), "requested_at": RO_TS, "decided_at": NULLABLE(RO_TS), "decision_note": NULLABLE(S(readOnly=True)),
+                        "payroll_note": NULLABLE(S(readOnly=True, description="Set when a month the leave touches already has an approved payroll"))},
        required=("employee_id", "leave_type", "from", "to"))
-collection(E + "/leave-requests", "Payroll & HR", "LeaveRequest", "payroll", filters=[q("status", S()), q("employee_id", UUID)])
+collection(E + "/leave-requests", "Payroll & HR", "LeaveRequest", "payroll", filters=[q("status", ENUM("pending", "approved", "rejected", "cancelled")), q("employee_id", UUID), P("From"), P("To")])
+LEAVE_DECISION = schema("LeaveDecision", {"note": NULLABLE(S(maxLength=300))})
+action(E + "/leave-requests/{id}/approve", "Payroll & HR", "approveLeaveRequest", "Approve a leave request", "payroll:approve", body=LEAVE_DECISION, resp=ref("LeaveRequest"),
+       desc="Its unpaid days go into the open payroll run of each month it touches.")
+action(E + "/leave-requests/{id}/reject", "Payroll & HR", "rejectLeaveRequest", "Reject a leave request", "payroll:approve", body=LEAVE_DECISION, resp=ref("LeaveRequest"))
+action(E + "/leave-requests/{id}/cancel", "Payroll & HR", "cancelLeaveRequest", "Withdraw a leave request", "payroll:write", body=LEAVE_DECISION, resp=ref("LeaveRequest"),
+       desc="Refused (409) when its unpaid days were already deducted in an approved payroll.")
+schema("LeaveBalance", {"leave_type": S(), "name": S(), "paid": B(), "annual_quota": NULLABLE(DAYS), "accrual": S(), "earned": NULLABLE(DAYS), "adjustments": DAYS, "taken": DAYS,
+                        "pending": DAYS, "unpaid_taken": DAYS, "available": NULLABLE(DAYS)})
+_op("get", E + "/leave-balances", "Payroll & HR", "listLeaveBalances", "Leave earned, taken and left, per person", "payroll:read", params=[q("employee_id", UUID), q("as_of", DATE)],
+    resp=schema("LeaveBalances", {"as_of": DATE, "leave_year_start": DATE, "leave_year_end": DATE,
+                                  "data": ARR(schema("EmployeeLeave", {"employee_id": UUID, "employee_code": S(), "employee_name": S(), "balances": ARR(ref("LeaveBalance"))}))}))
+action(E + "/leave-adjustments", "Payroll & HR", "adjustLeaveBalance", "Add days to a balance or take them off", "payroll:approve", status="201",
+       body=schema("LeaveAdjustment", {"employee_id": UUID, "leave_type": S(), "days": S(description="Negative to take days off"), "kind": ENUM("opening", "carry_forward", "correction"),
+                                       "as_of": NULLABLE(DATE), "note": NULLABLE(S())}, required=("employee_id", "leave_type", "days")),
+       resp=schema("LeaveAdjustmentResult", {"id": UUID, "employee_id": UUID, "leave_year_start": DATE, "balance": ref("LeaveBalance")}),
+       desc="What a person carried in when the company started here, a carry-forward, or a correction.")
+PERSON = schema("EmployeeRef", {"employee_id": UUID, "employee_code": S(), "name": S()})
+schema("ReadinessItem", {"code": S(), "title": S(), "employees": ARR(PERSON)})
+_op("get", E + "/payroll-runs/{id}/readiness", "Payroll & HR", "getPayrollReadiness", "What a payroll run still needs", "payroll:read",
+    resp=schema("PayrollReadiness", {"run_id": UUID, "period_month": DATE, "status": S(), "ready": B(), "headcount": I(), "blockers": ARR(ref("ReadinessItem")), "warnings": ARR(ref("ReadinessItem")),
+                                     "joiners": ARR(PERSON), "leavers": ARR(PERSON),
+                                     "lop_from_leave": ARR(schema("LopFromLeave", {"employee_id": UUID, "employee_code": S(), "name": S(), "lop_days": DAYS}))}),
+    desc="`blockers` stop the run from being computed (no salary set); `warnings` are worth a look first (onboarding not finished, no bank account, no PAN, leave awaiting a decision).")
+action(E + "/payroll-runs/{id}/inputs/from-leave", "Payroll & HR", "pullLeaveIntoPayroll", "Bring approved unpaid leave into the run's inputs", "payroll:write",
+       resp=schema("LopPulled", {"data": ARR(schema("LopRow", {"employee_id": UUID, "lop_days": DAYS}))}),
+       desc="Starting a run and deciding a leave request do this by themselves; this does it again on request. Figures typed for the month are kept.")
+schema("PayslipLine", {"code": S(), "label": S(), "kind": ENUM("earning", "deduction", "employer_contribution"), "amount": MONEY})
+schema("PayslipDetail", {"id": UUID, "run_id": UUID, "period_month": DATE, "run_status": S(), "final": B(description="From an approved run; a payslip that is not final is a draft"),
+                         "paid_on": NULLABLE(DATE), "employee_id": UUID, "employee_code": S(), "employee_name": S(), "designation": NULLABLE(S()), "department": NULLABLE(S()),
+                         "pan_last4": NULLABLE(S()), "uan": NULLABLE(S()), "date_of_joining": DATE, "paid_days": N(), "lop_days": N(), "gross": MONEY, "wages": MONEY, "pf_wage": MONEY,
+                         "pf_employee": MONEY, "pf_employer_epf": MONEY, "pf_employer_eps": MONEY, "esi_applicable": B(), "esi_employee": MONEY, "esi_employer": MONEY,
+                         "professional_tax": MONEY, "tds": MONEY, "other_deductions": MONEY, "net_pay": MONEY, "pdf_url": S(),
+                         "lines": ARR(ref("PayslipLine")), "year_to_date": schema("PayslipYtd", {"gross": MONEY, "tds": MONEY, "pf": MONEY, "net": MONEY})}, extra={"readOnly": True})
+_op("get", E + "/employees/{id}/payslips", "Payroll & HR", "listEmployeePayslips", "A person's payslips from approved runs", "payroll:read", params=[q("fy", FY)],
+    resp=schema("EmployeePayslips", {"data": ARR(ref("PayslipDetail"))}))
+_op("get", E + "/payslips/{id}", "Payroll & HR", "getPayslip", "One payslip with its lines and the year so far", "payroll:read", resp=ref("PayslipDetail"))
+_op("get", E + "/payslips/{id}/pdf", "Payroll & HR", "getPayslipPdf", "The payslip as a PDF", "payroll:read", params=[q("download", B())],
+    desc="`application/pdf`. A payslip from a run that is not approved carries a DRAFT mark.")
+schema("PolicyAck", {"employee_id": UUID, "employee_name": S(), "employee_code": S(), "acknowledged_on": DATE})
+schema("HrPolicyDocument", {"id": RO_UUID, "slug": NULLABLE(S(pattern="^[a-z0-9-]{1,60}$", description="Publishing with an existing slug adds its next version")), "title": S(),
+                            "category": ENUM("general", "leave", "conduct", "posh", "payroll", "it_security", "travel", "exit"), "body": S(), "requires_ack": B(),
+                            "version": I(readOnly=True), "is_current": B(readOnly=True), "published_at": RO_TS, "acknowledged": I(readOnly=True), "people": I(readOnly=True),
+                            "acknowledgements": {**ARR(ref("PolicyAck")), "readOnly": True}, "waiting": {**ARR(schema("PolicyWaiting", {"employee_id": UUID, "employee_name": S(), "employee_code": S()})), "readOnly": True}},
+       required=("title", "body"))
+_op("get", E + "/hr/policy-documents", "Payroll & HR", "listHrPolicyDocuments", "The handbook: the current version of each document", "payroll:read",
+    resp=schema("HrPolicyDocumentList", {"data": ARR(ref("HrPolicyDocument"))}))
+_op("post", E + "/hr/policy-documents", "Payroll & HR", "publishHrPolicyDocument", "Publish a handbook document or its next version", "payroll:approve",
+    body=ref("HrPolicyDocument"), resp=ref("HrPolicyDocument"), status="201", desc="A published version is never edited; people acknowledge the new one afresh.")
+_op("get", E + "/hr/policy-documents/{id}", "Payroll & HR", "getHrPolicyDocument", "A handbook document with who has acknowledged it", "payroll:read", resp=ref("HrPolicyDocument"))
+action(E + "/hr/policy-documents/{id}/acknowledgements", "Payroll & HR", "acknowledgeHrPolicyDocument", "Record that a person has read and accepted it", "payroll:write",
+       body=schema("PolicyAckIn", {"employee_id": UUID, "acknowledged_on": NULLABLE(DATE)}, required=("employee_id",)), resp=ref("HrPolicyDocument"))
 
 # =================================================================== LEGAL, BOARD, CAPITAL, SCHEMES
 tag("Legal & board", "Contracts, extracted terms, templates, meetings and resolutions")
@@ -1172,6 +1277,59 @@ action(E + "/depreciation/run", "Fixed assets", "runDepreciation", "Post depreci
        resp=schema("DepreciationRunResult", {"period": S(), "total": MONEY, "journals": ARR(schema("DepreciationJournal", {"month": DATE, "journal_entry_id": UUID, "entry_no": S(), "total": MONEY, "assets": I()}))}),
        desc="One journal per month not yet posted, covering all assets. Running a month that is already posted posts nothing.")
 
+# =================================================================== INVENTORY
+tag("Inventory", "Stock of the items marked as tracked: what is on hand and what it is worth, every movement, counts, write-offs, opening stock and the valuation as of a date. "
+                 "Weighted average cost per item. A booked purchase bill brings stock in and an issued invoice takes it out; those happen by themselves.")
+QTY = S(pattern=r"^-?[0-9]+\.[0-9]{3}$", description="A quantity with three decimals", examples=["12.000"])
+UNIT_COST = S(pattern=r"^[0-9]+\.[0-9]{4}$", description="Rupees per unit, four decimals", examples=["115.0000"])
+schema("Warehouse", {"id": RO_UUID, "code": S(pattern="^[A-Za-z0-9-]{1,12}$"), "name": S(), "is_default": B(description="Bills receive into it and invoices ship from it"), "is_active": B(readOnly=True)},
+       required=("code", "name"))
+_op("get", E + "/warehouses", "Inventory", "listWarehouses", "List warehouses", "finance:read", resp=schema("WarehouseList", {"data": ARR(ref("Warehouse"))}),
+    desc="The first stock movement creates the default warehouse (MAIN) when there is none.")
+_op("post", E + "/warehouses", "Inventory", "createWarehouse", "Add a warehouse", "finance:write", body=ref("Warehouse"), resp=ref("Warehouse"), status="201")
+schema("InventorySettings", {"allow_negative_stock": B(description="Whether a sale may take stock below zero. Off unless the company turns it on."),
+                             "valuation_method": ENUM("weighted_average", readOnly=True)}, required=("allow_negative_stock",))
+_op("get", E + "/inventory/settings", "Inventory", "getInventorySettings", "Inventory settings", "finance:read", resp=ref("InventorySettings"))
+_op("put", E + "/inventory/settings", "Inventory", "updateInventorySettings", "Allow or refuse negative stock", "finance:approve", body=ref("InventorySettings"), resp=ref("InventorySettings"))
+schema("StockLevel", {"warehouse_id": UUID, "code": S(), "name": S(), "qty": QTY})
+schema("StockItem", {"item_id": UUID, "sku": S(), "name": S(), "uqc": S(), "hsn_sac": HSN, "is_active": B(), "sale_rate": NULLABLE(MONEY),
+                     "qty": {**QTY, "description": "On hand in all warehouses"}, "average_cost": {**UNIT_COST, "description": "What one unit will leave stock at"},
+                     "value": MONEY, "last_moved_on": NULLABLE(DATE), "levels": ARR(ref("StockLevel"))})
+_op("get", E + "/stock-items", "Inventory", "listStockItems", "Tracked items with stock on hand and its value", "finance:read", params=[P("Q")],
+    resp=schema("StockItemList", {"data": ARR(ref("StockItem")), "totals": schema("StockTotals", {"value": MONEY, "items": I(), "out_of_stock": I()}),
+                                  "allow_negative_stock": B(), "valuation_method": ENUM("weighted_average")}))
+STOCK_SOURCE = ENUM("purchase_bill", "sales_document", "adjustment", "opening", "transfer", "bill_of_entry")
+schema("StockMovement", {"id": I(), "item_id": UUID, "sku": S(), "item_name": S(), "uqc": S(), "warehouse_id": UUID, "warehouse_code": S(), "date": DATE,
+                         "qty_in": QTY, "qty_out": QTY, "unit_cost": UNIT_COST,
+                         "value": {**MONEY, "description": "Signed: what the movement added to or took from the value of stock"},
+                         "source_kind": STOCK_SOURCE, "source_id": NULLABLE(UUID), "reference": NULLABLE(S(description="The bill, document or bill of entry number")),
+                         "reason": NULLABLE(S()), "note": NULLABLE(S()), "journal_entry_id": NULLABLE(UUID), "entry_no": NULLABLE(S()), "created_at": RO_TS})
+_op("get", E + "/stock-movements", "Inventory", "listStockMovements", "Stock movements, newest first", "finance:read",
+    params=[P("Limit"), P("Cursor"), q("item_id", UUID), q("warehouse_id", UUID), q("source_kind", STOCK_SOURCE), P("From"), P("To")], resp=page_of("StockMovement"))
+schema("StockChange", {"movements": ARR(ref("StockMovement")), "item": ref("StockItem"),
+                       "booking": ENUM("post", "in_opening_balances", description="Opening stock only: how it was booked")})
+action(E + "/stock-adjustments", "Inventory", "adjustStock", "Record opening stock, a stock count or a write-off", "finance:write", idem=True, status="201", resp=ref("StockChange"),
+       body=schema("StockAdjustment", {
+           "item_id": UUID, "warehouse_id": NULLABLE({**UUID, "description": "The default warehouse when left out"}), "kind": ENUM("opening", "count", "write_off"), "date": DATE,
+           "qty": NULLABLE({"type": "string", "description": "opening and write_off: the quantity"}),
+           "counted_qty": NULLABLE({"type": "string", "description": "count: what is physically there in the warehouse"}),
+           "unit_cost": NULLABLE({"type": "string", "description": "opening: what one unit cost. count: only when stock is found and the item has no cost on record"}),
+           "booking": NULLABLE(ENUM("post", "in_opening_balances", description="opening: `post` books Dr Inventory, Cr Opening balance equity; `in_opening_balances` only records the stock because the opening trial balance already carries its value. Left out, it is `in_opening_balances` when an opening trial balance has been imported and `post` when not.")),
+           "reason": NULLABLE(S(maxLength=200, description="Required for a count and a write-off")), "note": NULLABLE(S(maxLength=500))}, required=("item_id", "kind", "date")),
+       desc="The journal is posted in the same transaction: a count or write-off against Stock adjustments at the average cost, opening stock against Opening balance equity. "
+            "`insufficient_stock` (409) when a write-off would take stock below zero and the company does not allow it; `item_not_tracked` (409) for an item that is not kept in stock; "
+            "`period_locked` (409) for a date in a locked period.")
+action(E + "/stock-transfers", "Inventory", "transferStock", "Move stock from one warehouse to another", "finance:write", status="201", resp=ref("StockChange"),
+       body=schema("StockTransfer", {"item_id": UUID, "from_warehouse_id": UUID, "to_warehouse_id": UUID, "date": DATE, "qty": S(), "note": NULLABLE(S(maxLength=500))},
+                   required=("item_id", "from_warehouse_id", "to_warehouse_id", "date", "qty")),
+       desc="The cost moves with the stock, so the value of stock does not change and nothing is posted to the ledger.")
+_op("get", E + "/stock-valuation", "Inventory", "getStockValuation", "Stock valuation as of a date", "finance:read", params=[q("as_of", DATE, "Today when left out")],
+    resp=schema("StockValuation", {"as_of": DATE, "valuation_method": ENUM("weighted_average"),
+                                   "items": ARR(schema("StockValuationItem", {"item_id": UUID, "sku": S(), "name": S(), "uqc": S(), "qty": QTY, "average_cost": UNIT_COST, "value": MONEY})),
+                                   "total_value": MONEY, "ledger_balance": {**MONEY, "description": "The Inventory account on the same date"},
+                                   "difference": {**MONEY, "description": "Ledger less stock. Not zero when stock was booked to another account or Inventory was posted to by hand"}}),
+    desc="Quantity and value from the movements dated up to the day, at weighted average cost.")
+
 # =================================================================== PORTALS & JOBS
 tag("Portals & jobs", "Government / bank connections, OTP sessions, sync jobs and the job resource")
 schema("PortalConnection", {"id": RO_UUID, "portal": ENUM("gstn", "irp", "eway", "mca", "income_tax", "traces", "epfo", "esic", "professional_tax", "udyam", "account_aggregator", "bank_api", "treds", "digilocker"),
@@ -1269,6 +1427,12 @@ EVENTS = {
     "notice.received": "A notice arrived from an authority",
     "threshold.crossed": "A fact crossed a rule threshold",
     "sales_document.issued": "Invoice / note issued (IRN may follow)",
+    "stock.adjusted": "Opening stock, a stock count or a write-off was recorded",
+    "employee.onboarding_started": "A new hire was entered with a CTC",
+    "employee.activated": "Onboarding finished; the person is on payroll",
+    "leave.requested": "A leave request waits for a decision",
+    "leave.decided": "A leave request was approved, rejected or withdrawn",
+    "hr_policy.changed": "The HR policy or a handbook document changed",
     "sales_document.irn_generated": "IRP returned the IRN and signed QR",
     "sales_document.paid": "Fully settled",
     "receipt.created": "Money received and allocated",

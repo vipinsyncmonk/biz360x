@@ -17,7 +17,7 @@ from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import boe_parse, ledger, storage, trade
+from . import boe_parse, inventory, ledger, storage, trade
 from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, require, tx
 from .routes_finance import txn_out
 from .routes_orders import js, offset_of, page
@@ -550,6 +550,7 @@ def create_bill_of_entry(entity_id: uuid.UUID, body: BoeIn, p: Principal = Auth)
         bid = cur.fetchone()["id"]
         if body.document_id:
             link_document(cur, body.document_id, "bills_of_entry", bid, "evidence")
+        inventory.apply_boe_duty(cur, entity_id, bid)                # the duty becomes part of the cost of the stock its purchase bill brought in
         if body.free_of_charge:
             _flag_for_ca(cur, entity_id, bid, body.boe_number, credit)
         audit(cur, entity_id, "bill_of_entry.recorded", "bills_of_entry", bid, after={"boe_number": body.boe_number, "igst": body.igst, "free_of_charge": body.free_of_charge, "igst_credit_status": credit})
@@ -588,6 +589,8 @@ def update_bill_of_entry(entity_id: uuid.UUID, boe_id: uuid.UUID, body: BoePatch
             raise ApiError(400, "validation_failed", "A free-of-charge import has no purchase bill", errors=[{"field": "free_of_charge", "message": "unlink the purchase bill first"}])
         sets = ", ".join(f"{k} = %s" for k in changes)
         cur.execute(f"UPDATE bills_of_entry SET {sets} WHERE id = %s", (*changes.values(), boe_id))
+        if changes.get("purchase_bill_id"):
+            inventory.apply_boe_duty(cur, entity_id, boe_id)
         audit(cur, entity_id, "bill_of_entry.updated", "bills_of_entry", boe_id, before={"status": b["status"], "free_of_charge": b["free_of_charge"], "igst_credit_status": b["igst_credit_status"]}, after=js(changes))
         now_free, now_status = changes.get("free_of_charge", b["free_of_charge"]), changes.get("igst_credit_status", b["igst_credit_status"])
         if now_free and (now_status != b["igst_credit_status"] or not b["free_of_charge"]):
