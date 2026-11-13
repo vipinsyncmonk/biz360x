@@ -265,6 +265,14 @@ schema("NotificationPreference", {"entity_id": UUID, "event_type": ENUM("due_in_
 _op("get", "/me/notification-preferences", "Me", "listNotificationPreferences", "My notification matrix", resp=ARR(ref("NotificationPreference")))
 _op("put", "/me/notification-preferences", "Me", "replaceNotificationPreferences", "Replace my notification matrix",
     body=ARR(ref("NotificationPreference")), resp=ARR(ref("NotificationPreference")))
+schema("WorkItem", {"kind": ENUM("approval", "filing", "task", "leave", "document_request", "holiday"), "id": NULLABLE(UUID), "entity_id": UUID, "entity_name": S(), "title": S(),
+                    "detail": NULLABLE(S()), "due_on": NULLABLE(DATE), "overdue": B(), "href": S(description="The screen in the web app where it is acted on")})
+_op("get", "/me/work", "Me", "getMyWork", "Everything waiting on me, across my companies", params=[q("entity_id", UUID, "One company only"), P("Limit")],
+    resp=schema("MyWork", {"data": ARR(ref("WorkItem")), "total": I(), "overdue": I(), "counts": {"type": "object", "additionalProperties": I()}}),
+    desc="Tasks given to me, filings I own, approvals for me to decide, leave for me to decide and document requests I can answer; overdue first, then by due date.")
+_op("get", "/me/calendar", "Me", "getMyCalendar", "My dated work and my companies' holidays, day by day", params=[P("From"), P("To"), q("entity_id", UUID)],
+    resp=schema("MyCalendar", {"from": DATE, "to": DATE, "days": ARR(schema("MyCalendarDay", {"date": DATE, "items": ARR(ref("WorkItem"))}))}),
+    desc="Five weeks from today when no range is given.")
 
 # =================================================================== ONBOARDING & ENTITIES
 tag("Onboarding", "Look an identifier up in public registries and turn it into a workspace and an obligation graph")
@@ -450,10 +458,23 @@ action(E + "/signature-requests/{id}/signers/{signerId}/sign", "Approvals", "sig
        desc="Signers sign in order. When the last one signs the request completes; a contract becomes active with this document as its signed copy.")
 action(E + "/signature-requests/{id}/signers/{signerId}/decline", "Approvals", "declineAsSigner", "Decline to sign", "approvals:read",
        body=schema("DeclineAction", {"reason": S()}), resp=ref("SignatureRequest"), params=[{"name": "signerId", "in": "path", "required": True, "schema": UUID}])
-schema("Task", {"id": RO_UUID, "title": S(), "subject": NULLABLE(S()), "subject_id": NULLABLE(UUID), "assignee_id": NULLABLE(UUID),
-                "due_on": NULLABLE(DATE), "status": ENUM("open", "done", "cancelled"), "source": ENUM("user", "engine", "dunning", "copilot", "advisor", readOnly=True)},
-       required=("title",))
-collection(E + "/tasks", "Approvals", "Task", "tasks", filters=[q("assignee", S()), q("status", S())])
+schema("Task", {"id": RO_UUID, "title": S(), "description": NULLABLE(S()), "subject": NULLABLE(S()), "subject_id": NULLABLE(UUID), "assignee_id": NULLABLE(UUID),
+                "assignee_name": NULLABLE(S(readOnly=True)), "due_on": NULLABLE(DATE), "status": ENUM("open", "done", "cancelled"),
+                "source": ENUM("user", "engine", "dunning", "copilot", "advisor", readOnly=True), "created_by": NULLABLE(RO_UUID), "created_by_name": NULLABLE(S(readOnly=True)),
+                "created_at": RO_TS, "completed_at": NULLABLE(RO_TS)},
+       required=("title",), desc="The person a task is assigned to can always finish it; anything else needs `tasks:write`.")
+collection(E + "/tasks", "Approvals", "Task", "tasks", filters=[q("assignee", S(), "`me`, `none`, or a person's id"), q("status", ENUM("open", "done", "cancelled"))])
+WORK_KIND = ENUM("gst", "tds", "pf_esi", "professional_tax", "mca", "income_tax", "other_filing", "payroll_run", "vendor_payment", "leave")
+schema("ResponsibilitySlot", {"work_kind": WORK_KIND, "step": ENUM("prepare", "approve"), "user_id": UUID, "name": S(readOnly=True)}, required=("work_kind", "step", "user_id"))
+schema("Responsibilities", {
+    "data": ARR(ref("ResponsibilitySlot")),
+    "kinds": {**ARR(schema("WorkKind", {"key": S(), "label": S(), "about": S(), "steps": ARR(S())})), "readOnly": True},
+    "people": {**ARR(schema("ResponsiblePerson", {"user_id": UUID, "name": S(), "title": NULLABLE(S()), "approves": ARR(S(), description="The kinds of work this person could be named approver of")})), "readOnly": True},
+    "filings_reassigned": I(readOnly=True, description="On a save: open filings that moved to the person now named")}, required=("data",))
+_op("get", E + "/responsibilities", "Entities", "getResponsibilities", "Who prepares and who approves each kind of work", "tasks:read", resp=ref("Responsibilities"),
+    desc="Anyone in the company can read it. A new filing takes its owner and approver from it, and a request for approval goes to the approver it names (never to the person who raised it).")
+_op("put", E + "/responsibilities", "Entities", "setResponsibilities", "Replace the responsibility matrix", "settings:write", body=ref("Responsibilities"), resp=ref("Responsibilities"),
+    desc="Only an owner can (403 otherwise). An approver must be able to approve where the decision is made. Open filings nobody chose an owner for follow the new matrix; an owner chosen by hand stays.")
 item(E + "/tasks", "Approvals", "Task", "tasks")
 
 # =================================================================== PARTIES & ITEMS
@@ -1452,6 +1473,8 @@ EVENTS = {
     "leave.requested": "A leave request waits for a decision",
     "leave.decided": "A leave request was approved, rejected or withdrawn",
     "hr_policy.changed": "The HR policy or a handbook document changed",
+    "responsibilities.changed": "Who prepares or approves a kind of work changed",
+    "task.assigned": "A task was given to a person",
     "sales_document.irn_generated": "IRP returned the IRN and signed QR",
     "sales_document.paid": "Fully settled",
     "receipt.created": "Money received and allocated",

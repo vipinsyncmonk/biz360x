@@ -149,6 +149,8 @@ def invite_member(entity_id: uuid.UUID, body: MemberIn, p: Principal = Auth):
         if mid is None:
             raise ApiError(409, "conflict", "That person already has access to this entity")
         out = _member_row(cur, entity_id, mid)
+        from .routes_work import fill_from_preset
+        out["work_taken_on"] = fill_from_preset(cur, entity_id, out["user_id"], access["preset"], out["scopes"])
         audit(cur, entity_id, "member.invited", "memberships", mid, after={"email": str(body.email).lower(), "role": out["role"], "scopes": out["scopes"], "preset": access["preset"]})
         return out
 
@@ -189,6 +191,13 @@ def update_member(entity_id: uuid.UUID, member_id: uuid.UUID, body: MemberPatch,
         else:
             cur.execute("UPDATE memberships SET title = coalesce(%s, title), home = coalesce(%s, home) WHERE id = %s", (changes.get("title"), changes.get("home"), member_id))
         out = _member_row(cur, entity_id, member_id)
+        if changes.get("preset"):
+            from .routes_work import fill_from_preset
+            out["work_taken_on"] = fill_from_preset(cur, entity_id, out["user_id"], changes["preset"], out["scopes"])
+        # someone who can no longer approve a kind of work cannot stay its named approver: those slots are freed
+        from . import routing
+        lost = [k for k in routing.KINDS if not roles.allows(out["scopes"], routing.approve_module(k), "approve")]
+        cur.execute("DELETE FROM responsibilities WHERE entity_id = %s AND user_id = %s AND step = 'approve' AND work_kind = ANY(%s)", (entity_id, out["user_id"], lost))
         audit(cur, entity_id, "member.access_changed", "memberships", member_id, before={"role": m["role"], "scopes": m["scopes"], "title": m["title"]},
               after={"role": out["role"], "scopes": out["scopes"], "title": out["title"]})
         return out
@@ -211,6 +220,7 @@ def remove_member(entity_id: uuid.UUID, member_id: uuid.UUID, p: Principal = Aut
             cur.execute("SELECT count(*) AS n FROM memberships WHERE entity_id = %s AND role = 'owner' AND revoked_at IS NULL AND id <> %s", (entity_id, member_id))
             if cur.fetchone()["n"] == 0:
                 raise ApiError(409, "conflict", "An entity needs at least one owner")
+        cur.execute("DELETE FROM responsibilities WHERE entity_id = %s AND user_id = %s", (entity_id, m["user_id"]))       # their work goes back to unassigned
         cur.execute("UPDATE memberships SET revoked_at = now() WHERE id = %s", (member_id,))
         audit(cur, entity_id, "member.removed", "memberships", member_id, after={"role": m["role"]})
     return Response(status_code=204)

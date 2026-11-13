@@ -295,6 +295,77 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
+  /me/work:
+    get:
+      tags:
+      - Me
+      operationId: getMyWork
+      summary: Everything waiting on me, across my companies
+      description: Tasks given to me, filings I own, approvals for me to decide, leave for me to decide and document requests
+        I can answer; overdue first, then by due date.
+      parameters:
+      - name: entity_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: One company only
+      - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyWork'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /me/calendar:
+    get:
+      tags:
+      - Me
+      operationId: getMyCalendar
+      summary: My dated work and my companies' holidays, day by day
+      description: Five weeks from today when no range is given.
+      parameters:
+      - $ref: '#/components/parameters/From'
+      - $ref: '#/components/parameters/To'
+      - name: entity_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyCalendar'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
   /onboarding/lookups:
     post:
       tags:
@@ -2236,10 +2307,15 @@ paths:
         in: query
         schema:
           type: string
+        description: '`me`, `none`, or a person''s id'
       - name: status
         in: query
         schema:
           type: string
+          enum:
+          - open
+          - done
+          - cancelled
       responses:
         '200':
           description: OK
@@ -2294,6 +2370,70 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: tasks:write
+  /entities/{entityId}/responsibilities:
+    get:
+      tags:
+      - Entities
+      operationId: getResponsibilities
+      summary: Who prepares and who approves each kind of work
+      description: Anyone in the company can read it. A new filing takes its owner and approver from it, and a request for
+        approval goes to the approver it names (never to the person who raised it).
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Responsibilities'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: tasks:read
+    put:
+      tags:
+      - Entities
+      operationId: setResponsibilities
+      summary: Replace the responsibility matrix
+      description: Only an owner can (403 otherwise). An approver must be able to approve where the decision is made. Open
+        filings nobody chose an owner for follow the new matrix; an owner chosen by hand stays.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Responsibilities'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Responsibilities'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: settings:write
   /entities/{entityId}/tasks/{id}:
     get:
       tags:
@@ -13218,6 +13358,60 @@ webhooks:
       responses:
         2XX:
           description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  responsibilities.changed:
+    post:
+      summary: Who prepares or approves a kind of work changed
+      operationId: webhook_responsibilities_changed
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  task.assigned:
+    post:
+      summary: A task was given to a person
+      operationId: webhook_task_assigned
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
   sales_document.irn_generated:
     post:
       summary: IRP returned the IRN and signed QR
@@ -13881,6 +14075,82 @@ components:
       - event_type
       - channel
       - enabled
+    WorkItem:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - approval
+          - filing
+          - task
+          - leave
+          - document_request
+          - holiday
+        id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        entity_id:
+          type: string
+          format: uuid
+        entity_name:
+          type: string
+        title:
+          type: string
+        detail:
+          oneOf:
+          - type: string
+          - type: 'null'
+        due_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        overdue:
+          type: boolean
+        href:
+          type: string
+          description: The screen in the web app where it is acted on
+    MyWork:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkItem'
+        total:
+          type: integer
+        overdue:
+          type: integer
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+    MyCalendarDay:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkItem'
+    MyCalendar:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyCalendarDay'
     RegistryDirector:
       type: object
       properties:
@@ -15190,6 +15460,10 @@ components:
           readOnly: true
         title:
           type: string
+        description:
+          oneOf:
+          - type: string
+          - type: 'null'
         subject:
           oneOf:
           - type: string
@@ -15203,6 +15477,11 @@ components:
           oneOf:
           - type: string
             format: uuid
+          - type: 'null'
+        assignee_name:
+          oneOf:
+          - type: string
+            readOnly: true
           - type: 'null'
         due_on:
           oneOf:
@@ -15224,8 +15503,30 @@ components:
           - copilot
           - advisor
           readOnly: true
+        created_by:
+          oneOf:
+          - type: string
+            format: uuid
+            readOnly: true
+          - type: 'null'
+        created_by_name:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        completed_at:
+          oneOf:
+          - type: string
+            format: date-time
+            readOnly: true
+          - type: 'null'
       required:
       - title
+      description: The person a task is assigned to can always finish it; anything else needs `tasks:write`.
     TaskPage:
       type: object
       properties:
@@ -15240,6 +15541,90 @@ components:
       required:
       - data
       - next_cursor
+    ResponsibilitySlot:
+      type: object
+      properties:
+        work_kind:
+          type: string
+          enum:
+          - gst
+          - tds
+          - pf_esi
+          - professional_tax
+          - mca
+          - income_tax
+          - other_filing
+          - payroll_run
+          - vendor_payment
+          - leave
+        step:
+          type: string
+          enum:
+          - prepare
+          - approve
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          readOnly: true
+      required:
+      - work_kind
+      - step
+      - user_id
+    WorkKind:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        about:
+          type: string
+        steps:
+          type: array
+          items:
+            type: string
+    ResponsiblePerson:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        title:
+          oneOf:
+          - type: string
+          - type: 'null'
+        approves:
+          type: array
+          items:
+            type: string
+          description: The kinds of work this person could be named approver of
+    Responsibilities:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResponsibilitySlot'
+        kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkKind'
+          readOnly: true
+        people:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResponsiblePerson'
+          readOnly: true
+        filings_reassigned:
+          type: integer
+          readOnly: true
+          description: 'On a save: open filings that moved to the person now named'
+      required:
+      - data
     PartyGstin:
       type: object
       properties:

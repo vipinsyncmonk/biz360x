@@ -113,6 +113,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/work": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything waiting on me, across my companies
+         * @description Tasks given to me, filings I own, approvals for me to decide, leave for me to decide and document requests I can answer; overdue first, then by due date.
+         */
+        get: operations["getMyWork"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My dated work and my companies' holidays, day by day
+         * @description Five weeks from today when no range is given.
+         */
+        get: operations["getMyCalendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/onboarding/lookups": {
         parameters: {
             query?: never;
@@ -882,6 +922,30 @@ export interface paths {
         put?: never;
         /** Create task */
         post: operations["createTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/responsibilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who prepares and who approves each kind of work
+         * @description Anyone in the company can read it. A new filing takes its owner and approver from it, and a request for approval goes to the approver it names (never to the person who raised it).
+         */
+        get: operations["getResponsibilities"];
+        /**
+         * Replace the responsibility matrix
+         * @description Only an owner can (403 otherwise). An approver must be able to approve where the decision is made. Open filings nobody chose an owner for follow the new matrix; an owner chosen by hand stays.
+         */
+        put: operations["setResponsibilities"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5205,6 +5269,40 @@ export interface webhooks {
         patch?: never;
         trace?: never;
     };
+    "responsibilities.changed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Who prepares or approves a kind of work changed */
+        post: operations["webhook_responsibilities_changed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "task.assigned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A task was given to a person */
+        post: operations["webhook_task_assigned"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "sales_document.irn_generated": {
         parameters: {
             query?: never;
@@ -5470,6 +5568,40 @@ export interface components {
             /** @enum {string} */
             channel: "email" | "whatsapp" | "push" | "sms";
             enabled: boolean;
+        };
+        WorkItem: {
+            /** @enum {string} */
+            kind?: "approval" | "filing" | "task" | "leave" | "document_request" | "holiday";
+            id?: string | null;
+            /** Format: uuid */
+            entity_id?: string;
+            entity_name?: string;
+            title?: string;
+            detail?: string | null;
+            due_on?: string | null;
+            overdue?: boolean;
+            /** @description The screen in the web app where it is acted on */
+            href?: string;
+        };
+        MyWork: {
+            data?: components["schemas"]["WorkItem"][];
+            total?: number;
+            overdue?: number;
+            counts?: {
+                [key: string]: number;
+            };
+        };
+        MyCalendarDay: {
+            /** Format: date */
+            date?: string;
+            items?: components["schemas"]["WorkItem"][];
+        };
+        MyCalendar: {
+            /** Format: date */
+            from?: string;
+            /** Format: date */
+            to?: string;
+            days?: components["schemas"]["MyCalendarDay"][];
         };
         RegistryDirector: {
             name?: string;
@@ -5966,22 +6098,60 @@ export interface components {
         DeclineAction: {
             reason?: string;
         };
+        /** @description The person a task is assigned to can always finish it; anything else needs `tasks:write`. */
         Task: {
             /** Format: uuid */
             readonly id?: string;
             title: string;
+            description?: string | null;
             subject?: string | null;
             subject_id?: string | null;
             assignee_id?: string | null;
+            assignee_name?: string | null;
             due_on?: string | null;
             /** @enum {string} */
             status?: "open" | "done" | "cancelled";
             /** @enum {string} */
             readonly source?: "user" | "engine" | "dunning" | "copilot" | "advisor";
+            created_by?: string | null;
+            created_by_name?: string | null;
+            /** Format: date-time */
+            readonly created_at?: string;
+            completed_at?: string | null;
         };
         TaskPage: {
             data: components["schemas"]["Task"][];
             next_cursor: string | null;
+        };
+        ResponsibilitySlot: {
+            /** @enum {string} */
+            work_kind: "gst" | "tds" | "pf_esi" | "professional_tax" | "mca" | "income_tax" | "other_filing" | "payroll_run" | "vendor_payment" | "leave";
+            /** @enum {string} */
+            step: "prepare" | "approve";
+            /** Format: uuid */
+            user_id: string;
+            readonly name?: string;
+        };
+        WorkKind: {
+            key?: string;
+            label?: string;
+            about?: string;
+            steps?: string[];
+        };
+        ResponsiblePerson: {
+            /** Format: uuid */
+            user_id?: string;
+            name?: string;
+            title?: string | null;
+            /** @description The kinds of work this person could be named approver of */
+            approves?: string[];
+        };
+        Responsibilities: {
+            data: components["schemas"]["ResponsibilitySlot"][];
+            readonly kinds?: components["schemas"]["WorkKind"][];
+            readonly people?: components["schemas"]["ResponsiblePerson"][];
+            /** @description On a save: open filings that moved to the person now named */
+            readonly filings_reassigned?: number;
         };
         PartyGstin: {
             gstin?: components["schemas"]["Gstin"] | null;
@@ -9271,6 +9441,66 @@ export interface operations {
             429: components["responses"]["TooMany"];
         };
     };
+    getMyWork: {
+        parameters: {
+            query?: {
+                /** @description One company only */
+                entity_id?: string;
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyWork"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getMyCalendar: {
+        parameters: {
+            query?: {
+                from?: components["parameters"]["From"];
+                to?: components["parameters"]["To"];
+                entity_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCalendar"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
     createRegistryLookup: {
         parameters: {
             query?: never;
@@ -11129,8 +11359,9 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
                 /** @description Field name; prefix `-` for descending */
                 sort?: components["parameters"]["Sort"];
+                /** @description `me`, `none`, or a person's id */
                 assignee?: string;
-                status?: string;
+                status?: "open" | "done" | "cancelled";
             };
             header?: never;
             path: {
@@ -11188,6 +11419,67 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getResponsibilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Responsibilities"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    setResponsibilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Responsibilities"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Responsibilities"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };
@@ -21629,6 +21921,60 @@ export interface operations {
         };
     };
     webhook_hr_policy_changed: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_responsibilities_changed: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_task_assigned: {
         parameters: {
             query?: never;
             header: {

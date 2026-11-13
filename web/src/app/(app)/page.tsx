@@ -5,9 +5,10 @@ import { ApiProblem, api, newIdempotencyKey, unwrap, type ApprovalRequest, type 
 import { addDays, formatInr, greeting, isoDate, shortDate } from "@/lib/format";
 import { daysLabel, isOpen, kpis, standing, statusInfo, weekBuckets, type CalDay, type Obl } from "@/lib/compliance";
 import { useLoad } from "@/lib/hooks";
-import { canOpen, homeTiles, roleText } from "@/lib/roles";
+import { canOpen, homeTiles, levelOf, roleText } from "@/lib/roles";
 import { useSession } from "@/lib/session";
 import { HomeTiles } from "@/components/RoleForms";
+import { WorkQueue } from "@/components/WorkPanels";
 import { ErrorNote, Icon, Loading, Pill } from "@/components/ui";
 
 const SUBJECT_ICON: Record<string, string> = {
@@ -70,6 +71,7 @@ export default function Today() {
 
             <div className="cols">
               <div className="col-main">
+                <WorkQueue entityId={entity.id!} canAssign={Object.keys(entity.scopes ?? {}).some((m) => levelOf(entity, m) >= 3)} />
                 <ApprovalsCard entityId={entity.id!} items={open} loading={approvals.loading} error={approvals.error} reload={() => { approvals.reload(); obls.reload(); }} />
 
                 {seesCompliance && <>

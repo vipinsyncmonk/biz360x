@@ -1,6 +1,6 @@
 # Roles, practitioners and employee self-service — design
 
-Status: phase 1 (presets, a level per module, the `hr` and `inventory` modules, the filtered sidebar and the home numbers) is built in migration 37; phases 2 to 7 are a proposal. Written against `main` after migration 36.
+Status: phase 1 (presets, a level per module, the `hr` and `inventory` modules, the filtered sidebar and the home numbers) is built in migration 37, and phase 2 (the responsibility matrix, routing of filings and approvals, the work queue, the calendar and tasks) in migration 38, with two steps (`prepare`, `approve`) and members only as assignees; phases 3 to 7 are a proposal. Written against `main` after migration 36.
 
 The goal: every person who touches a company in Biz360X signs in to a home that shows their own work. That covers the company's team (CEO, COO, CFO, HR Manager, Accountant), outside practitioners the company engages (CA, CS, statutory auditor, GST / PF-ESI / TDS / export-import consultants), and every employee (leave, calendar, tasks, onboarding, policies, payslips, year-end submissions). Later, practitioners can be found and engaged on the platform.
 
