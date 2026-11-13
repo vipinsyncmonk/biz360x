@@ -363,6 +363,7 @@ def _post_proceeds(cur, entity_id, s, body: RealisationIn, txn_id=None) -> dict:
 
 # ================================================================== bills of entry
 BOE_STATUS = Literal["filed", "assessed", "duty_paid", "cleared"]
+CREDIT_STATUS = Literal["eligible", "blocked", "undecided"]
 
 
 class BoeIn(BaseModel):
@@ -383,6 +384,8 @@ class BoeIn(BaseModel):
     document_id: uuid.UUID | None = None                              # the customs PDF already in the vault (from /bills-of-entry/read)
     new_supplier_name: str | None = Field(default=None, min_length=2, max_length=200)    # add this overseas supplier when supplier_party_id is not given
     new_supplier_country: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
+    free_of_charge: bool = False                                       # a sample: nothing to pay the supplier, so no purchase bill
+    igst_credit_status: CREDIT_STATUS | None = None                    # left out: eligible, or undecided for a free-of-charge import
 
 
 class BoePatch(BaseModel):
@@ -393,11 +396,13 @@ class BoePatch(BaseModel):
     igst: Money | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
     other_duty: Money | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
     purchase_bill_id: uuid.UUID | None = None
+    free_of_charge: bool | None = None
+    igst_credit_status: CREDIT_STATUS | None = None
 
 
 BOE_SQL = """SELECT b.id, b.boe_number, b.boe_date, b.port_code, b.currency, b.cif_foreign, b.exchange_rate::text AS exchange_rate, b.cif_inr, b.bcd, b.sws, b.igst, b.other_duty, b.duty_total,
-                    b.status, b.duty_paid_on, b.supplier_party_id, p.legal_name AS supplier_name, b.purchase_bill_id,
-                    CASE WHEN b.status IN ('duty_paid', 'cleared') THEN b.igst ELSE 0 END AS igst_credit,
+                    b.status, b.duty_paid_on, b.supplier_party_id, p.legal_name AS supplier_name, b.purchase_bill_id, b.free_of_charge, b.igst_credit_status,
+                    CASE WHEN b.status IN ('duty_paid', 'cleared') AND b.igst_credit_status = 'eligible' THEN b.igst ELSE 0 END AS igst_credit,
                     (SELECT l.document_id FROM document_links l WHERE l.subject = 'bills_of_entry' AND l.subject_id = b.id ORDER BY l.document_id LIMIT 1) AS document_id
                FROM bills_of_entry b LEFT JOIN parties p ON p.id = b.supplier_party_id"""
 
@@ -408,6 +413,20 @@ def _boe_out(cur, entity_id, bid) -> dict:
     if not b:
         raise ApiError(404, "not_found", "Not found")
     return js(b)
+
+
+CREDIT_WORDS = {"eligible": "claimed as credit", "blocked": "not claimed (a cost)", "undecided": "not decided yet"}
+
+
+def _flag_for_ca(cur, entity_id, bid, number, status) -> None:
+    """A free-of-charge import needs a CA's eye: whether its IGST may be claimed depends on how the goods are used (section 17(5)(h)).
+    Opens a task for the advisor and raises an event, so it shows on the compliance desk and can be sent on."""
+    title = f"CA to review: IGST credit on free-of-charge import BoE {number} is {CREDIT_WORDS[status]}"
+    cur.execute("SELECT 1 FROM tasks WHERE entity_id = %s AND title = %s AND status = 'open'", (entity_id, title))
+    if cur.fetchone():
+        return
+    cur.execute("INSERT INTO tasks (entity_id, title, due_on, source) VALUES (%s, %s, %s, 'advisor')", (entity_id, title, dt.date.today() + dt.timedelta(days=7)))
+    emit(cur, entity_id, "bill_of_entry.ca_review_needed", "bills_of_entry", bid, {"boe_number": number, "igst_credit_status": status})
 
 
 def _check_boe_links(cur, entity_id, supplier, bill) -> None:
@@ -516,20 +535,25 @@ def create_bill_of_entry(entity_id: uuid.UUID, body: BoeIn, p: Principal = Auth)
         if body.status in ("duty_paid", "cleared") and not body.duty_paid_on:
             raise ApiError(400, "validation_failed", "Say when the duty was paid", errors=[{"field": "duty_paid_on", "message": "required once duty is paid"}])
         _check_boe_links(cur, entity_id, body.supplier_party_id, body.purchase_bill_id)
+        if body.free_of_charge and body.purchase_bill_id:
+            raise ApiError(400, "validation_failed", "A free-of-charge import has no purchase bill", errors=[{"field": "purchase_bill_id", "message": "nothing is bought, so there is no bill"}])
+        credit = body.igst_credit_status or ("undecided" if body.free_of_charge else "eligible")
         if body.document_id:
             cur.execute("SELECT 1 FROM documents WHERE id = %s AND entity_id = %s", (body.document_id, entity_id))
             if not cur.fetchone():
                 raise ApiError(400, "validation_failed", "Unknown document", errors=[{"field": "document_id", "message": "not a document in this company's vault"}])
         supplier = body.supplier_party_id or (_supplier_for(cur, entity_id, body.new_supplier_name, body.new_supplier_country, body.currency) if body.new_supplier_name else None)
-        cur.execute("""INSERT INTO bills_of_entry (entity_id, supplier_party_id, purchase_bill_id, boe_number, boe_date, port_code, currency, cif_foreign, exchange_rate, bcd, sws, igst, other_duty, status, duty_paid_on)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+        cur.execute("""INSERT INTO bills_of_entry (entity_id, supplier_party_id, purchase_bill_id, boe_number, boe_date, port_code, currency, cif_foreign, exchange_rate, bcd, sws, igst, other_duty, status, duty_paid_on, free_of_charge, igst_credit_status)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
                     (entity_id, supplier, body.purchase_bill_id, body.boe_number, body.boe_date, body.port_code, body.currency, body.cif_foreign, body.exchange_rate,
-                     body.bcd, body.sws, body.igst, body.other_duty, body.status, body.duty_paid_on))
+                     body.bcd, body.sws, body.igst, body.other_duty, body.status, body.duty_paid_on, body.free_of_charge, credit))
         bid = cur.fetchone()["id"]
         if body.document_id:
             link_document(cur, body.document_id, "bills_of_entry", bid, "evidence")
         inventory.apply_boe_duty(cur, entity_id, bid)                # the duty becomes part of the cost of the stock its purchase bill brought in
-        audit(cur, entity_id, "bill_of_entry.recorded", "bills_of_entry", bid, after={"boe_number": body.boe_number, "igst": body.igst})
+        if body.free_of_charge:
+            _flag_for_ca(cur, entity_id, bid, body.boe_number, credit)
+        audit(cur, entity_id, "bill_of_entry.recorded", "bills_of_entry", bid, after={"boe_number": body.boe_number, "igst": body.igst, "free_of_charge": body.free_of_charge, "igst_credit_status": credit})
         emit(cur, entity_id, "bill_of_entry.recorded", "bills_of_entry", bid, {"boe_number": body.boe_number})
         return _boe_out(cur, entity_id, bid)
 
@@ -547,7 +571,7 @@ def list_bills_of_entry(entity_id: uuid.UUID, p: Principal = Auth, limit: int = 
 def update_bill_of_entry(entity_id: uuid.UUID, boe_id: uuid.UUID, body: BoePatch, p: Principal = Auth):
     with tx(p.user_id) as cur:
         require(cur, entity_id, "trade:write")
-        cur.execute("SELECT status, duty_paid_on FROM bills_of_entry WHERE id = %s AND entity_id = %s FOR UPDATE", (boe_id, entity_id))
+        cur.execute("SELECT boe_number, status, duty_paid_on, free_of_charge, igst_credit_status, purchase_bill_id FROM bills_of_entry WHERE id = %s AND entity_id = %s FOR UPDATE", (boe_id, entity_id))
         b = cur.fetchone()
         if not b:
             raise ApiError(404, "not_found", "Not found")
@@ -561,11 +585,16 @@ def update_bill_of_entry(entity_id: uuid.UUID, boe_id: uuid.UUID, body: BoePatch
         if merged_paid and merged_paid > dt.date.today():
             raise ApiError(400, "validation_failed", "Duty cannot have been paid in the future", errors=[{"field": "duty_paid_on", "message": "record it once it is paid"}])
         _check_boe_links(cur, entity_id, None, changes.get("purchase_bill_id"))
+        if changes.get("free_of_charge", b["free_of_charge"]) and changes.get("purchase_bill_id", b["purchase_bill_id"]):
+            raise ApiError(400, "validation_failed", "A free-of-charge import has no purchase bill", errors=[{"field": "free_of_charge", "message": "unlink the purchase bill first"}])
         sets = ", ".join(f"{k} = %s" for k in changes)
         cur.execute(f"UPDATE bills_of_entry SET {sets} WHERE id = %s", (*changes.values(), boe_id))
         if changes.get("purchase_bill_id"):
             inventory.apply_boe_duty(cur, entity_id, boe_id)
-        audit(cur, entity_id, "bill_of_entry.updated", "bills_of_entry", boe_id, before={"status": b["status"]}, after=js(changes))
+        audit(cur, entity_id, "bill_of_entry.updated", "bills_of_entry", boe_id, before={"status": b["status"], "free_of_charge": b["free_of_charge"], "igst_credit_status": b["igst_credit_status"]}, after=js(changes))
+        now_free, now_status = changes.get("free_of_charge", b["free_of_charge"]), changes.get("igst_credit_status", b["igst_credit_status"])
+        if now_free and (now_status != b["igst_credit_status"] or not b["free_of_charge"]):
+            _flag_for_ca(cur, entity_id, boe_id, b["boe_number"], now_status)
         return _boe_out(cur, entity_id, boe_id)
 
 
@@ -578,7 +607,9 @@ def trade_summary(entity_id: uuid.UUID, p: Principal = Auth):
         start = trade.fy_start(today)
         cur.execute("SELECT id FROM shipping_bills WHERE entity_id = %s", (entity_id,))
         bills = [_sb_out(cur, entity_id, r["id"]) for r in cur.fetchall()]
-        cur.execute("""SELECT count(*) AS n, coalesce(sum(duty_total), 0) AS duty, coalesce(sum(CASE WHEN status IN ('duty_paid', 'cleared') THEN igst ELSE 0 END), 0) AS igst
+        cur.execute("""SELECT count(*) AS n, coalesce(sum(duty_total), 0) AS duty, coalesce(sum(CASE WHEN status IN ('duty_paid', 'cleared') AND igst_credit_status = 'eligible' THEN igst ELSE 0 END), 0) AS igst,
+                              coalesce(sum(CASE WHEN status IN ('duty_paid', 'cleared') AND igst_credit_status = 'undecided' THEN igst ELSE 0 END), 0) AS igst_undecided,
+                              coalesce(sum(CASE WHEN status IN ('duty_paid', 'cleared') AND igst_credit_status = 'blocked' THEN igst ELSE 0 END), 0) AS igst_blocked
                          FROM bills_of_entry WHERE entity_id = %s AND boe_date >= %s""", (entity_id, start))
         imports = cur.fetchone()
         cur.execute("SELECT valid_until FROM entity_registrations WHERE entity_id = %s AND kind = 'lut' AND status = 'active' ORDER BY valid_until DESC NULLS FIRST LIMIT 1", (entity_id,))
@@ -597,5 +628,6 @@ def trade_summary(entity_id: uuid.UUID, p: Principal = Auth):
         "realisation": {"outstanding_bills": len(owed), "outstanding_inr": sum((Decimal(b["outstanding_inr"]) for b in owed), Decimal(0)), "overdue_bills": len(overdue),
                         "overdue_inr": sum((Decimal(b["outstanding_inr"]) for b in overdue), Decimal(0)), "awaiting_export": sum(1 for b in bills if b["realisation_state"] == "awaiting_export")},
         "claims": {"rodtep_pending": claims_rodtep, "drawback_pending": claims_drawback},
-        "imports": {"bills": imports["n"], "duty_inr": imports["duty"], "igst_credit_inr": imports["igst"]},
+        "imports": {"bills": imports["n"], "duty_inr": imports["duty"], "igst_credit_inr": imports["igst"],
+                    "igst_undecided_inr": imports["igst_undecided"], "igst_not_claimed_inr": imports["igst_blocked"]},
     })

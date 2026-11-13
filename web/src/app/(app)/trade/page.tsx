@@ -6,12 +6,12 @@ import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { BOE_STATUS, BillOfEntry, ExportInvoice, LUT_STATE, REALISATION, ShippingBill, Summary, claimsPending, clockText, lutText, receivedText } from "@/lib/trade";
-import { AddBoe, AddShippingBill, EditClaims, MarkExported, PayDuty, RecordMoney, money } from "@/components/TradeForms";
+import { AddBoe, AddShippingBill, DecideCredit, EditClaims, MarkExported, PayDuty, RecordMoney, money } from "@/components/TradeForms";
 import { FileDraft, RecordRegistration } from "@/components/ExportForms";
 import { draftText } from "@/lib/export";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
-type Open = { kind: "money" | "exported" | "claims" | "duty" | "customs"; id: string } | null;
+type Open = { kind: "money" | "exported" | "claims" | "duty" | "customs" | "credit"; id: string } | null;
 
 export default function Trade() {
   const { entity } = useSession();
@@ -52,7 +52,7 @@ export default function Trade() {
         <Tile label="Proceeds still to come home" value={s ? money(s.realisation.outstanding_inr) : "…"} note={s ? `${s.realisation.outstanding_bills} ${s.realisation.outstanding_bills === 1 ? "bill" : "bills"}${s.realisation.awaiting_export ? ` · ${s.realisation.awaiting_export} awaiting export` : ""}` : ""} />
         <Tile label="Overdue (past nine months)" value={s ? money(s.realisation.overdue_inr) : "…"} note={s ? `${s.realisation.overdue_bills} ${s.realisation.overdue_bills === 1 ? "bill" : "bills"}` : ""} warn={!!s && s.realisation.overdue_bills > 0} />
         <Tile label="RoDTEP and drawback pending" value={s ? money(String(Number(s.claims.rodtep_pending) + Number(s.claims.drawback_pending))) : "…"} note={s ? `RoDTEP ${money(s.claims.rodtep_pending)} · drawback ${money(s.claims.drawback_pending)}` : ""} />
-        <Tile label="Import IGST credit" value={s ? money(s.imports.igst_credit_inr) : "…"} note={s ? `${s.imports.bills} ${s.imports.bills === 1 ? "bill" : "bills"} · duty ${money(s.imports.duty_inr)}` : ""} />
+        <Tile label="Import IGST credit" value={s ? money(s.imports.igst_credit_inr) : "…"} note={s ? `${s.imports.bills} ${s.imports.bills === 1 ? "bill" : "bills"} · duty ${money(s.imports.duty_inr)}${Number(s.imports.igst_undecided_inr) > 0 ? ` · ${money(s.imports.igst_undecided_inr)} to decide` : ""}${Number(s.imports.igst_not_claimed_inr) > 0 ? ` · ${money(s.imports.igst_not_claimed_inr)} not claimed` : ""}` : ""} warn={!!s && Number(s.imports.igst_undecided_inr) > 0} />
       </section>
       <ErrorNote error={summary.error} />
 
@@ -124,10 +124,17 @@ export default function Trade() {
                     <span style={{ fontWeight: 600 }}>BoE {b.boe_number}<span className="t13" style={{ display: "block", fontWeight: 400 }}>{shortDate(b.boe_date)} · {b.port_code}</span>{b.document_id && boeDocs.data?.[b.document_id] && <a className="t13" style={{ display: "block" }} href={boeDocs.data[b.document_id]} aria-label={`View bill of entry ${b.boe_number} (PDF)`}>View PDF</a>}</span>
                     <span>{b.supplier_name ?? "Supplier not linked"}<span className="t13 mono" style={{ display: "block" }}>{b.currency} {b.cif_foreign} · {money(b.cif_inr)}</span></span>
                     <span>Duty {money(b.duty_total)}<span className="t13" style={{ display: "block" }}>BCD {money(b.bcd)} · SWS {money(b.sws)} · IGST {money(b.igst)}{Number(b.other_duty) > 0 ? ` · other ${money(b.other_duty)}` : ""}</span></span>
-                    <span><Pill tone={st.tone}>{st.label}</Pill><span className="t13" style={{ display: "block" }}>{b.duty_paid_on ? `Paid ${shortDate(b.duty_paid_on)} · IGST credit ${formatInr(b.igst_credit, { decimals: false })}` : "IGST credit once the duty is paid"}</span></span>
+                    <span>
+                      <Pill tone={st.tone}>{st.label}</Pill>{b.free_of_charge && <> <Pill tone="wait">Free of charge</Pill></>}
+                      <span className="t13" style={{ display: "block" }}>{creditLine(b)}</span>
+                    </span>
                   </div>
-                  {!b.duty_paid_on && <div style={{ padding: "0 20px 14px" }}><button type="button" className="btn" aria-expanded={open?.id === b.id} onClick={() => toggle("duty", b.id)}>Mark duty paid</button></div>}
+                  <div style={{ padding: "0 20px 14px", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {!b.duty_paid_on && <button type="button" className="btn" aria-expanded={open?.id === b.id && open.kind === "duty"} onClick={() => toggle("duty", b.id)}>Mark duty paid</button>}
+                    {(b.free_of_charge || b.igst_credit_status !== "eligible") && <button type="button" className="btn" aria-expanded={open?.id === b.id && open.kind === "credit"} aria-label={`Decide the IGST credit on ${b.boe_number}`} onClick={() => toggle("credit", b.id)}>IGST credit</button>}
+                  </div>
                   {id && open?.kind === "duty" && open.id === b.id && <PayDuty entityId={id} id={b.id} number={b.boe_number} onDone={reload} onCancel={() => setOpen(null)} />}
+                  {id && open?.kind === "credit" && open.id === b.id && <DecideCredit entityId={id} boe={b} onDone={reload} onCancel={() => setOpen(null)} />}
                 </div>
               );
             })}
@@ -136,6 +143,15 @@ export default function Trade() {
       )}
     </main>
   );
+}
+
+/** What the bill says about its IGST: credit, a cost, or still to be decided (a free sample needs a decision before any of it counts). */
+function creditLine(b: BillOfEntry): string {
+  const igst = formatInr(b.igst, { decimals: false });
+  const paid = b.duty_paid_on ? `Paid ${shortDate(b.duty_paid_on)} · ` : "";
+  if (b.igst_credit_status === "blocked") return `${paid}IGST ${igst} not claimed (part of the cost)`;
+  if (b.igst_credit_status === "undecided") return `${paid}IGST ${igst}: credit not decided yet · your CA is asked to review`;
+  return b.duty_paid_on ? `${paid}IGST credit ${formatInr(b.igst_credit, { decimals: false })}` : "IGST credit once the duty is paid";
 }
 
 function Tile({ label, value, note, warn }: { label: string; value: string; note: string; warn?: boolean }) {

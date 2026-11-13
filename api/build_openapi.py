@@ -1204,7 +1204,9 @@ schema("BillOfEntry", {
     "id": RO_UUID, "boe_number": CODE20, "boe_date": DATE, "port_code": PORT_CODE, "currency": CCY, "cif_foreign": MONEY, "exchange_rate": S(), "cif_inr": {**MONEY, "readOnly": True},
     "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "duty_total": {**MONEY, "readOnly": True},
     "status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": NULLABLE(DATE), "supplier_party_id": NULLABLE(UUID), "supplier_name": NULLABLE(S(readOnly=True)),
-    "purchase_bill_id": NULLABLE(UUID), "igst_credit": {**MONEY, "readOnly": True, "description": "IGST paid on the import, available as input tax credit once the duty is paid"},
+    "purchase_bill_id": NULLABLE(UUID), "igst_credit": {**MONEY, "readOnly": True, "description": "IGST paid on the import that is claimed as input tax credit: once the duty is paid, and only when igst_credit_status is eligible"},
+    "free_of_charge": B(description="A sample: nothing to pay the supplier, so it has no purchase bill. The duty and IGST are still paid."),
+    "igst_credit_status": ENUM("eligible", "blocked", "undecided", description="Whether the IGST is claimed. Left out when recording: eligible, or undecided when free_of_charge. Section 17(5)(h) blocks credit on goods given away as free samples; a CA decides."),
     "document_id": {**NULLABLE(UUID), "description": "The customs PDF in the document vault. Pass the id from readBillOfEntry when recording; it is linked to the bill of entry."},
     "new_supplier_name": S(writeOnly=True, description="Add this overseas supplier when supplier_party_id is not given. A supplier with the same name (ignoring Co., Ltd and punctuation) is reused."),
     "new_supplier_country": S(writeOnly=True, pattern="^[A-Z]{2}$")},
@@ -1221,7 +1223,8 @@ action(E + "/bills-of-entry/read", "Export & import", "readBillOfEntry", "Read a
            required=("document_id", "warnings", "boe_number", "boe_date", "port_code", "bcd", "sws", "igst", "other_duty", "status")),
        desc="Reads the assessed copy PDF from ICEGATE (it needs a text layer; scans are refused with 422 not_a_bill_of_entry), stores it in the vault under Purchases, and returns what it found. Nothing is recorded: show the figures to a person, then POST /bills-of-entry with document_id. warnings lists anything to check (a different company's GSTIN, a value that differs from the invoice). existing_boe_id is set when this bill is already recorded; the file is then linked to it.")
 _op("patch", E + "/bills-of-entry/{id}", "Export & import", "updateBillOfEntry", "Record assessment, duty paid and the purchase bill it belongs to", "trade:write",
-    body=schema("BillOfEntryUpdate", {"status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": DATE, "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "purchase_bill_id": UUID}),
+    body=schema("BillOfEntryUpdate", {"status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": DATE, "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "purchase_bill_id": UUID,
+                                                  "free_of_charge": B(), "igst_credit_status": ENUM("eligible", "blocked", "undecided")}),
     resp=ref("BillOfEntry"))
 schema("TradeSummary", {
     "as_of": DATE, "financial_year_from": DATE, "iec": NULLABLE(S()),
@@ -1229,7 +1232,8 @@ schema("TradeSummary", {
     "exports": schema("ExportTotals", {"bills": I(), "value_inr": MONEY, "drafts": I(description="Shipping bills opened from export invoices that still need the customs details")}),
     "realisation": schema("RealisationTotals", {"outstanding_bills": I(), "outstanding_inr": MONEY, "overdue_bills": I(), "overdue_inr": MONEY, "awaiting_export": I()}),
     "claims": schema("ClaimTotals", {"rodtep_pending": MONEY, "drawback_pending": MONEY}),
-    "imports": schema("ImportTotals", {"bills": I(), "duty_inr": MONEY, "igst_credit_inr": MONEY})})
+    "imports": schema("ImportTotals", {"bills": I(), "duty_inr": MONEY, "igst_credit_inr": {**MONEY, "description": "Eligible IGST on bills whose duty is paid"},
+                              "igst_undecided_inr": {**MONEY, "description": "IGST paid where it is not yet decided whether to claim it"}, "igst_not_claimed_inr": {**MONEY, "description": "IGST paid that is not claimed (blocked)"}})})
 _op("get", E + "/trade/summary", "Export & import", "getTradeSummary", "Where exports and imports stand this financial year", "trade:read", resp=ref("TradeSummary"),
     desc="Exports and imports are counted from 1 April. The LUT is read from the company's LUT registration.")
 

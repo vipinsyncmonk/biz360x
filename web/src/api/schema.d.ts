@@ -8224,8 +8224,15 @@ export interface components {
             supplier_party_id?: string | null;
             supplier_name?: string | null;
             purchase_bill_id?: string | null;
-            /** @description IGST paid on the import, available as input tax credit once the duty is paid */
+            /** @description IGST paid on the import that is claimed as input tax credit: once the duty is paid, and only when igst_credit_status is eligible */
             readonly igst_credit?: components["schemas"]["Money"];
+            /** @description A sample: nothing to pay the supplier, so it has no purchase bill. The duty and IGST are still paid. */
+            free_of_charge?: boolean;
+            /**
+             * @description Whether the IGST is claimed. Left out when recording: eligible, or undecided when free_of_charge. Section 17(5)(h) blocks credit on goods given away as free samples; a CA decides.
+             * @enum {string}
+             */
+            igst_credit_status?: "eligible" | "blocked" | "undecided";
             /** @description The customs PDF in the document vault. Pass the id from readBillOfEntry when recording; it is linked to the bill of entry. */
             document_id?: string | null;
             /** @description Add this overseas supplier when supplier_party_id is not given. A supplier with the same name (ignoring Co., Ltd and punctuation) is reused. */
@@ -8280,6 +8287,9 @@ export interface components {
             other_duty?: components["schemas"]["Money"];
             /** Format: uuid */
             purchase_bill_id?: string;
+            free_of_charge?: boolean;
+            /** @enum {string} */
+            igst_credit_status?: "eligible" | "blocked" | "undecided";
         };
         LutState: {
             /** @enum {string} */
@@ -8307,7 +8317,12 @@ export interface components {
         ImportTotals: {
             bills?: number;
             duty_inr?: components["schemas"]["Money"];
+            /** @description Eligible IGST on bills whose duty is paid */
             igst_credit_inr?: components["schemas"]["Money"];
+            /** @description IGST paid where it is not yet decided whether to claim it */
+            igst_undecided_inr?: components["schemas"]["Money"];
+            /** @description IGST paid that is not claimed (blocked) */
+            igst_not_claimed_inr?: components["schemas"]["Money"];
         };
         TradeSummary: {
             /** Format: date */
