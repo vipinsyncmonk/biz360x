@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { initials } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { NAV, TABS } from "@/components/nav";
+import { navFor } from "@/lib/roles";
 import { Icon } from "@/components/ui";
 
 const TRACK: Record<string, string> = { business: "Business", startup: "Startup", msme: "MSME" };
@@ -14,7 +15,7 @@ export default function More() {
   const { me, entity, setEntityId, logout } = useSession();
   const router = useRouter();
   const entities = me?.entities ?? [];
-  const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !IN_TABS.has(i.href)) })).filter((g) => g.items.length > 0);
+  const groups = navFor(NAV, entity, (me?.organizations ?? []).length > 0).map((g) => ({ ...g, items: g.items.filter((i) => !IN_TABS.has(i.href)) })).filter((g) => g.items.length > 0);
 
   return (
     <main className="page">

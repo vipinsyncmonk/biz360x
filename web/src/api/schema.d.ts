@@ -244,6 +244,26 @@ export interface paths {
         patch: operations["updateRegistration"];
         trace?: never;
     };
+    "/role-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The presets a person or a practitioner can start from
+         * @description A title is not a permission: a preset fills the scopes and the home screen, and every line can be changed.
+         */
+        get: operations["listRolePresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/members": {
         parameters: {
             query?: never;
@@ -3039,7 +3059,7 @@ export interface paths {
         put?: never;
         /**
          * Enter a new hire with a CTC
-         * @description Creates the employee as `onboarding` (outside payroll), the salary structure from the policy and the checklist from the policy.
+         * @description Creates the employee as `onboarding` (outside payroll), the salary structure from the policy and the checklist from the policy. It sets a salary, so it needs `payroll:write` as well as `hr:write`.
          */
         post: operations["onboardEmployee"];
         delete?: never;
@@ -3099,6 +3119,23 @@ export interface paths {
          * @description Every required item must be done (`onboarding_incomplete`). The person becomes active and is paid from the joining date.
          */
         post: operations["activateEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/hr/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The company's people for HR work, without anything about pay */
+        get: operations["listHrPeople"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5394,7 +5431,18 @@ export interface components {
             track?: "business" | "startup" | "msme";
             /** @enum {string} */
             role?: "owner" | "approver" | "maker" | "viewer" | "advisor" | "org_staff";
+            /** @description The modules the caller can open; `*` is all of them */
             modules?: string[];
+            /** @description The caller's level on each module. A member's levels are read, comment, write, approve, file; a practitioner's are their grant's */
+            scopes?: {
+                [key: string]: string;
+            };
+            title?: string | null;
+            /**
+             * @description The home screen the caller lands on
+             * @enum {string}
+             */
+            home?: "leadership" | "finance" | "people" | "general" | "practitioner";
         };
         OrgSummary: {
             /** Format: uuid */
@@ -5559,16 +5607,36 @@ export interface components {
             data: components["schemas"]["Registration"][];
             next_cursor: string | null;
         };
+        /** @description Only an owner can invite a person, change their access or remove them (403 for anyone else). */
         Member: {
             /** Format: uuid */
             readonly id?: string;
             /** Format: uuid */
             user_id?: string;
             /** Format: email */
-            email?: string;
-            readonly full_name?: string;
-            /** @enum {string} */
-            role: "owner" | "approver" | "maker" | "viewer";
+            email: string;
+            full_name?: string;
+            preset?: string | null;
+            /**
+             * @description A level for each module: read < comment < write < approve < file. `*` stands for every module not named.
+             * @example {
+             *       "finance": "file",
+             *       "payroll": "approve",
+             *       "hr": "read"
+             *     }
+             */
+            scopes?: {
+                [key: string]: "read" | "comment" | "write" | "approve" | "file";
+            };
+            /** @description An owner has every module and is the only one who manages people */
+            owner?: boolean;
+            title?: string | null;
+            home?: ("leadership" | "finance" | "people" | "general") | null;
+            /**
+             * @description Derived from the scopes: owner, or the highest level held. Accepted on create with `modules` as the earlier way to invite.
+             * @enum {string}
+             */
+            role?: "owner" | "approver" | "maker" | "viewer";
             /**
              * @example [
              *       "gst",
@@ -5579,6 +5647,29 @@ export interface components {
             accepted_at?: string | null;
             /** @example SSO · 2FA */
             readonly auth?: string;
+        };
+        RolePreset: {
+            key?: string;
+            /** @enum {string} */
+            kind?: "member" | "practitioner";
+            title?: string;
+            about?: string;
+            owner?: boolean;
+            home?: ("leadership" | "finance" | "people" | "general") | null;
+            advisor_kind?: string | null;
+            /** @description For a member, levels on the member scale; for a practitioner, an advisor grant's levels (read, comment, prepare, certify) */
+            scopes?: {
+                [key: string]: string;
+            };
+        };
+        ModuleLabel: {
+            key?: string;
+            label?: string;
+        };
+        RolePresets: {
+            presets?: components["schemas"]["RolePreset"][];
+            levels?: string[];
+            modules?: components["schemas"]["ModuleLabel"][];
         };
         MemberPage: {
             data: components["schemas"]["Member"][];
@@ -7396,6 +7487,23 @@ export interface components {
         };
         OnboardingTaskDone: {
             done: boolean;
+        };
+        HrPerson: {
+            /** Format: uuid */
+            id?: string;
+            employee_code?: string;
+            full_name?: string;
+            designation?: string | null;
+            department?: string | null;
+            /** Format: date */
+            date_of_joining?: string;
+            date_of_leaving?: string | null;
+            status?: string;
+            has_pan?: boolean;
+            has_bank_account?: boolean;
+        };
+        HrPeople: {
+            data?: components["schemas"]["HrPerson"][];
         };
         Holiday: {
             /** Format: uuid */
@@ -9489,6 +9597,32 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             412: components["responses"]["PreconditionFailed"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listRolePresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolePresets"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };
@@ -16541,6 +16675,37 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listHrPeople: {
+        parameters: {
+            query?: {
+                status?: "onboarding" | "active" | "notice" | "exited";
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HrPeople"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };

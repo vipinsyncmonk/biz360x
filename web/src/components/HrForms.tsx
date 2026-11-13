@@ -89,6 +89,7 @@ export function Checklist({ entityId, employeeId, onChanged }: { entityId: strin
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "0 20px 16px" }}>
       <span className="t13" role="status">{checklistLine(d)}</span>
+      {d.employee.current_structure && <span className="t13">CTC {formatInr(d.employee.current_structure.ctc_annual, { decimals: false })} a year</span>}
       <ul aria-label={`Onboarding checklist for ${name}`} style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
         {d.checklist.map((t) => (
           <li key={t.key} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>

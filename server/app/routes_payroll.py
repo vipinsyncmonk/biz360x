@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from . import adapters, hrdb, ledger, payroll as pr, secretbox
-from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, jsonable, money, require, tx
+from .core import ApiError, Auth, Principal, allowed as may, audit, emit, idempotency_begin, idempotency_finish, jsonable, money, require, tx
 from .routes_orders import js, offset_of, page
 
 router = APIRouter()
@@ -115,7 +115,7 @@ def update_employee(entity_id: uuid.UUID, employee_id: uuid.UUID, body: dict, p:
     allowed = {"full_name", "pan", "uan", "esic_ip_no", "email", "date_of_leaving", "designation", "department", "work_state", "employment_type",
                "tax_regime", "status", "bank_account"}
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:write")
+        require(cur, entity_id, "payroll:write" if may(cur, entity_id, "payroll:write") else "hr:write")      # a person's details are HR's too; their pay is not here
         cur.execute("SELECT * FROM employees WHERE id = %s AND entity_id = %s FOR UPDATE", (employee_id, entity_id))
         e = cur.fetchone()
         if not e:
@@ -134,7 +134,10 @@ def update_employee(entity_id: uuid.UUID, employee_id: uuid.UUID, body: dict, p:
                     (new.full_name, new.pan, new.uan, new.esic_ip_no, new.email, new.date_of_leaving, new.designation, new.department, new.work_state,
                      new.employment_type, new.tax_regime, new.status, secretbox.encrypt(bank.account_no) if bank else None, bank.ifsc if bank else None, employee_id))
         audit(cur, entity_id, "employee.updated", "employees", employee_id, after={k: v for k, v in body.items() if k != "bank_account"})
-        return load_employee(cur, entity_id, employee_id)
+        out = load_employee(cur, entity_id, employee_id)
+        if not may(cur, entity_id, "payroll:read"):
+            out["current_structure"] = None
+        return out
 
 
 class ComponentIn(BaseModel):

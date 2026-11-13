@@ -2,7 +2,7 @@
 import type { Tone } from "./compliance";
 import { daysUntil } from "./legal";
 
-export interface Member { id: string; user_id: string; email: string; full_name: string; role: string; modules: string[]; accepted_at: string | null; auth: string }
+export interface Member { id: string; user_id: string; email: string; full_name: string; role: string; modules: string[]; scopes?: Record<string, string>; title?: string | null; preset?: string | null; home?: string | null; accepted_at: string | null; auth: string }
 export interface Grant { id: string; advisor_name: string; advisor_kind: string; scopes: Record<string, string>; expires_on: string | null; status: string }
 export interface Dsc { id: string; person_name: string; dsc_class: string; valid_from: string; valid_until: string; registered_on: string[] }
 export interface PortalConn { id: string; portal: string; via: string; status: string; session_expires_at: string | null; last_sync_at: string | null; last_error: string | null }
