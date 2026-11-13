@@ -18,7 +18,7 @@ from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel, Field
 
 from . import hr, hrdb, payroll as pr, secretbox
-from .core import ApiError, Auth, Principal, audit, emit, money, require, tx
+from .core import ApiError, Auth, Principal, allowed, audit, emit, money, require, tx
 from .routes_orders import js, offset_of, page
 from .routes_payroll import BankDetails, _month_end, _run_for_update, load_employee, structure_out
 
@@ -99,7 +99,7 @@ def _policy_out(cur, entity_id) -> dict:
 def get_policy(entity_id: uuid.UUID, p: Principal = Auth):
     """The policy in force today. A company that has saved none sees the starter policy (`is_default`)."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:read")
+        require(cur, entity_id, "hr:read")
         return _policy_out(cur, entity_id)
 
 
@@ -115,7 +115,7 @@ def put_policy(entity_id: uuid.UUID, body: PolicyIn, p: Principal = Auth):
     if len(set(keys)) != len(keys):
         raise _bad("onboarding.checklist", "Each checklist item needs its own key")
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:approve")
+        require(cur, entity_id, "hr:approve")
         before = _policy_out(cur, entity_id)
         d = body.model_dump(mode="json")
         cur.execute("""INSERT INTO hr_policies (entity_id, effective_from, salary, leave, payroll, onboarding, created_by)
@@ -144,7 +144,7 @@ class LeaveTypeIn(BaseModel):
 @router.get(E + "/leave-types", tags=["Payroll & HR"])
 def list_leave_types(entity_id: uuid.UUID, p: Principal = Auth):
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:read")
+        require(cur, entity_id, "hr:read")
         return {"data": [_type_out(t) for t in hrdb.leave_types(cur, entity_id, active_only=False)]}
 
 
@@ -154,7 +154,7 @@ def save_leave_type(entity_id: uuid.UUID, body: LeaveTypeIn, p: Principal = Auth
     if body.paid and body.annual_quota is None:
         raise _bad("annual_quota", "A paid leave type needs the days a year")
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:approve")
+        require(cur, entity_id, "hr:approve")
         hrdb.ensure_leave_types(cur, entity_id)
         cur.execute("""INSERT INTO leave_types (entity_id, code, name, annual_quota, accrual, paid, carry_forward_max, encashable, is_active) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                        ON CONFLICT (entity_id, code) DO UPDATE SET name = EXCLUDED.name, annual_quota = EXCLUDED.annual_quota, accrual = EXCLUDED.accrual, paid = EXCLUDED.paid,
@@ -234,7 +234,10 @@ def _onboarding(cur, entity_id, e: dict) -> dict:
     has_salary = bool(cur.fetchone())
     state, blockers = hr.checklist_state(tasks, has_pan=bool(e["pan"]), has_bank=e["bank_account_enc"] is not None, has_salary=has_salary,
                                          handbook_done=_handbook_done(cur, entity_id, e["id"]))
-    return {"employee": load_employee(cur, entity_id, e["id"]), "checklist": state, "open_required": blockers,
+    person = load_employee(cur, entity_id, e["id"])
+    if not allowed(cur, entity_id, "payroll:read"):
+        person["current_structure"] = None                       # the checklist is HR's; the salary is payroll's
+    return {"employee": person, "checklist": state, "open_required": blockers,
             "ready": e["status"] == "onboarding" and not blockers, "done": sum(1 for t in state if t["done"]), "total": len(state)}
 
 
@@ -243,7 +246,8 @@ def onboard(entity_id: uuid.UUID, body: OnboardIn, p: Principal = Auth):
     """Enter a new hire once: the person, the joining date and the CTC. The salary structure is worked out from the policy, the
     checklist is copied from it, and the person stays `onboarding` (outside payroll) until they are activated."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:write")
+        require(cur, entity_id, "hr:write")
+        require(cur, entity_id, "payroll:write")                  # it sets a salary from the CTC
         code = body.employee_code
         if not code:
             cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"employees:{entity_id}",))
@@ -269,7 +273,7 @@ def onboard(entity_id: uuid.UUID, body: OnboardIn, p: Principal = Auth):
 @router.get(E + "/employees/{employee_id}/onboarding", tags=["Payroll & HR"])
 def get_onboarding(entity_id: uuid.UUID, employee_id: uuid.UUID, p: Principal = Auth):
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:read")
+        require(cur, entity_id, "hr:read")
         return _onboarding(cur, entity_id, _employee_row(cur, entity_id, employee_id))
 
 
@@ -277,7 +281,7 @@ def get_onboarding(entity_id: uuid.UUID, employee_id: uuid.UUID, p: Principal = 
 def tick_task(entity_id: uuid.UUID, employee_id: uuid.UUID, key: str, body: TaskIn, p: Principal = Auth):
     """Tick or untick a checklist item. Items read from the record (PAN, bank account, salary, handbook) cannot be ticked by hand."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:write")
+        require(cur, entity_id, "hr:write")
         e = _employee_row(cur, entity_id, employee_id, lock=True)
         cur.execute("SELECT id, auto FROM onboarding_tasks WHERE employee_id = %s AND key = %s", (employee_id, key))
         t = cur.fetchone()
@@ -294,7 +298,7 @@ def tick_task(entity_id: uuid.UUID, employee_id: uuid.UUID, key: str, body: Task
 def activate(entity_id: uuid.UUID, employee_id: uuid.UUID, p: Principal = Auth):
     """Finish onboarding: every required item must be done. The person becomes active and is paid from the joining date."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:write")
+        require(cur, entity_id, "hr:write")
         e = _employee_row(cur, entity_id, employee_id, lock=True)
         if e["status"] != "onboarding":
             raise ApiError(409, "conflict", f"This employee is already {e['status']}")
@@ -309,6 +313,17 @@ def activate(entity_id: uuid.UUID, employee_id: uuid.UUID, p: Principal = Auth):
         return out
 
 
+@router.get(E + "/hr/people", tags=["Payroll & HR"])
+def hr_people(entity_id: uuid.UUID, p: Principal = Auth, status: Literal["onboarding", "active", "notice", "exited"] | None = None):
+    """The people of the company for HR work (leave, onboarding, policies): who they are and where they stand, without anything about pay."""
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "hr:read")
+        cur.execute("""SELECT id, employee_code, full_name, designation, department, date_of_joining, date_of_leaving, status, pan IS NOT NULL AS has_pan,
+                              bank_account_enc IS NOT NULL AS has_bank_account
+                         FROM employees WHERE entity_id = %s AND (%s::text IS NULL OR status = %s) ORDER BY employee_code""", (entity_id, status, status))
+        return {"data": js(cur.fetchall())}
+
+
 # ================================================================== holidays
 class HolidayIn(BaseModel):
     date: dt.date
@@ -318,7 +333,7 @@ class HolidayIn(BaseModel):
 @router.get(E + "/holidays", tags=["Payroll & HR"])
 def list_holidays(entity_id: uuid.UUID, year: int | None = Query(default=None, ge=2000, le=2100), p: Principal = Auth):
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:read")
+        require(cur, entity_id, "hr:read")
         cur.execute("""SELECT id, holiday_date AS date, name FROM holidays WHERE entity_id = %s AND (%s::int IS NULL OR extract(year FROM holiday_date) = %s)
                         ORDER BY holiday_date""", (entity_id, year, year))
         return {"data": js(cur.fetchall())}
@@ -327,7 +342,7 @@ def list_holidays(entity_id: uuid.UUID, year: int | None = Query(default=None, g
 @router.post(E + "/holidays", status_code=201, tags=["Payroll & HR"])
 def add_holiday(entity_id: uuid.UUID, body: HolidayIn, p: Principal = Auth):
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:write")
+        require(cur, entity_id, "hr:write")
         cur.execute("INSERT INTO holidays (entity_id, holiday_date, name) VALUES (%s, %s, %s) RETURNING id, holiday_date AS date, name", (entity_id, body.date, body.name.strip()))
         out = js(cur.fetchone())
         audit(cur, entity_id, "holiday.added", "holidays", out["id"], after=out)
@@ -337,7 +352,7 @@ def add_holiday(entity_id: uuid.UUID, body: HolidayIn, p: Principal = Auth):
 @router.delete(E + "/holidays/{holiday_id}", status_code=204, tags=["Payroll & HR"])
 def delete_holiday(entity_id: uuid.UUID, holiday_id: uuid.UUID, p: Principal = Auth):
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:write")
+        require(cur, entity_id, "hr:write")
         cur.execute("DELETE FROM holidays WHERE id = %s AND entity_id = %s RETURNING holiday_date, name", (holiday_id, entity_id))
         h = cur.fetchone()
         if not h:
@@ -406,7 +421,7 @@ def leave_balances(entity_id: uuid.UUID, employee_id: uuid.UUID | None = None, a
     """What each person has earned, taken and can still take, for the leave year the date falls in."""
     as_of = as_of or dt.date.today()
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:read")
+        require(cur, entity_id, "hr:read")
         policy = hrdb.current_policy(cur, entity_id, as_of)
         types = hrdb.leave_types(cur, entity_id)
         cur.execute("""SELECT id, employee_code, full_name, date_of_joining, status FROM employees WHERE entity_id = %s AND status <> 'exited'
@@ -425,7 +440,7 @@ def list_leave(entity_id: uuid.UUID, p: Principal = Auth, status: Literal["pendi
                from_: dt.date | None = Query(default=None, alias="from"), to: dt.date | None = None, limit: int = Query(default=50, ge=1, le=200), cursor: str | None = None):
     off = offset_of(cursor)
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:read")
+        require(cur, entity_id, "hr:read")
         cur.execute(LEAVE_SQL + """ WHERE e.entity_id = %s AND (%s::text IS NULL OR r.status = %s) AND (%s::uuid IS NULL OR r.employee_id = %s)
                                      AND (%s::date IS NULL OR upper(r.dates) > %s) AND (%s::date IS NULL OR lower(r.dates) <= %s)
                                    ORDER BY (r.status = 'pending') DESC, lower(r.dates) DESC, r.id LIMIT %s OFFSET %s""",
@@ -442,7 +457,7 @@ def request_leave(entity_id: uuid.UUID, body: LeaveIn, p: Principal = Auth):
     if (body.to - body.from_).days > 180:
         raise _bad("to", "A single request covers at most six months")
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:write")
+        require(cur, entity_id, "hr:write")
         e = _employee_row(cur, entity_id, body.employee_id, lock=True)
         if e["status"] == "exited" or body.from_ < e["date_of_joining"] or (e["date_of_leaving"] and body.to > e["date_of_leaving"]):
             raise _bad("from", "The leave falls outside this person's time with the company")
@@ -472,7 +487,7 @@ def request_leave(entity_id: uuid.UUID, body: LeaveIn, p: Principal = Auth):
 
 def _decide(entity_id, request_id, p: Principal, to_status: str, note: str | None):
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:approve" if to_status in ("approved", "rejected") else "payroll:write")
+        require(cur, entity_id, "hr:approve" if to_status in ("approved", "rejected") else "hr:write")
         r = _load_leave(cur, entity_id, request_id, lock=True)
         allowed = ("pending",) if to_status in ("approved", "rejected") else ("pending", "approved")
         if r["status"] not in allowed:
@@ -516,7 +531,7 @@ def adjust_leave(entity_id: uuid.UUID, body: AdjustmentIn, p: Principal = Auth):
     if body.days == 0:
         raise _bad("days", "Give the days to add, or a negative number to take off")
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:approve")
+        require(cur, entity_id, "hr:approve")
         e = _employee_row(cur, entity_id, body.employee_id)
         t = _type_by_code(cur, entity_id, body.leave_type)
         if not t["paid"]:
@@ -685,7 +700,7 @@ def _doc_out(cur, entity_id, d: dict, *, full: bool) -> dict:
 def list_policy_docs(entity_id: uuid.UUID, p: Principal = Auth):
     """The handbook: the current version of each document, with how many people have acknowledged it."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:read")
+        require(cur, entity_id, "hr:read")
         cur.execute("SELECT * FROM hr_policy_documents WHERE entity_id = %s AND is_current ORDER BY category, title", (entity_id,))
         return {"data": [_doc_out(cur, entity_id, d, full=False) for d in cur.fetchall()]}
 
@@ -696,7 +711,7 @@ def publish_policy_doc(entity_id: uuid.UUID, body: PolicyDocIn, p: Principal = A
     acknowledge the new one afresh."""
     slug = body.slug or re.sub(r"[^a-z0-9]+", "-", body.title.lower()).strip("-")[:60] or "policy"
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:approve")
+        require(cur, entity_id, "hr:approve")
         cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"hr_policy_documents:{entity_id}:{slug}",))
         cur.execute("SELECT coalesce(max(version), 0) AS v FROM hr_policy_documents WHERE entity_id = %s AND slug = %s", (entity_id, slug))
         version = cur.fetchone()["v"] + 1
@@ -713,7 +728,7 @@ def publish_policy_doc(entity_id: uuid.UUID, body: PolicyDocIn, p: Principal = A
 @router.get(E + "/hr/policy-documents/{document_id}", tags=["Payroll & HR"])
 def get_policy_doc(entity_id: uuid.UUID, document_id: uuid.UUID, p: Principal = Auth):
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:read")
+        require(cur, entity_id, "hr:read")
         cur.execute("SELECT * FROM hr_policy_documents WHERE id = %s AND entity_id = %s", (document_id, entity_id))
         d = cur.fetchone()
         if not d:
@@ -728,7 +743,7 @@ def acknowledge(entity_id: uuid.UUID, document_id: uuid.UUID, body: AckIn, p: Pr
     if on > dt.date.today():
         raise _bad("acknowledged_on", "An acknowledgement cannot be dated in the future")
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:write")
+        require(cur, entity_id, "hr:write")
         cur.execute("SELECT * FROM hr_policy_documents WHERE id = %s AND entity_id = %s", (document_id, entity_id))
         d = cur.fetchone()
         if not d:

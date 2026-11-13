@@ -637,6 +637,33 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
       x-permission: settings:write
+  /role-presets:
+    get:
+      tags:
+      - Entities
+      operationId: listRolePresets
+      summary: The presets a person or a practitioner can start from
+      description: 'A title is not a permission: a preset fills the scopes and the home screen, and every line can be changed.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolePresets'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
   /entities/{entityId}/members:
     get:
       tags:
@@ -7754,7 +7781,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: payroll:read
+      x-permission: hr:read
     put:
       tags:
       - Payroll & HR
@@ -7786,7 +7813,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: payroll:approve
+      x-permission: hr:approve
   /entities/{entityId}/leave-types:
     get:
       tags:
@@ -7815,7 +7842,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: payroll:read
+      x-permission: hr:read
     post:
       tags:
       - Payroll & HR
@@ -7851,7 +7878,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:approve
+      x-permission: hr:approve
   /entities/{entityId}/payroll/ctc-breakup:
     get:
       tags:
@@ -7900,7 +7927,7 @@ paths:
       operationId: onboardEmployee
       summary: Enter a new hire with a CTC
       description: Creates the employee as `onboarding` (outside payroll), the salary structure from the policy and the checklist
-        from the policy.
+        from the policy. It sets a salary, so it needs `payroll:write` as well as `hr:write`.
       parameters:
       - $ref: '#/components/parameters/EntityId'
       requestBody:
@@ -7931,7 +7958,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:write
+      x-permission: hr:write
   /entities/{entityId}/employees/{id}/onboarding:
     get:
       tags:
@@ -7961,7 +7988,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: payroll:read
+      x-permission: hr:read
   /entities/{entityId}/employees/{id}/onboarding/{key}:
     put:
       tags:
@@ -8000,7 +8027,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: payroll:write
+      x-permission: hr:write
   /entities/{entityId}/employees/{id}/activate:
     post:
       tags:
@@ -8034,7 +8061,45 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:write
+      x-permission: hr:write
+  /entities/{entityId}/hr/people:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: listHrPeople
+      summary: The company's people for HR work, without anything about pay
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - onboarding
+          - active
+          - notice
+          - exited
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrPeople'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:read
   /entities/{entityId}/holidays:
     get:
       tags:
@@ -8067,7 +8132,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: payroll:read
+      x-permission: hr:read
     post:
       tags:
       - Payroll & HR
@@ -8103,7 +8168,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:write
+      x-permission: hr:write
   /entities/{entityId}/holidays/{id}:
     delete:
       tags:
@@ -8128,7 +8193,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:write
+      x-permission: hr:write
   /entities/{entityId}/leave-requests:
     get:
       tags:
@@ -8173,7 +8238,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: payroll:read
+      x-permission: hr:read
     post:
       tags:
       - Payroll & HR
@@ -8209,7 +8274,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:write
+      x-permission: hr:write
   /entities/{entityId}/leave-requests/{id}/approve:
     post:
       tags:
@@ -8248,7 +8313,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:approve
+      x-permission: hr:approve
   /entities/{entityId}/leave-requests/{id}/reject:
     post:
       tags:
@@ -8286,7 +8351,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:approve
+      x-permission: hr:approve
   /entities/{entityId}/leave-requests/{id}/cancel:
     post:
       tags:
@@ -8325,7 +8390,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:write
+      x-permission: hr:write
   /entities/{entityId}/leave-balances:
     get:
       tags:
@@ -8364,7 +8429,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: payroll:read
+      x-permission: hr:read
   /entities/{entityId}/leave-adjustments:
     post:
       tags:
@@ -8402,7 +8467,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:approve
+      x-permission: hr:approve
   /entities/{entityId}/payroll-runs/{id}/readiness:
     get:
       tags:
@@ -8589,7 +8654,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: payroll:read
+      x-permission: hr:read
     post:
       tags:
       - Payroll & HR
@@ -8626,7 +8691,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:approve
+      x-permission: hr:approve
   /entities/{entityId}/hr/policy-documents/{id}:
     get:
       tags:
@@ -8656,7 +8721,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: payroll:read
+      x-permission: hr:read
   /entities/{entityId}/hr/policy-documents/{id}/acknowledgements:
     post:
       tags:
@@ -8694,7 +8759,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: payroll:write
+      x-permission: hr:write
   /entities/{entityId}/contracts:
     get:
       tags:
@@ -11335,7 +11400,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: finance:read
+      x-permission: inventory:read
     post:
       tags:
       - Inventory
@@ -11371,7 +11436,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: finance:write
+      x-permission: inventory:write
   /entities/{entityId}/inventory/settings:
     get:
       tags:
@@ -11400,7 +11465,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: finance:read
+      x-permission: inventory:read
     put:
       tags:
       - Inventory
@@ -11431,7 +11496,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: finance:approve
+      x-permission: inventory:approve
   /entities/{entityId}/stock-items:
     get:
       tags:
@@ -11461,7 +11526,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: finance:read
+      x-permission: inventory:read
   /entities/{entityId}/stock-movements:
     get:
       tags:
@@ -11512,7 +11577,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: finance:read
+      x-permission: inventory:read
   /entities/{entityId}/stock-adjustments:
     post:
       tags:
@@ -11554,7 +11619,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: finance:write
+      x-permission: inventory:write
   /entities/{entityId}/stock-transfers:
     post:
       tags:
@@ -11592,7 +11657,7 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
-      x-permission: finance:write
+      x-permission: inventory:write
   /entities/{entityId}/stock-valuation:
     get:
       tags:
@@ -11628,7 +11693,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
-      x-permission: finance:read
+      x-permission: inventory:read
   /entities/{entityId}/portal-connections:
     get:
       tags:
@@ -13730,6 +13795,27 @@ components:
           type: array
           items:
             type: string
+          description: The modules the caller can open; `*` is all of them
+        scopes:
+          type: object
+          additionalProperties:
+            type: string
+          description: The caller's level on each module. A member's levels are read, comment, write, approve, file; a practitioner's
+            are their grant's
+        title:
+          oneOf:
+          - type: string
+            description: What the company calls the caller
+          - type: 'null'
+        home:
+          type: string
+          enum:
+          - leadership
+          - finance
+          - people
+          - general
+          - practitioner
+          description: The home screen the caller lands on
     OrgSummary:
       type: object
       properties:
@@ -14162,7 +14248,47 @@ components:
           format: email
         full_name:
           type: string
-          readOnly: true
+        preset:
+          oneOf:
+          - type: string
+            description: A starting point from GET /role-presets (ceo, cfo, accountant, hr_manager…). Explicit scopes, title
+              and home win over it.
+          - type: 'null'
+        scopes:
+          type: object
+          additionalProperties:
+            type: string
+            enum:
+            - read
+            - comment
+            - write
+            - approve
+            - file
+          examples:
+          - finance: file
+            payroll: approve
+            hr: read
+          description: 'A level for each module: read < comment < write < approve < file. `*` stands for every module not
+            named.'
+        owner:
+          type: boolean
+          writeOnly: true
+          description: An owner has every module and is the only one who manages people
+        title:
+          oneOf:
+          - type: string
+            maxLength: 80
+            description: 'What the company calls the person: CFO, Accounts executive'
+          - type: 'null'
+        home:
+          oneOf:
+          - type: string
+            enum:
+            - leadership
+            - finance
+            - people
+            - general
+          - type: 'null'
         role:
           type: string
           enum:
@@ -14170,6 +14296,8 @@ components:
           - approver
           - maker
           - viewer
+          description: 'Derived from the scopes: owner, or the highest level held. Accepted on create with `modules` as the
+            earlier way to invite.'
         modules:
           type: array
           items:
@@ -14189,7 +14317,65 @@ components:
           examples:
           - SSO · 2FA
       required:
-      - role
+      - email
+      description: Only an owner can invite a person, change their access or remove them (403 for anyone else).
+    RolePreset:
+      type: object
+      properties:
+        key:
+          type: string
+        kind:
+          type: string
+          enum:
+          - member
+          - practitioner
+        title:
+          type: string
+        about:
+          type: string
+        owner:
+          type: boolean
+        home:
+          oneOf:
+          - type: string
+            enum:
+            - leadership
+            - finance
+            - people
+            - general
+          - type: 'null'
+        advisor_kind:
+          oneOf:
+          - type: string
+          - type: 'null'
+        scopes:
+          type: object
+          additionalProperties:
+            type: string
+          description: For a member, levels on the member scale; for a practitioner, an advisor grant's levels (read, comment,
+            prepare, certify)
+    ModuleLabel:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+    RolePresets:
+      type: object
+      properties:
+        presets:
+          type: array
+          items:
+            $ref: '#/components/schemas/RolePreset'
+        levels:
+          type: array
+          items:
+            type: string
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModuleLabel'
     MemberPage:
       type: object
       properties:
@@ -19104,6 +19290,45 @@ components:
           type: boolean
       required:
       - done
+    HrPerson:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        employee_code:
+          type: string
+        full_name:
+          type: string
+        designation:
+          oneOf:
+          - type: string
+          - type: 'null'
+        department:
+          oneOf:
+          - type: string
+          - type: 'null'
+        date_of_joining:
+          type: string
+          format: date
+        date_of_leaving:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        status:
+          type: string
+        has_pan:
+          type: boolean
+        has_bank_account:
+          type: boolean
+    HrPeople:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HrPerson'
     Holiday:
       type: object
       properties:

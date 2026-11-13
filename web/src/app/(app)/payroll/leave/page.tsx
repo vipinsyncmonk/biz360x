@@ -5,7 +5,7 @@ import { api, unwrap, unwrapEmpty } from "@/lib/api";
 import { shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { Balances, Holiday, LEAVE_STATUS, LeaveRequest, LeaveType, balanceText, daysText } from "@/lib/hr";
-import type { Employee } from "@/lib/payroll";
+import { canOpen } from "@/lib/roles";
 import { useSession } from "@/lib/session";
 import { ApplyLeave, HolidayAdd } from "@/components/HrForms";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
@@ -25,7 +25,7 @@ export default function Leave() {
   const requests = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/leave-requests", { params: { ...p, query: { limit: 100 } } })).data as unknown as LeaveRequest[], id);
   const balances = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/leave-balances", { params: p })) as unknown as Balances, id);
   const types = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/leave-types", { params: p })).data as unknown as LeaveType[], id);
-  const people = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/employees", { params: { ...p, query: { limit: 200 } } })).data as unknown as Employee[], id);
+  const people = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/hr/people", { params: p })).data as unknown as Array<{ id: string; employee_code: string; full_name: string; status: string }>, id);
   const holidays = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/holidays", { params: p })).data as unknown as Holiday[], id);
 
   const reload = () => { requests.reload(); balances.reload(); };
@@ -56,7 +56,7 @@ export default function Leave() {
     <main className="page">
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "flex-end" }}>
         <div>
-          <Link href="/payroll" style={{ fontSize: 14 }}>← Payroll &amp; HR</Link>
+          {canOpen(entity, "payroll") && <Link href="/payroll" style={{ fontSize: 14 }}>← Payroll &amp; HR</Link>}
           <h1 className="disp" style={{ margin: "8px 0 0", fontSize: 36 }}>Leave</h1>
         </div>
         <button type="button" className="btn primary" aria-expanded={applying} disabled={staff.length === 0 || paidTypes.length === 0} onClick={() => setApplying(!applying)}>+ Record leave</button>

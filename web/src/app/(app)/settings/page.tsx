@@ -1,10 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api, unwrap, unwrapEmpty } from "@/lib/api";
 import { shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { PortalsSection, WebhooksSection } from "@/components/IntegrationsPanels";
-import { AddCertificate, CreateApiKey, GrantAdvisor, InvitePerson } from "@/components/SettingsForms";
+import { AccessEditor } from "@/components/RoleForms";
+import { AddCertificate, CreateApiKey, GrantAdvisor } from "@/components/SettingsForms";
+import { scopesText, type Presets } from "@/lib/roles";
 import { ApiKeyRow, CHANNELS, CONN_STATUS, Dsc, EVENTS, GRANT_STATUS, Grant, KIND_LABEL, Member, PORTAL_LABEL, PortalConn, Pref, ROLE_LABEL, SCOPE_LABEL, dscStatus, modulesLabel, permissionLabel, prefBody, prefKey, prefState } from "@/lib/settings";
 import { useSession } from "@/lib/session";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
@@ -27,6 +29,9 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
   const [panel, setPanel] = useState<PanelKey>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const presets = useLoad(async () => unwrap(await api.GET("/role-presets")) as unknown as Presets, id);
+  const isOwner = entity?.role === "owner";
   const [confirm, setConfirm] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -73,21 +78,23 @@ export default function Settings() {
       <section className="card" style={{ overflow: "hidden" }}>
         <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <h2 style={{ margin: 0 }}>People{members.data ? ` · ${members.data.length}` : ""}</h2>
-          <button type="button" className="btn" onClick={() => setPanel(panel === "invite" ? null : "invite")}>+ Invite person</button>
+          {isOwner && <button type="button" className="btn" aria-expanded={panel === "invite"} onClick={() => setPanel(panel === "invite" ? null : "invite")}>+ Invite person</button>}
         </div>
         <div style={{ padding: "0 20px" }}><ErrorNote error={members.error ?? actionError} /></div>
-        {panel === "invite" && <div style={{ padding: 16 }}><InvitePerson entityId={id!} onDone={done(members.reload)} onCancel={() => setPanel(null)} /></div>}
+        {panel === "invite" && presets.data && <div style={{ padding: 16 }}><AccessEditor entityId={id!} presets={presets.data} onDone={done(members.reload)} onCancel={() => setPanel(null)} /></div>}
+        {!isOwner && <div className="t13" style={{ padding: "8px 20px" }}>Only an owner can invite people or change what they may do.</div>}
         {members.loading ? <Loading what="people" /> : (
           <div className="tablewrap">
             <table style={{ minWidth: 640 }}>
-              <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Modules</th><th scope="col">Sign-in</th><th scope="col"><span className="sr">Actions</span></th></tr></thead>
+              <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">May</th><th scope="col">Sign-in</th><th scope="col"><span className="sr">Actions</span></th></tr></thead>
               <tbody>
                 {(members.data ?? []).map((m) => (
-                  <tr key={m.id}>
+                  <Fragment key={m.id}><tr>
                     <td><span style={{ fontWeight: 500 }}>{m.full_name}</span><span className="t13" style={{ display: "block" }}>{m.email}{m.accepted_at ? "" : " · invited"}</span></td>
-                    <td>{ROLE_LABEL[m.role] ?? m.role}</td><td>{modulesLabel(m.modules)}</td><td className="t13">{m.auth}</td>
-                    <td style={{ textAlign: "right" }}>{m.email !== me?.email && <Confirm rowId={m.id} what="Remove access" reload={members.reload} path="members" />}</td>
+                    <td>{m.title ?? ROLE_LABEL[m.role] ?? m.role}{m.title && <span className="t13" style={{ display: "block" }}>{ROLE_LABEL[m.role] ?? m.role}</span>}</td><td className="t13">{m.scopes ? scopesText(m.scopes, presets.data?.modules) : modulesLabel(m.modules)}</td><td className="t13">{m.auth}</td>
+                    <td style={{ textAlign: "right" }}>{isOwner && m.email !== me?.email && <><button type="button" className="linkbtn" style={{ color: "var(--cobalt)", marginRight: 12 }} aria-expanded={editing === m.id} aria-label={`Change access of ${m.full_name}`} onClick={() => setEditing(editing === m.id ? null : m.id)}>Change access</button><Confirm rowId={m.id} what="Remove access" reload={members.reload} path="members" /></>}</td>
                   </tr>
+                  {editing === m.id && presets.data && <tr><td colSpan={5}><AccessEditor entityId={id!} presets={presets.data} member={{ id: m.id, name: m.full_name, title: m.title ?? null, preset: m.preset ?? null, role: m.role, scopes: m.scopes ?? {} }} onDone={() => { setEditing(null); members.reload(); }} onCancel={() => setEditing(null)} /></td></tr>}</Fragment>
                 ))}
               </tbody>
             </table>

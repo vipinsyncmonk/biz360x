@@ -11,7 +11,8 @@ from typing import Literal
 from fastapi import APIRouter, Header, Query, Response
 from pydantic import BaseModel, Field
 
-from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, require, tx
+from . import roles
+from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, require, require_owner, tx
 from .routes_orders import js, offset_of, page
 
 router = APIRouter()
@@ -27,7 +28,7 @@ def list_members(entity_id: uuid.UUID, p: Principal = Auth, limit: int = Query(d
     off = offset_of(cursor)
     with tx(p.user_id) as cur:
         require(cur, entity_id, "settings:read")
-        cur.execute("""SELECT m.id, m.user_id, u.email, u.full_name, m.role::text, m.modules, m.accepted_at, u.auth_provider, u.mfa_enabled
+        cur.execute("""SELECT m.id, m.user_id, u.email, u.full_name, m.role::text, m.modules, m.scopes, m.title, m.preset, m.home, m.accepted_at, u.auth_provider, u.mfa_enabled
                          FROM memberships m JOIN users u ON u.id = m.user_id
                         WHERE m.entity_id = %s AND m.revoked_at IS NULL AND u.auth_provider <> 'service'
                         ORDER BY m.role, u.full_name LIMIT %s OFFSET %s""", (entity_id, limit + 1, off))
@@ -61,16 +62,74 @@ def list_dsc(entity_id: uuid.UUID, p: Principal = Auth, limit: int = Query(defau
         return page(js(cur.fetchall()), limit, off)
 
 
+@router.get("/role-presets", tags=["Entities"])
+def role_presets(p: Principal = Auth):
+    """The presets a person can be invited with (CEO, CFO, Accountant, HR Manager…) and the ones a practitioner's grant can start from, with the
+    modules and the scale of levels. A preset is a starting point: every line can be changed."""
+    return {"presets": roles.presets_out(), "levels": list(roles.LEVELS),
+            "modules": [{"key": m, "label": roles.MODULE_LABELS[m]} for m in roles.MODULES if m not in roles.SHARED]}
+
+
 # ------------------------------------------------------------------ writes: people, advisors, certificates
 class MemberIn(BaseModel):
     email: str = Field(pattern=EMAIL_PATTERN, max_length=254)
     full_name: str | None = Field(default=None, max_length=120)
-    role: Literal["owner", "approver", "maker", "viewer"]
-    modules: list[str] = Field(default=["*"], min_length=1, max_length=40)
+    preset: str | None = Field(default=None, pattern=r"^[a-z_]{1,40}$")       # a starting point from GET /role-presets
+    scopes: dict[str, str] | None = None                                       # a level per module; overrides the preset's
+    owner: bool | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    home: Literal["leadership", "finance", "people", "general"] | None = None
+    role: Literal["owner", "approver", "maker", "viewer"] | None = None        # the earlier way: one level for a list of modules
+    modules: list[str] | None = Field(default=None, min_length=1, max_length=40)
+
+
+class MemberPatch(BaseModel):
+    preset: str | None = Field(default=None, pattern=r"^[a-z_]{1,40}$")
+    scopes: dict[str, str] | None = None
+    owner: bool | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    home: Literal["leadership", "finance", "people", "general"] | None = None
+
+
+LEGACY_LEVEL = {"owner": "file", "approver": "file", "maker": "write", "viewer": "read"}
+
+
+def _bad(field: str, message: str):
+    return ApiError(400, "validation_failed", message, errors=[{"field": field, "message": message}])
+
+
+def resolve_access(*, preset: str | None, scopes: dict | None, owner: bool | None, title: str | None, home: str | None,
+                   role: str | None = None, modules: list[str] | None = None) -> dict:
+    """What a person gets, from a preset, explicit scopes, or the earlier role and module list. Explicit values win over the preset."""
+    base = None
+    if preset:
+        base = roles.PRESETS.get(preset)
+        if not base or base["kind"] != "member":
+            raise _bad("preset", f"'{preset}' is not a preset for a team member")
+    if scopes is None and base is None and role is None:
+        raise _bad("scopes", "Choose a preset or give the modules this person may use")
+    is_owner = owner if owner is not None else (base["owner"] if base else role == "owner")
+    if scopes is None:
+        if base:
+            scopes = base["scopes"]
+        else:
+            for m in modules or ["*"]:
+                if m != "*" and not MODULE_RE.match(m):
+                    raise _bad("modules", f"'{m}' is not a module name")
+            scopes = {m: LEGACY_LEVEL[role] for m in (["*"] if "*" in (modules or ["*"]) else sorted(set(modules)))}
+    if is_owner:
+        scopes = {"*": "file"}
+    elif role is None or preset:                              # the earlier way took any module name; the new way checks them
+        try:
+            scopes = roles.clean_scopes(scopes)
+        except roles.ScopeError as e:
+            raise _bad("scopes", str(e))
+    return {"owner": is_owner, "scopes": scopes, "title": title or (base["title"] if base else None), "preset": preset,
+            "home": home or (base["home"] if base else roles.default_home(scopes, is_owner))}
 
 
 def _member_row(cur, entity_id, member_id) -> dict:
-    cur.execute("""SELECT m.id, m.user_id, u.email, u.full_name, m.role::text, m.modules, m.accepted_at, u.auth_provider, u.mfa_enabled
+    cur.execute("""SELECT m.id, m.user_id, u.email, u.full_name, m.role::text, m.modules, m.scopes, m.title, m.preset, m.home, m.accepted_at, u.auth_provider, u.mfa_enabled
                      FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.id = %s AND m.entity_id = %s""", (member_id, entity_id))
     r = cur.fetchone()
     provider, mfa = r.pop("auth_provider"), r.pop("mfa_enabled")
@@ -81,25 +140,65 @@ def _member_row(cur, entity_id, member_id) -> dict:
 @router.post(E + "/members", status_code=201, tags=["Entities"])
 def invite_member(entity_id: uuid.UUID, body: MemberIn, p: Principal = Auth):
     """Invite a person by email. They sign in with a one-time code to that address; nothing is emailed until the notification service exists."""
-    for m in body.modules:
-        if m != "*" and not MODULE_RE.match(m):
-            raise ApiError(400, "validation_failed", f"'{m}' is not a module name")
+    access = resolve_access(preset=body.preset, scopes=body.scopes, owner=body.owner, title=body.title, home=body.home, role=body.role, modules=body.modules)
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "settings:write")
-        cur.execute("SELECT app.invite_member(%s, %s, %s, %s::member_role, %s) AS id",
-                    (entity_id, str(body.email).lower(), body.full_name, body.role, ["*"] if "*" in body.modules else sorted(set(body.modules))))
+        require_owner(cur, entity_id)
+        cur.execute("SELECT app.invite_member_scoped(%s, %s, %s, %s, %s::jsonb, %s, %s, %s) AS id",
+                    (entity_id, str(body.email).lower(), body.full_name, access["owner"], json.dumps(access["scopes"]), access["title"], access["preset"], access["home"]))
         mid = cur.fetchone()["id"]
         if mid is None:
             raise ApiError(409, "conflict", "That person already has access to this entity")
-        audit(cur, entity_id, "member.invited", "memberships", mid, after={"email": str(body.email).lower(), "role": body.role})
-        return _member_row(cur, entity_id, mid)
+        out = _member_row(cur, entity_id, mid)
+        audit(cur, entity_id, "member.invited", "memberships", mid, after={"email": str(body.email).lower(), "role": out["role"], "scopes": out["scopes"], "preset": access["preset"]})
+        return out
+
+
+@router.patch(E + "/members/{member_id}", tags=["Entities"])
+def update_member(entity_id: uuid.UUID, member_id: uuid.UUID, body: MemberPatch, p: Principal = Auth):
+    """Change what a person may do: a preset, a level per module, their title or their home screen. Only an owner can, never for themselves,
+    and a company keeps at least one owner."""
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        raise ApiError(400, "validation_failed", "Nothing to change")
+    with tx(p.user_id) as cur:
+        require_owner(cur, entity_id)
+        cur.execute("""SELECT m.id, m.user_id, m.role::text AS role, m.scopes, m.title, m.preset, m.home FROM memberships m JOIN users u ON u.id = m.user_id
+                        WHERE m.id = %s AND m.entity_id = %s AND m.revoked_at IS NULL AND u.auth_provider <> 'service' FOR UPDATE OF m""", (member_id, entity_id))
+        m = cur.fetchone()
+        if not m:
+            raise ApiError(404, "not_found", "Not found")
+        cur.execute("SELECT app.current_user_id() AS me")
+        if m["user_id"] == cur.fetchone()["me"]:
+            raise ApiError(409, "conflict", "You cannot change your own access", "Ask another owner to do it.")
+        access_changed = any(k in changes for k in ("preset", "scopes", "owner"))
+        if access_changed:
+            was_owner = m["role"] == "owner"
+            given = changes.get("scopes") is not None                # an empty object is given, and refused below; it must not fall back to what they had
+            owner = changes.get("owner", False if changes.get("preset") or given else was_owner)
+            if was_owner and not owner and not (given or changes.get("preset")):
+                raise _bad("scopes", "Say what this person may do once they are no longer an owner")
+            access = resolve_access(preset=changes.get("preset"), scopes=changes["scopes"] if given else (None if changes.get("preset") else m["scopes"]),
+                                    owner=owner, title=changes.get("title") or m["title"], home=changes.get("home"))
+            if was_owner and not access["owner"]:
+                cur.execute("SELECT count(*) AS n FROM memberships WHERE entity_id = %s AND role = 'owner' AND revoked_at IS NULL AND id <> %s", (entity_id, member_id))
+                if cur.fetchone()["n"] == 0:
+                    raise ApiError(409, "conflict", "An entity needs at least one owner")
+            cur.execute("UPDATE memberships SET role = %s::member_role, scopes = %s::jsonb, preset = %s, home = %s, title = %s WHERE id = %s",
+                        (roles.role_for(access["scopes"], access["owner"]), json.dumps(access["scopes"]), access["preset"] if "preset" in changes else m["preset"],
+                         access["home"], access["title"], member_id))
+        else:
+            cur.execute("UPDATE memberships SET title = coalesce(%s, title), home = coalesce(%s, home) WHERE id = %s", (changes.get("title"), changes.get("home"), member_id))
+        out = _member_row(cur, entity_id, member_id)
+        audit(cur, entity_id, "member.access_changed", "memberships", member_id, before={"role": m["role"], "scopes": m["scopes"], "title": m["title"]},
+              after={"role": out["role"], "scopes": out["scopes"], "title": out["title"]})
+        return out
 
 
 @router.delete(E + "/members/{member_id}", status_code=204, tags=["Entities"])
 def remove_member(entity_id: uuid.UUID, member_id: uuid.UUID, p: Principal = Auth):
     """Revokes access. The person's name stays on past work."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "settings:write")
+        require_owner(cur, entity_id)
         cur.execute("""SELECT m.id, m.user_id, m.role::text AS role FROM memberships m JOIN users u ON u.id = m.user_id
                         WHERE m.id = %s AND m.entity_id = %s AND m.revoked_at IS NULL AND u.auth_provider <> 'service'""", (member_id, entity_id))
         m = cur.fetchone()

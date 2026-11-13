@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { useSession } from "@/lib/session";
 import { initials } from "@/lib/format";
+import { navFor, roleText } from "@/lib/roles";
 import { NAV, TABS, activeTab } from "./nav";
 import { Icon, Logo } from "./ui";
 
@@ -36,7 +37,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           ) : <span style={{ fontSize: 14 }}>No workspace yet</span>}
         </div>
         <nav aria-label="Workspace" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {NAV.map((g) => (
+          {navFor(NAV, entity, (me.organizations ?? []).length > 0).map((g) => (
             <div className="navgroup" key={g.h}>
               <span className="navhead mono">{g.h}</span>
               {g.items.map((n) => (
@@ -53,7 +54,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           <span className="avatar" aria-hidden="true">{initials(name)}</span>
           <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
             <span style={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-            <span style={{ fontSize: 12, color: "#9CA3AF" }}>{entity?.role ?? "—"}</span>
+            <span style={{ fontSize: 12, color: "#9CA3AF" }}>{roleText(entity)}</span>
             <button type="button" className="linkbtn" onClick={() => void logout().then(() => router.replace("/login"))}>Sign out</button>
           </span>
         </div>

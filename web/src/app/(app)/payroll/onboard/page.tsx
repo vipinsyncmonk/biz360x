@@ -2,12 +2,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { api, unwrap } from "@/lib/api";
-import { formatInr, shortDate } from "@/lib/format";
+import { shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
-import type { Employee } from "@/lib/payroll";
 import { useSession } from "@/lib/session";
 import { Checklist, NewHire } from "@/components/HrForms";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
+
+interface Person { id: string; employee_code: string; full_name: string; designation: string | null; date_of_joining: string; has_pan: boolean; has_bank_account: boolean }
 
 export default function Onboard() {
   const { entity } = useSession();
@@ -15,7 +16,7 @@ export default function Onboard() {
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const list = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/employees", { params: { path: { entityId: id! }, query: { status: "onboarding", limit: 200 } } })).data as unknown as Employee[], id);
+  const list = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/hr/people", { params: { path: { entityId: id! }, query: { status: "onboarding" } } })).data as unknown as Person[], id);
   const rows = list.data ?? [];
 
   if (!entity) return <main className="page"><div className="card card-pad">Select a workspace first.</div></main>;
@@ -44,7 +45,7 @@ export default function Onboard() {
             <div key={e.id} style={{ borderTop: "1px solid var(--line-2)" }}>
               <div style={{ padding: "14px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, alignItems: "start" }}>
                 <span style={{ fontWeight: 600 }}>{e.full_name}<span className="t13 mono" style={{ display: "block", fontWeight: 400 }}>{e.employee_code}{e.designation ? ` · ${e.designation}` : ""}</span></span>
-                <span>Joins {shortDate(e.date_of_joining)}<span className="t13" style={{ display: "block" }}>{e.current_structure ? `CTC ${formatInr(e.current_structure.ctc_annual, { decimals: false })} a year` : "No salary set"}</span></span>
+                <span>Joins {shortDate(e.date_of_joining)}<span className="t13" style={{ display: "block" }}>{e.has_pan ? "PAN on file" : "No PAN yet"} · {e.has_bank_account ? "bank account on file" : "no bank account yet"}</span></span>
                 <span><Pill tone="prep">Onboarding</Pill></span>
                 <span><button type="button" className="btn" aria-expanded={open === e.id} aria-label={`Checklist for ${e.full_name}`} onClick={() => setOpen(open === e.id ? null : e.id)}>Checklist</button></span>
               </div>

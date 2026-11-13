@@ -3,7 +3,7 @@ a move between warehouses and the valuation report.
 
 Stock moves by itself when a purchase bill is booked and when an invoice or a credit note for returned goods is issued
 (inventory.py, called from routes_purchases.py and routes_sales.py). What a person records here is everything else. The catalogue
-runs under the parties permission, the rest under finance, because every adjustment posts a journal."""
+runs under the parties permission, the rest under inventory. Every adjustment posts a journal."""
 from __future__ import annotations
 
 import datetime as dt
@@ -160,7 +160,7 @@ class InventorySettingsIn(BaseModel):
 @router.get(E + "/warehouses", tags=["Inventory"])
 def list_warehouses(entity_id: uuid.UUID, p: Principal = Auth):
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "finance:read")
+        require(cur, entity_id, "inventory:read")
         cur.execute("SELECT id, code, name, is_default, is_active FROM warehouses WHERE entity_id = %s ORDER BY is_default DESC, code", (entity_id,))
         return {"data": js(cur.fetchall())}
 
@@ -168,7 +168,7 @@ def list_warehouses(entity_id: uuid.UUID, p: Principal = Auth):
 @router.post(E + "/warehouses", status_code=201, tags=["Inventory"])
 def create_warehouse(entity_id: uuid.UUID, body: WarehouseIn, p: Principal = Auth):
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "finance:write")
+        require(cur, entity_id, "inventory:write")
         cur.execute("SELECT count(*) AS n FROM warehouses WHERE entity_id = %s", (entity_id,))
         first = cur.fetchone()["n"] == 0
         if body.is_default:
@@ -187,7 +187,7 @@ def _settings(cur, entity_id) -> dict:
 @router.get(E + "/inventory/settings", tags=["Inventory"])
 def get_settings(entity_id: uuid.UUID, p: Principal = Auth):
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "finance:read")
+        require(cur, entity_id, "inventory:read")
         return _settings(cur, entity_id)
 
 
@@ -196,7 +196,7 @@ def put_settings(entity_id: uuid.UUID, body: InventorySettingsIn, p: Principal =
     """Whether a sale may take stock below zero. Off by default; turning it on makes the cost of those sales an estimate until the
     purchase is booked."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "finance:approve")
+        require(cur, entity_id, "inventory:approve")
         before = _settings(cur, entity_id)
         cur.execute("UPDATE entities SET allow_negative_stock = %s WHERE id = %s", (body.allow_negative_stock, entity_id))
         after = _settings(cur, entity_id)
@@ -234,7 +234,7 @@ def _stock_rows(cur, entity_id, item_id=None, q: str | None = None) -> list[dict
 def list_stock(entity_id: uuid.UUID, p: Principal = Auth, q: str | None = None):
     """Every tracked item with what is on hand (all warehouses), its average cost and its value, and the total value of stock."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "finance:read")
+        require(cur, entity_id, "inventory:read")
         rows = _stock_rows(cur, entity_id, q=q)
         settings = _settings(cur, entity_id)
     return {"data": rows, "totals": {"value": money(sum((Decimal(r["value"]) for r in rows), ZERO)), "items": len(rows),
@@ -267,7 +267,7 @@ def list_movements(entity_id: uuid.UUID, p: Principal = Auth, item_id: uuid.UUID
     """Movements, newest first: what came in or went out, at what cost, and the bill, document or adjustment behind it."""
     off = offset_of(cursor)
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "finance:read")
+        require(cur, entity_id, "inventory:read")
         cur.execute(MOVE_SQL + """ WHERE m.entity_id = %s AND (%s::uuid IS NULL OR m.item_id = %s) AND (%s::uuid IS NULL OR m.warehouse_id = %s)
                                     AND (%s::text IS NULL OR m.source_kind = %s) AND (%s::date IS NULL OR m.movement_date >= %s) AND (%s::date IS NULL OR m.movement_date <= %s)
                                   ORDER BY m.id DESC LIMIT %s OFFSET %s""",
@@ -325,7 +325,7 @@ def adjust_stock(entity_id: uuid.UUID, body: AdjustmentIn, p: Principal = Auth, 
     if body.date > dt.date.today():
         raise _bad("date", "Stock cannot be adjusted on a date that has not come")
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "finance:write")
+        require(cur, entity_id, "inventory:write")
         replay = idempotency_begin(cur, idempotency_key, "POST", f"/entities/{entity_id}/stock-adjustments", body.model_dump(mode="json"))
         if replay:
             return JSONResponse(replay["body"], status_code=replay["status"])
@@ -415,7 +415,7 @@ def transfer_stock(entity_id: uuid.UUID, body: TransferIn, p: Principal = Auth):
     if body.from_warehouse_id == body.to_warehouse_id:
         raise _bad("to_warehouse_id", "Choose a different warehouse to move the stock to")
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "finance:write")
+        require(cur, entity_id, "inventory:write")
         item = _tracked_item(cur, entity_id, body.item_id)
         src, dst = _warehouse(cur, entity_id, body.from_warehouse_id), _warehouse(cur, entity_id, body.to_warehouse_id)
         pos = inventory.position(cur, entity_id, body.item_id)
@@ -442,7 +442,7 @@ def stock_valuation(entity_id: uuid.UUID, p: Principal = Auth, as_of: dt.date | 
     Inventory by hand; `difference` shows it."""
     as_of = as_of or dt.date.today()
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "finance:read")
+        require(cur, entity_id, "inventory:read")
         cur.execute("""SELECT i.id AS item_id, i.sku, i.name, i.uqc, sum(m.qty_in - m.qty_out) AS qty, sum(m.value) AS value
                          FROM stock_movements m JOIN items i ON i.id = m.item_id
                         WHERE m.entity_id = %s AND m.movement_date <= %s GROUP BY i.id, i.sku, i.name, i.uqc

@@ -75,7 +75,9 @@ def get_me(p: Principal = Auth):
         cur.execute("""
             SELECT e.id, e.legal_name, e.constitution::text, e.track::text,
                    coalesce(m.role::text, CASE WHEN g.id IS NOT NULL THEN 'advisor' ELSE 'org_staff' END) AS role,
-                   coalesce(m.modules, ARRAY(SELECT jsonb_object_keys(g.scopes))) AS modules
+                   coalesce(m.modules, ARRAY(SELECT jsonb_object_keys(g.scopes))) AS modules,
+                   coalesce(m.scopes, g.scopes, '{}'::jsonb) AS scopes, m.title,
+                   coalesce(m.home, CASE WHEN m.id IS NULL THEN 'practitioner' ELSE 'general' END) AS home
               FROM entities e
               LEFT JOIN memberships m ON m.entity_id = e.id AND m.user_id = app.current_user_id() AND m.revoked_at IS NULL
               LEFT JOIN advisor_grants g ON g.entity_id = e.id AND g.status = 'active'
