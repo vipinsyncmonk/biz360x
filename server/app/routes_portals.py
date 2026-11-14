@@ -446,9 +446,9 @@ def _file_mca(cur, o, job) -> str:
     return adapters.get("mca").file_form(o["form_code"] or o["code"], {"cin": cin, "period": o["period_label"], "fy": o["fy"]})["srn"]
 
 
-def _payroll_amount(cur, o, expr: str):
-    cur.execute(f"""SELECT coalesce(sum({expr}), 0) AS amt FROM payroll_runs r JOIN payslips s ON s.run_id = r.id WHERE r.entity_id = %s AND r.period_month = %s
-                       AND r.status IN ('approved', 'bank_file_sent', 'paid', 'statutory_done')""", (o["entity_id"], o["period_start"]))
+def _payroll_amount(cur, o, what: str):
+    """The month's PF or ESI total. The person filing may not read payslips, so the database gives the total only (migration 40)."""
+    cur.execute("SELECT coalesce(sum(amount), 0) AS amt FROM app.payroll_statutory_total(%s, %s, %s)", (o["entity_id"], o["period_start"], what))
     amt = cur.fetchone()["amt"]
     if amt <= 0:
         raise ApiError(409, "conflict", "There is no approved payroll for this period to file from")
@@ -457,13 +457,13 @@ def _payroll_amount(cur, o, expr: str):
 
 def _file_epf(cur, o, job) -> str:
     from .worker import job_otp
-    amt = _payroll_amount(cur, o, "s.pf_employee + s.pf_employer_epf + s.pf_employer_eps")
+    amt = _payroll_amount(cur, o, "pf")
     cur.execute("SELECT number FROM entity_registrations WHERE id = %s", (o["registration_id"],))
     return adapters.get("labour").upload_ecr({"establishment": cur.fetchone()["number"], "period": o["period_start"].strftime("%Y-%m"), "amount": str(amt)}, otp=job_otp(job))["trrn"]
 
 
 def _file_esi(cur, o, job) -> str:
-    amt = _payroll_amount(cur, o, "s.esi_employee + s.esi_employer")
+    amt = _payroll_amount(cur, o, "esi")
     cur.execute("SELECT number FROM entity_registrations WHERE id = %s", (o["registration_id"],))
     return adapters.get("labour").upload_esic({"employer_code": cur.fetchone()["number"], "period": o["period_start"].strftime("%Y-%m"), "amount": str(amt)})["ack"]
 

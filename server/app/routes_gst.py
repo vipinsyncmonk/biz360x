@@ -718,12 +718,11 @@ def _prep_advance_tax(cur, o) -> dict:
     return {"challan_id": str(cid), "amount": money(amount), "instalment_no": inst}
 
 
-def _prep_payroll_statutory(kind: str, expr: str):
-    """PF, ESI and professional tax challans come from the approved payroll run for the obligation's month."""
+def _prep_payroll_statutory(kind: str, what: str):
+    """PF, ESI and professional tax challans come from the approved payroll run for the obligation's month. The person preparing the
+    challan may not be allowed to read payslips, so the database hands over the month's total and nothing else (migration 40)."""
     def prep(cur, o) -> dict:
-        cur.execute(f"""SELECT r.id, coalesce(sum({expr}), 0) AS amt FROM payroll_runs r JOIN payslips s ON s.run_id = r.id
-                         WHERE r.entity_id = %s AND r.period_month = %s AND r.status IN ('approved', 'bank_file_sent', 'paid', 'statutory_done') GROUP BY r.id""",
-                    (o["entity_id"], o["period_start"]))
+        cur.execute("SELECT run_id AS id, amount AS amt FROM app.payroll_statutory_total(%s, %s, %s)", (o["entity_id"], o["period_start"], what))
         run = cur.fetchone()
         if not run or run["amt"] <= 0:
             return {"challan_id": None, "note": "No approved payroll with this contribution for the period"}
@@ -740,9 +739,9 @@ def _prep_payroll_statutory(kind: str, expr: str):
 
 PREPARERS = {"GST.GSTR1.MONTHLY": _prep_gst, "GST.GSTR3B.MONTHLY": _prep_gst, "TDS.DEPOSIT.MONTHLY": _prep_tds_deposit,
              "TDS.RETURN.QUARTERLY": _prep_tds_return, "IT.ADVANCE_TAX": _prep_advance_tax,
-             "EPF.ECR.MONTHLY": _prep_payroll_statutory("epf_ecr", "s.pf_employee + s.pf_employer_epf + s.pf_employer_eps"),
-             "ESI.MONTHLY": _prep_payroll_statutory("esic", "s.esi_employee + s.esi_employer"),
-             "PT.KA.MONTHLY": _prep_payroll_statutory("professional_tax", "s.professional_tax")}
+             "EPF.ECR.MONTHLY": _prep_payroll_statutory("epf_ecr", "pf"),
+             "ESI.MONTHLY": _prep_payroll_statutory("esic", "esi"),
+             "PT.KA.MONTHLY": _prep_payroll_statutory("professional_tax", "pt")}
 
 
 def handle_prepare(cur, job: dict) -> dict:
