@@ -319,9 +319,46 @@ def hr_people(entity_id: uuid.UUID, p: Principal = Auth, status: Literal["onboar
     with tx(p.user_id) as cur:
         require(cur, entity_id, "hr:read")
         cur.execute("""SELECT id, employee_code, full_name, designation, department, date_of_joining, date_of_leaving, status, pan IS NOT NULL AS has_pan,
-                              bank_account_enc IS NOT NULL AS has_bank_account
+                              bank_account_enc IS NOT NULL AS has_bank_account, email,
+                              CASE WHEN user_id IS NOT NULL THEN 'active' WHEN self_invited_at IS NOT NULL THEN 'invited' ELSE 'off' END AS self_service
                          FROM employees WHERE entity_id = %s AND (%s::text IS NULL OR status = %s) ORDER BY employee_code""", (entity_id, status, status))
         return {"data": js(cur.fetchall())}
+
+
+# ================================================================== the employee's own sign-in
+def _self_service(entity_id, employee_id, p: Principal, on: bool):
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "hr:write")
+        e = _employee_row(cur, entity_id, employee_id, lock=True)
+        before = "active" if e["user_id"] else "invited" if e["self_invited_at"] else "off"
+        if on:
+            if e["status"] == "exited":
+                raise ApiError(409, "conflict", "This person has left the company")
+            if not e["email"]:
+                raise ApiError(409, "employee_email_missing", "Add the person's email first", "They sign in with the email on their record, so the record needs one.")
+            if before == "off":
+                cur.execute("SELECT app.invite_employee(%s)", (employee_id,))             # also makes the account they will sign in with, if there is none
+                hrdb.ensure_leave_types(cur, entity_id)                                   # so their leave page has the starter types even if HR never opened Leave
+        elif before != "off":
+            cur.execute("UPDATE employees SET user_id = NULL, self_invited_at = NULL, self_invited_by = NULL, self_accepted_at = NULL WHERE id = %s", (employee_id,))
+        after = before if on and before != "off" else "invited" if on else "off"
+        if after != before:
+            audit(cur, entity_id, "employee.self_service", "employees", employee_id, before={"self_service": before}, after={"self_service": after})
+            emit(cur, entity_id, "employee.self_service", "employees", employee_id, {"employee": e["full_name"], "self_service": after})
+        return {"employee_id": str(employee_id), "self_service": after, "email": e["email"]}
+
+
+@router.post(E + "/employees/{employee_id}/self-service", tags=["Payroll & HR"])
+def open_self_service(entity_id: uuid.UUID, employee_id: uuid.UUID, p: Principal = Auth):
+    """Let a person sign in to see their own payslips, leave and policies. They sign in with the email on their record and accept;
+    until then the record is `invited`. Nothing is emailed yet. Doing it twice changes nothing."""
+    return _self_service(entity_id, employee_id, p, True)
+
+
+@router.delete(E + "/employees/{employee_id}/self-service", tags=["Payroll & HR"])
+def close_self_service(entity_id: uuid.UUID, employee_id: uuid.UUID, p: Principal = Auth):
+    """Withdraw the invitation, or end the person's access at once."""
+    return _self_service(entity_id, employee_id, p, False)
 
 
 # ================================================================== holidays

@@ -66,12 +66,20 @@ def balances(cur, entity_id, employee: dict, as_of: dt.date, policy: dict, types
     types = types if types is not None else leave_types(cur, entity_id)
     cur.execute("SELECT leave_type_id, coalesce(sum(days), 0) AS d FROM leave_adjustments WHERE employee_id = %s AND leave_year_start = %s GROUP BY leave_type_id",
                 (employee["id"], start))
-    adj = {r["leave_type_id"]: r["d"] for r in cur.fetchall()}
+    adj = cur.fetchall()
     cur.execute("""SELECT leave_type_id, status, coalesce(sum(days - lop_days), 0) AS paid, coalesce(sum(lop_days), 0) AS lop FROM leave_requests
                     WHERE employee_id = %s AND status IN ('pending', 'approved') AND lower(dates) BETWEEN %s AND %s GROUP BY leave_type_id, status""",
                 (employee["id"], start, end))
+    return balance_rows(types, adj, cur.fetchall(), employee["date_of_joining"], start, as_of)
+
+
+def balance_rows(types: list[dict], adjustments: list[dict], used_rows: list[dict], joined: dt.date, start: dt.date, as_of: dt.date) -> list[dict]:
+    """The balances from rows already read: the leave types, the adjustments (leave_type_id, d) and the days used (leave_type_id,
+    status, paid, lop) of one person in one leave year. Self-service reads those rows through its own functions and comes here too."""
+    employee = {"date_of_joining": joined}
+    adj = {r["leave_type_id"]: r["d"] for r in adjustments}
     used: dict = {}
-    for r in cur.fetchall():
+    for r in used_rows:
         used[(r["leave_type_id"], r["status"])] = (r["paid"], r["lop"])
     out = []
     for t in types:

@@ -90,6 +90,8 @@ def get_me(p: Principal = Auth):
         cur.execute("""SELECT o.id, o.name, o.kind::text, om.role FROM org_members om
                         JOIN organizations o ON o.id = om.organization_id WHERE om.user_id = app.current_user_id()""")
         me["organizations"] = cur.fetchall()
+        cur.execute("SELECT employee_id, entity_id, legal_name, employee_code, full_name, designation, status FROM app.my_employments()")
+        me["employments"] = cur.fetchall()                # companies where the person is an employee with their own sign-in (/v1/self)
     return me
 
 

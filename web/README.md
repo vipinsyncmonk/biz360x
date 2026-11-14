@@ -82,6 +82,8 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/app/(app)/settings` | Settings: people (invite, remove), advisors (grant, revoke), signature certificates (record), API keys (create, revoke; the key is shown once), portals (connect, OTP renewal), webhooks, notification choices (saved per person), audit-chain check |
 | `src/app/(app)/group` | Group view for firms: clients × authorities grid, filters, open items per client, team load, Add client (the onboarding flow filed under the firm) and Chase clients (queues reminders to client owners) |
 | `src/lib/group.ts` | Chase targets and wording, the add-client link. Unit-tested |
+| `src/app/self` | The employee's own page, outside the company workspace: their record and joining checklist, leave (balances, apply, withdraw), payslips and the company's policies to read and acknowledge. Someone with no workspace and an employee record lands here. HR opens it from Leave, tab Employee sign-in |
+| `src/lib/self.ts`, `src/components/SelfPanels.tsx` | Which employment to show, the to-do list, the leave form and its refusals, the handbook state, HR's switch. `self.ts` is unit-tested |
 | `src/components/IntegrationsPanels.tsx` | Portal connections (connect, renew with the OTP flow, disconnect) and webhooks (add, pause, test, deliveries, delete) |
 | `src/components/SettingsForms.tsx` | The invite, advisor, certificate and API key forms |
 | `src/lib/board.ts` | Contract, meeting and resolution form rules, IST display of meeting times. Unit-tested |

@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from "react";
 import { useSession } from "@/lib/session";
 import { initials } from "@/lib/format";
 import { navFor, roleText } from "@/lib/roles";
+import { homeWithoutWorkspace } from "@/lib/self";
 import { NAV, TABS, activeTab } from "./nav";
 import { Icon, Logo } from "./ui";
 
@@ -15,7 +16,8 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   useEffect(() => { if (status === "anon") router.replace("/login"); }, [status, router]);
   const noWorkspace = status === "authed" && (me?.entities ?? []).length === 0;
-  useEffect(() => { if (noWorkspace) router.replace("/onboarding"); }, [noWorkspace, router]);
+  const employed = ((me as { employments?: unknown[] } | null)?.employments ?? []).length;      // an employee with their own sign-in, at this or another company
+  useEffect(() => { if (noWorkspace) router.replace(homeWithoutWorkspace(employed)); }, [noWorkspace, employed, router]);
 
   if (status !== "authed" || !me) return <div className="empty" role="status">Loading…</div>;
 
@@ -55,6 +57,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
             <span style={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
             <span style={{ fontSize: 12, color: "#9CA3AF" }}>{roleText(entity)}</span>
+            {employed > 0 && <Link href="/self" className="linkbtn">My payslips and leave</Link>}
             <button type="button" className="linkbtn" onClick={() => void logout().then(() => router.replace("/login"))}>Sign out</button>
           </span>
         </div>

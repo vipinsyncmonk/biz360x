@@ -63,7 +63,7 @@ This guide covers four things: how the system is put together, the rules every e
 
 ### Error codes
 
-`validation_failed` · `not_found` · `conflict` · `precondition_failed` · `idempotency_conflict` · `permission_denied` · `two_person_rule` · `approval_required` · `period_locked` · `journal_unbalanced` · `tax_split_mismatch` · `b2b_needs_gstin` · `note_needs_original` · `number_too_long` · `over_settlement` · `msme_terms_exceeded` · `insufficient_stock` · `item_not_tracked` · `leave_balance_short` · `onboarding_incomplete` · `audit_read_only` · `independence_conflict` · `rule_version_overlap` · `portal_session_expired` · `portal_rejected` · `rate_limited` · `unauthorized` · `mfa_required` · `internal`
+`validation_failed` · `not_found` · `conflict` · `precondition_failed` · `idempotency_conflict` · `permission_denied` · `two_person_rule` · `approval_required` · `period_locked` · `journal_unbalanced` · `tax_split_mismatch` · `b2b_needs_gstin` · `note_needs_original` · `number_too_long` · `over_settlement` · `msme_terms_exceeded` · `insufficient_stock` · `item_not_tracked` · `leave_balance_short` · `onboarding_incomplete` · `audit_read_only` · `employee_email_missing` · `independence_conflict` · `rule_version_overlap` · `portal_session_expired` · `portal_rejected` · `rate_limited` · `unauthorized` · `mfa_required` · `internal`
 
 Most domain errors are raised by the database itself. The API maps constraint names to codes in one table (`CONSTRAINT_CODES` in `server/app/core.py`), so the rule and its error message can never drift apart.
 
@@ -222,6 +222,20 @@ What a practitioner may do is checked in `require()` from `app.my_grant_scopes`:
 
 Not built: sending the invitation by email, the engagement letter and UDIN on certificates, verifying the membership number, fees and billing, a practitioner asking a company for an engagement, and the directory (phase 7 of `docs/ROLES_DESIGN.md`). The confidential modules (pay and people, the cap table, bank lines) are also enforced by the database: see the next section.
 
+### Employee self-service
+
+An employee signs in to their own page: their record, leave, payslips and the company's policies (`routes_self.py`, `db/41_employee_self_service.sql`; screen `/self`). They are **not a member of the company**. They never appear in `memberships`, `app.visible_entity_ids()` is unchanged, and no company policy has to learn to exclude them.
+
+- **A separate door.** Requests under `/v1/self/{employeeId}/…` run as the database role `biz_self` (`tx(p.user_id, role="biz_self")`). That role holds no privilege on any table, view or sequence and no USAGE on the schema `app`. It can only execute the functions in the schema `self`. Each of those takes the employee record it is about and raises unless `employees.user_id` is the signed-in person, so a bug in a handler cannot reach the books, another employee or another company. Someone else's record is a 404.
+- **Opening it.** HR (`hr:write`) calls `POST /employees/{id}/self-service`; the record needs an email (`employee_email_missing`, 409). `app.invite_employee` makes an account for that email if there is none. The person signs in with that email, sees the invitation at `GET /me/employments`, and accepts with `POST /me/employments/{id}/accept`, which sets `employees.user_id`. `DELETE /employees/{id}/self-service` withdraws the invitation or ends the access at once. Nothing is emailed yet. `/me` carries `employments`.
+- **What they do.** `GET /self/{employeeId}` (the record with the PAN's last four characters, whether a bank account is on file, and the joining checklist to read); `GET …/leave`, `POST …/leave-requests`, `POST …/leave-requests/{id}/cancel`; `GET …/payslips`, `…/payslips/{id}` and `…/payslips/{id}/pdf` (approved runs only); `GET …/policies`, `…/policies/{id}` and `POST …/policies/{id}/acknowledge`.
+- **Leave** is counted exactly as when HR records it (`hr.leave_days`, `hrdb.balance_rows`, `hr.split_paid_unpaid`). The request waits for whoever approves leave at the company, and shows in HR's list and in `/me/work` like any other. The employee can withdraw it only while it is pending; an approved leave is cancelled by HR, because pay may already depend on it.
+- **An acknowledgement is the person's own act**: it is recorded with their user as the actor. HR can still record one on a person's behalf.
+- **When you add something an employee should see**, add a function in `self` that starts with `self.mine(p_employee)`, grant it to `biz_self`, and call it from `routes_self.py`. Never grant `biz_self` a table, and never run a `/self` handler as `biz_app`. Return typed columns, not JSON, so money stays `numeric`.
+- **In production** the API's login role must be a member of `biz_self` as well as `biz_app`.
+
+Not built: an employee entering their own PAN, bank account or address, uploading proofs, ticking their own checklist items, a manager approving leave for the people who report to them (leave goes to HR or to the person named in "Who does what"), tasks for employees, an emailed invitation, what a person who has left may still see and for how long (today they keep the page until HR ends it), and year-end tax declarations (the next phase). Tests: `server/tests/test_self_service.py` includes a raw `biz_self` connection that is refused on every table and view.
+
 ### Module confidentiality in the database
 
 The company a person can see is decided by row-level security. Which **modules** they can open was, until migration 40, decided only by `require()` in each handler. For the modules where a leak hurts people, the database now applies the module too (`db/40_module_confidentiality.sql`), so a handler that forgets the check, or a join into another module's table, returns nothing.
@@ -277,6 +291,8 @@ Cost, measured on 20,000 payslips in one run: the run's payslips 8 ms to 16 ms, 
 | GST & Tax | `GET /gst-returns?period=…`, `GET /itc-matches`, `GET /itc-matches/summary`, `POST /itc-matches/{id}/resolve`, `POST /itc-matches/remind-suppliers`, `POST /gst-returns/{id}/compute`, `POST /gst-returns/{id}/file`, `POST /gst/inward-sync`, `GET /gst/ledger-balances`, `GET /tds-deductions`, `GET /advance-tax` |
 | Legal & Contracts | `GET /contracts?notice_within_days=30`, `GET /contracts/{id}`, `POST …/extract-terms`, `POST …/notices`, `GET /signature-requests`, `GET /contract-templates`, `GET /documents?q=…`, `GET /documents?expiring_within_days=90`, `GET /document-requests` |
 | Document Vault | `GET /documents?q=…&folder=…`, `POST /documents` (signed upload), `GET /documents?expiring_within_days=90`, `GET /document-requests`, `POST /document-requests/{id}/share`, `GET /data-rooms`, `POST /data-rooms`, `PATCH /data-rooms/{id}`, `DELETE /data-rooms/{id}` |
+| My employee page (the screen at self) | `GET /me/employments`, `POST /me/employments/{id}/accept`, `GET /self/{employeeId}`, `GET /self/{employeeId}/leave`, `POST /self/{employeeId}/leave-requests`, `POST /self/{employeeId}/leave-requests/{id}/cancel`, `GET /self/{employeeId}/payslips`, `GET /self/{employeeId}/payslips/{id}/pdf`, `GET /self/{employeeId}/policies`, `GET /self/{employeeId}/policies/{id}`, `POST /self/{employeeId}/policies/{id}/acknowledge` |
+| Leave → Employee sign-in | `GET /hr/people`, `POST /employees/{id}/self-service`, `DELETE /employees/{id}/self-service` |
 | Group view | `GET /organizations/{id}/entities`, `GET /organizations/{id}/workload`, `GET /organizations/{id}/client-staff`, `PUT /organizations/{id}/client-staff/{entityId}`, `POST /organizations/{id}/client-reminders` |
 | Settings | `/members` (+ `PATCH /members/{id}`), `GET /role-presets`, `GET /responsibilities`, `PUT /responsibilities`, `/advisor-grants`, `/dsc-certificates`, `/portal-connections` (+ `/portal-connections/{id}/renew`), `/me/notification-preferences`, `/webhooks` (+ `/webhooks/{id}/test`, `/webhooks/{id}/deliveries`), `/api-keys`, `/audit-log`, `/audit-log/verify` |
 | Sales & Billing | `GET /sales/summary`, `GET /einvoice-status` (E-invoicing card), `POST /facts` (declare a year's turnover), `GET /sales-documents?payment_status=…`, `GET /dunning-sequences`, `GET /recurring-invoices` |
@@ -331,7 +347,7 @@ DATABASE_URL=… uvicorn app.main:app --reload        # API on :8000, spec at /v
 DATABASE_URL=… python -m app.worker                 # job worker
 ```
 
-In production the API connects as a login role that is a member of `biz_app`, and the workers as one that is a member of `biz_worker`. Development sign-in accepts OTP `000000`, only when `BIZ_ENV` is `dev` or `test` and the OTP provider is the sandbox; the server refuses to start in production with the sandbox provider. Choose and register a real OTP provider (`auth.register_otp_sender`) and an identity provider (`auth.register_idp`) before launch.
+In production the API connects as a login role that is a member of `biz_app` and of `biz_self` (employee self-service), and the workers as one that is a member of `biz_worker`. Development sign-in accepts OTP `000000`, only when `BIZ_ENV` is `dev` or `test` and the OTP provider is the sandbox; the server refuses to start in production with the sandbox provider. Choose and register a real OTP provider (`auth.register_otp_sender`) and an identity provider (`auth.register_idp`) before launch.
 
 ## 7. What comes next
 
