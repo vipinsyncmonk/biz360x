@@ -187,6 +187,23 @@ The company states its policy once and the rest follows from it, so a month's pa
 
 Not built: an employee's own sign-in (people get their payslips, leave and policies through HR; an employee role needs its own row-level-security design), sending payslips by email, offer and appointment letters, attendance and shift capture, year-end carry-forward and leave encashment, comp-off and half-day sessions, full and final settlement, tax declarations and Form 16, employer PF administration and EDLI charges in the CTC, reimbursement claims. The CTC split, the leave quotas, the gratuity share and the checklist are a starter policy for the company and a CA to review.
 
+### Who does what, and a person's work
+
+A company says once who prepares and who approves each kind of work (`GET` and `PUT /responsibilities`, migration 38; `routing.py`, `routes_work.py`). The kinds are GST, TDS, PF and ESI, professional tax, company filings (MCA), income tax, other filings, the payroll run, vendor payments and leave. Filings have two steps, `prepare` and `approve`; the payroll run, vendor payments and leave have only `approve`, because whoever starts them is the preparer. Anyone in the company can read the matrix; only an owner can change it, and a person can be named approver only where they can approve (leave needs an approving level on `hr`, the payroll run on `payroll`, vendor payments on `purchases`).
+
+The routing is in database triggers, so every path that creates work follows one rule:
+
+- A new obligation takes its owner (`prepare`) and approver (`approve`) from the matrix, unless whoever created it named them. `app.work_kind_of_rule` maps a rule to its kind from its code and authority.
+- A request for approval is assigned to the named approver of that kind of work, unless that person raised it: the two-person rule would stop them, so it stays open to the other approvers.
+- Saving the matrix moves open filings that nobody owns, or that the matrix's earlier choice still holds, to the person now named. An owner a person chose by hand stays.
+- A person invited with a preset takes the work that preset usually does, where nobody holds it yet (an Accountant prepares GST, TDS and income tax; a CFO approves them and payments; an HR Manager prepares PF, ESI and professional tax and decides leave). Removing a person, or taking away the level they need, frees their slots.
+
+With no row for a kind, nothing changes: the work is unowned and any approver may decide it.
+
+`GET /me/work` is the caller's queue across every company they can see, overdue first and then by due date: tasks given to them, filings they own, approvals for them to decide (assigned to them, or unassigned in a company where they can approve, never their own request), leave for them to decide (the named approver, or anyone with an approving level on `hr` when nobody is named) and open document requests in companies where they can write to the vault. `GET /me/calendar` gives the dated items with the companies' holidays, day by day. Tasks (`GET` and `POST /tasks`, `PATCH /tasks/{id}`) are given to a member; the person a task is assigned to can always finish it, and anything else needs `tasks:write`.
+
+Not built: naming a practitioner or a firm's staff in the matrix (it comes with engagements), a `review` or `file` step, reminders and escalation when work sits, reassigning in bulk when someone is away, comments on a task, and the queue on the phone layout's own tab.
+
 ### Copilot
 
 1. `POST /copilot/threads` starts a conversation (only its owner can see it). `POST /copilot/threads/{id}/messages` returns the answer as JSON, or with `Accept: text/event-stream` streams `token`, `citation`, `action` and `done` events.
@@ -206,7 +223,7 @@ Not built: an employee's own sign-in (people get their payslips, leave and polic
 |---|---|
 | Sign in / Create workspace | `POST /auth/otp`, `POST /auth/signup`, `POST /auth/token`, `POST /onboarding/lookups` |
 | Onboarding | `GET /onboarding/lookups/{id}`, `POST /onboarding/preview`, `POST /onboarding/workspaces` |
-| Command Center | `GET /compliance/summary`, `GET /approvals?assigned_to=me`, `GET /compliance/calendar`, `GET /compliance/standing`, `GET /finance/summary`, `GET /audit-log?limit=5`, `/events` |
+| Command Center | `GET /me/work`, `POST /tasks`, `PATCH /tasks/{id}`, `GET /compliance/summary`, `GET /approvals?assigned_to=me`, `GET /compliance/calendar`, `GET /compliance/standing`, `GET /finance/summary`, `GET /audit-log?limit=5`, `/events` |
 | Compliance Engine | `GET /obligations`, `GET /obligations/{id}`, `GET /compliance/calendar`, `GET /compliance/thresholds`, `GET /notices`, `POST /compliance/engine-runs` |
 | Exports & imports | `GET /trade/summary`, `GET /shipping-bills`, `POST /shipping-bills`, `GET /shipping-bills/{id}`, `PATCH /shipping-bills/{id}`, `POST /shipping-bills/{id}/realisations`, `GET /bills-of-entry`, `POST /bills-of-entry`, `POST /bills-of-entry/read`, `PATCH /bills-of-entry/{id}`, `GET /sales-documents?doc_type=export_invoice`, `POST /registrations` (the LUT and IEC) |
 | Startup workspace | `GET /cap-table` (`scenario=current` or `post_round&round_id=…`), `POST /share-classes`, `POST /shareholders`, `GET /funding-rounds`, `POST /funding-rounds`, `PATCH /funding-rounds/{id}` (steps come with the round), `POST /allotments`, `GET /esop-pools`, `POST /esop-pools`, `GET /esop-grants`, `POST /esop-grants`, `GET /benefits`, `POST /benefits/check`, `PUT /benefits/{scheme_code}`, `GET /finance/summary`, `GET /obligations` |
@@ -222,7 +239,7 @@ Not built: an employee's own sign-in (people get their payslips, leave and polic
 | Legal & Contracts | `GET /contracts?notice_within_days=30`, `GET /contracts/{id}`, `POST …/extract-terms`, `POST …/notices`, `GET /signature-requests`, `GET /contract-templates`, `GET /documents?q=…`, `GET /documents?expiring_within_days=90`, `GET /document-requests` |
 | Document Vault | `GET /documents?q=…&folder=…`, `POST /documents` (signed upload), `GET /documents?expiring_within_days=90`, `GET /document-requests`, `POST /document-requests/{id}/share`, `GET /data-rooms`, `POST /data-rooms`, `PATCH /data-rooms/{id}`, `DELETE /data-rooms/{id}` |
 | Group view | `GET /organizations/{id}/entities`, `GET /organizations/{id}/workload`, `POST /organizations/{id}/client-reminders` |
-| Settings | `/members` (+ `PATCH /members/{id}`), `GET /role-presets`, `/advisor-grants`, `/dsc-certificates`, `/portal-connections` (+ `/portal-connections/{id}/renew`), `/me/notification-preferences`, `/webhooks` (+ `/webhooks/{id}/test`, `/webhooks/{id}/deliveries`), `/api-keys`, `/audit-log`, `/audit-log/verify` |
+| Settings | `/members` (+ `PATCH /members/{id}`), `GET /role-presets`, `GET /responsibilities`, `PUT /responsibilities`, `/advisor-grants`, `/dsc-certificates`, `/portal-connections` (+ `/portal-connections/{id}/renew`), `/me/notification-preferences`, `/webhooks` (+ `/webhooks/{id}/test`, `/webhooks/{id}/deliveries`), `/api-keys`, `/audit-log`, `/audit-log/verify` |
 | Sales & Billing | `GET /sales/summary`, `GET /einvoice-status` (E-invoicing card), `POST /facts` (declare a year's turnover), `GET /sales-documents?payment_status=…`, `GET /dunning-sequences`, `GET /recurring-invoices` |
 | New GST invoice | `POST /sales-documents/preview` (every change), `POST /sales-documents`, `POST /sales-documents/{id}/issue`, `GET /sales-documents/{id}/pdf` (View PDF, Download PDF) |
 | Collections | `GET /receivables/ageing`, `GET /receipts`, `POST /receipts`, `POST /receipts/{id}/allocate`, `GET /dunning-sequences`, `POST /parties/{id}/pause-dunning`, `GET /recurring-invoices`, `PATCH /recurring-invoices/{id}` |

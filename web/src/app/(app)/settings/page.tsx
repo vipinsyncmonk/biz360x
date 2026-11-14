@@ -5,6 +5,7 @@ import { shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { PortalsSection, WebhooksSection } from "@/components/IntegrationsPanels";
 import { AccessEditor } from "@/components/RoleForms";
+import { WhoDoesWhat } from "@/components/WorkPanels";
 import { AddCertificate, CreateApiKey, GrantAdvisor } from "@/components/SettingsForms";
 import { scopesText, type Presets } from "@/lib/roles";
 import { ApiKeyRow, CHANNELS, CONN_STATUS, Dsc, EVENTS, GRANT_STATUS, Grant, KIND_LABEL, Member, PORTAL_LABEL, PortalConn, Pref, ROLE_LABEL, SCOPE_LABEL, dscStatus, modulesLabel, permissionLabel, prefBody, prefKey, prefState } from "@/lib/settings";
@@ -101,6 +102,8 @@ export default function Settings() {
           </div>
         )}
       </section>
+
+      {id && <WhoDoesWhat entityId={id} isOwner={isOwner} />}
 
       <div className="cols">
         <div className="col-main">
