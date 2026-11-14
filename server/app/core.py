@@ -80,6 +80,8 @@ CONSTRAINT_CODES = {
     "two_person_rule": (403, "two_person_rule", "You cannot decide a request you raised"),
     "share_allotments_check": (400, "allotment_late", "Shares must be allotted within 60 days of receiving the money"),
     "stock_not_negative": (409, "insufficient_stock", "Not enough stock"),
+    "audit_engagement_read_only": (400, "audit_read_only", "An audit engagement can only read and raise queries, and needs an end date"),
+    "engagement_independence": (409, "independence_conflict", "The same practitioner cannot audit the company and keep its books"),
 }
 
 
@@ -222,12 +224,10 @@ def require(cur, entity_id: uuid.UUID, permission: str) -> None:
     m = cur.fetchone()
     if m and roles.allows(m["scopes"], module, action):          # a member holds a level per module (migration 37)
         return
-    cur.execute("""SELECT g.scopes FROM advisor_grants g JOIN org_members om ON om.organization_id = g.advisor_org_id
-                    WHERE g.entity_id = %s AND om.user_id = app.current_user_id() AND g.status = 'active'""", (entity_id,))
-    for g in cur.fetchall():
-        level = g["scopes"].get(module)
-        if level and action in ADVISOR_ACTIONS.get(level, set()):
-            return
+    # a practitioner: the engagements that reach them, as themselves or through their firm (staff only for clients they are assigned to)
+    cur.execute("SELECT scopes FROM app.my_grant_scopes(%s)", (entity_id,))
+    if any(roles.grant_allows(g["scopes"], module, action) for g in cur.fetchall()):
+        return
     raise ApiError(403, "permission_denied", f"Missing permission {permission}")
 
 

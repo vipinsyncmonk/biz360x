@@ -113,6 +113,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/engagements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Invitations waiting for me, and the firms I could accept one for
+         * @description An invited person cannot see the company until they accept; this is where they see the invitation.
+         */
+        get: operations["getMyEngagements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/engagements/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept an invitation, as myself or for my firm
+         * @description Access starts now. Accepting for a firm makes it the firm's engagement: partners see the client, staff once they are assigned. `independence_conflict` (409) when it would break the audit rule.
+         */
+        post: operations["acceptEngagement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/engagements/{id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decline an invitation */
+        post: operations["declineEngagement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/work": {
         parameters: {
             query?: never;
@@ -4812,6 +4869,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organizations/{id}/client-staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The firm's clients and which staff work on each */
+        get: operations["getClientStaff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/{id}/client-staff/{entityId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Say which staff work on a client
+         * @description Only a partner or admin of the firm can. Staff see only the clients they are assigned to; someone taken off a client stops seeing it at once.
+         */
+        put: operations["setClientStaff"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organizations/{id}/workload": {
         parameters: {
             query?: never;
@@ -5303,6 +5397,57 @@ export interface webhooks {
         patch?: never;
         trace?: never;
     };
+    "engagement.invited": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A practitioner was invited to work for the company */
+        post: operations["webhook_engagement_invited"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "engagement.accepted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A practitioner accepted; their access has started */
+        post: operations["webhook_engagement_accepted"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "engagement.declined": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A practitioner declined an invitation */
+        post: operations["webhook_engagement_declined"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "sales_document.irn_generated": {
         parameters: {
             query?: never;
@@ -5583,6 +5728,56 @@ export interface components {
             /** @description The screen in the web app where it is acted on */
             href?: string;
         };
+        EngagementInvite: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            entity_id?: string;
+            entity_name?: string;
+            advisor_name?: string;
+            advisor_kind?: string;
+            service?: ("bookkeeping" | "gst" | "tds" | "pf_esi" | "payroll" | "secretarial" | "trade" | "statutory_audit" | "tax_audit" | "internal_audit" | "virtual_cfo" | "legal") | null;
+            service_label?: string | null;
+            /**
+             * @description A level per module in the practitioner's words. Never settings, and never an approving level: approvals stay with the company.
+             * @example {
+             *       "gst": "certify",
+             *       "sales": "read"
+             *     }
+             */
+            scopes?: {
+                [key: string]: "read" | "comment" | "prepare" | "certify";
+            };
+            period_fy?: string | null;
+            expires_on?: string | null;
+            invited_by_name?: string | null;
+            audit?: boolean;
+            /** Format: date-time */
+            readonly created_at?: string;
+        };
+        FirmRef: {
+            /** Format: uuid */
+            id?: string;
+            name?: string;
+        };
+        MyEngagements: {
+            invitations?: components["schemas"]["EngagementInvite"][];
+            firms?: components["schemas"]["FirmRef"][];
+        };
+        EngagementAnswer: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            status?: "active" | "declined";
+            /** Format: uuid */
+            entity_id?: string;
+            accepted_for?: string | null;
+            /** @description Kinds of work the practitioner now prepares, from their preset */
+            work_taken_on?: number;
+        };
+        AcceptEngagement: {
+            organization_id?: string | null;
+        };
         MyWork: {
             data?: components["schemas"]["WorkItem"][];
             total?: number;
@@ -5789,6 +5984,7 @@ export interface components {
             owner?: boolean;
             home?: ("leadership" | "finance" | "people" | "general") | null;
             advisor_kind?: string | null;
+            service?: string | null;
             /** @description For a member, levels on the member scale; for a practitioner, an advisor grant's levels (read, comment, prepare, certify) */
             scopes?: {
                 [key: string]: string;
@@ -5807,29 +6003,52 @@ export interface components {
             data: components["schemas"]["Member"][];
             next_cursor: string | null;
         };
+        /** @description Only an owner can engage a practitioner or end an engagement. `audit_read_only` (400) for an audit engagement with a writing level or no end date; `independence_conflict` (409) when the same practitioner would hold the statutory audit and the books, the internal audit or the CFO role for the same year. Which services an auditor may not provide is a starter rule for a CA to confirm. */
         AdvisorGrant: {
             /** Format: uuid */
             readonly id?: string;
             advisor_org_id?: string | null;
             advisor_name: string;
-            /** @enum {string} */
-            advisor_kind: "chartered_accountant" | "company_secretary" | "counsel" | "lender" | "investor" | "auditor";
-            /** Format: email */
-            invite_email?: string;
             /**
+             * @description Taken from the preset when one is given
+             * @enum {string}
+             */
+            advisor_kind?: "chartered_accountant" | "company_secretary" | "counsel" | "lender" | "investor" | "auditor";
+            /**
+             * Format: email
+             * @description The person to invite. Access starts when they accept. Left out, the engagement is only a record.
+             */
+            invite_email?: string;
+            service?: ("bookkeeping" | "gst" | "tds" | "pf_esi" | "payroll" | "secretarial" | "trade" | "statutory_audit" | "tax_audit" | "internal_audit" | "virtual_cfo" | "legal") | null;
+            preset?: string | null;
+            /**
+             * @description A level per module in the practitioner's words. Never settings, and never an approving level: approvals stay with the company.
              * @example {
-             *       "finance": "read",
-             *       "gst": "prepare",
-             *       "mca_financial": "certify"
+             *       "gst": "certify",
+             *       "sales": "read"
              *     }
              */
-            scopes: {
+            scopes?: {
                 [key: string]: "read" | "comment" | "prepare" | "certify";
             };
-            document_folders?: string[];
+            period_fy?: components["schemas"]["FyLabel"] | null;
+            membership_no?: string | null;
+            document_folders?: string[] | null;
             expires_on?: string | null;
+            invited_email?: string | null;
+            practitioner_user_id?: string | null;
+            accepted_at?: string | null;
+            /** Format: date-time */
+            readonly created_at?: string;
+            /**
+             * @description Engaged as a person, through a firm, or only recorded
+             * @enum {string}
+             */
+            readonly party?: "person" | "firm" | "record";
+            /** @description An audit engagement: read and raise queries only */
+            readonly audit?: boolean;
             /** @enum {string} */
-            readonly status?: "invited" | "active" | "revoked" | "expired";
+            readonly status?: "invited" | "active" | "declined" | "revoked" | "expired";
         };
         AdvisorGrantPage: {
             data: components["schemas"]["AdvisorGrant"][];
@@ -6143,6 +6362,8 @@ export interface components {
             user_id?: string;
             name?: string;
             title?: string | null;
+            /** @description Engaged from outside; can prepare, never approve */
+            practitioner?: boolean;
             /** @description The kinds of work this person could be named approver of */
             approves?: string[];
         };
@@ -9032,6 +9253,31 @@ export interface components {
             name?: string;
             filings_due?: number;
         };
+        FirmClient: {
+            /** Format: uuid */
+            entity_id?: string;
+            legal_name?: string;
+            set_up_by_firm?: boolean;
+            services?: string[];
+            /** @description The staff assigned to this client */
+            staff?: string[];
+        };
+        FirmPerson: {
+            /** Format: uuid */
+            user_id?: string;
+            name?: string;
+            /** @enum {string} */
+            role?: "admin" | "partner" | "staff";
+            /** @description Partners and admins see every client */
+            sees_all?: boolean;
+        };
+        ClientStaff: {
+            clients?: components["schemas"]["FirmClient"][];
+            people?: components["schemas"]["FirmPerson"][];
+        };
+        ClientStaffIn: {
+            user_ids: string[];
+        };
         ChaseClients: {
             /** @description Leave out to chase every client that has filings waiting on them. */
             entity_ids?: string[];
@@ -9438,6 +9684,94 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getMyEngagements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyEngagements"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    acceptEngagement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptEngagement"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngagementAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    declineEngagement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngagementAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             429: components["responses"]["TooMany"];
         };
     };
@@ -21061,6 +21395,66 @@ export interface operations {
             429: components["responses"]["TooMany"];
         };
     };
+    getClientStaff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientStaff"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    setClientStaff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                entityId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientStaffIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientStaff"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
     getStaffWorkload: {
         parameters: {
             query?: never;
@@ -21975,6 +22369,87 @@ export interface operations {
         };
     };
     webhook_task_assigned: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_engagement_invited: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_engagement_accepted: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s. */
+                "Biz360X-Signature": string;
+                /** @description Deduplicate on this */
+                "Biz360X-Event-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Event"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. Non-2xx is retried with backoff for 72 h. */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook_engagement_declined: {
         parameters: {
             query?: never;
             header: {

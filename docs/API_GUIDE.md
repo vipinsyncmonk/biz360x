@@ -63,7 +63,7 @@ This guide covers four things: how the system is put together, the rules every e
 
 ### Error codes
 
-`validation_failed` · `not_found` · `conflict` · `precondition_failed` · `idempotency_conflict` · `permission_denied` · `two_person_rule` · `approval_required` · `period_locked` · `journal_unbalanced` · `tax_split_mismatch` · `b2b_needs_gstin` · `note_needs_original` · `number_too_long` · `over_settlement` · `msme_terms_exceeded` · `insufficient_stock` · `item_not_tracked` · `leave_balance_short` · `onboarding_incomplete` · `rule_version_overlap` · `portal_session_expired` · `portal_rejected` · `rate_limited` · `unauthorized` · `mfa_required` · `internal`
+`validation_failed` · `not_found` · `conflict` · `precondition_failed` · `idempotency_conflict` · `permission_denied` · `two_person_rule` · `approval_required` · `period_locked` · `journal_unbalanced` · `tax_split_mismatch` · `b2b_needs_gstin` · `note_needs_original` · `number_too_long` · `over_settlement` · `msme_terms_exceeded` · `insufficient_stock` · `item_not_tracked` · `leave_balance_short` · `onboarding_incomplete` · `audit_read_only` · `independence_conflict` · `rule_version_overlap` · `portal_session_expired` · `portal_rejected` · `rate_limited` · `unauthorized` · `mfa_required` · `internal`
 
 Most domain errors are raised by the database itself. The API maps constraint names to codes in one table (`CONSTRAINT_CODES` in `server/app/core.py`), so the rule and its error message can never drift apart.
 
@@ -89,7 +89,7 @@ A team member holds a **level for each module** (`memberships.scopes`, migration
 - **`role` and `modules`** are still returned and still accepted on `POST /members` as the earlier way to invite. A database trigger keeps them in step with the scopes: the role is `owner`, or the highest level held (`approver` for approve or file, `maker` for write, `viewer` below).
 - **Approvals and tasks** are never granted on their own: a person works with them at their highest level.
 - **Home.** `/me` returns each company's `scopes`, `title` and `home` (`leadership`, `finance`, `people`, `general`, or `practitioner` for someone who comes in through a firm). The web app filters the sidebar by the modules a person can open and puts the home's numbers above the shared sections; a section a person has no scope for is not asked for. The server stays the authority: hiding a link is not a permission.
-- **Advisors.** An advisor grant maps each module to a level: `read`, `comment` (read), `prepare` (read + write) or `certify` (read + write + file).
+- **Practitioners.** An engagement maps each module to a level: `read`, `comment` (read), `prepare` (read + write) or `certify` (read + write + file). It never includes settings or an approving level, and it gives access only once the practitioner has accepted ("Engaging a practitioner" below).
 - **Two-person rule.** It is enforced in the database: whoever requested an approval can never decide it, whatever their role.
 - **API keys.** A key (`bzx_live_…`, shown once, stored as a hash) acts as a named service user, so the same row-level security applies, and it is limited to its listed `module:read|write|use` permissions. It can never approve, file or pay, and cannot create keys. See `docs/SECURITY.md`.
 
@@ -204,6 +204,24 @@ With no row for a kind, nothing changes: the work is unowned and any approver ma
 
 Not built: naming a practitioner or a firm's staff in the matrix (it comes with engagements), a `review` or `file` step, reminders and escalation when work sits, reassigning in bulk when someone is away, comments on a task, and the queue on the phone layout's own tab.
 
+### Engaging a practitioner
+
+A CA, CS, auditor or consultant works for a company through an **engagement** (`advisor_grants`, migration 39; `routes_settings.py`, `routes_engagements.py`). Only an owner can engage one or end an engagement.
+
+1. `POST /advisor-grants` with the name, `invite_email`, a `service` (bookkeeping, GST, TDS, PF and ESI, payroll, secretarial, trade, statutory audit, tax audit, internal audit, virtual CFO, legal) and either a practitioner `preset` or `scopes` in the practitioner's words (`read`, `comment`, `prepare`, `certify`). Settings can never be given, and neither can an approving level: approving and paying stay with the company. The engagement starts as `invited`. Without an email it is only a record.
+2. The person invited cannot see the company yet. `GET /me/engagements` lists their invitations (read through a database function that reaches exactly those rows) and the firms they are a partner or admin of.
+3. `POST /me/engagements/{id}/accept` starts access. Accepting as oneself makes it a personal engagement; passing `organization_id` makes it the firm's. `POST /me/engagements/{id}/decline` refuses it. Both are written to the audit log by the database, because someone who declines never gets to see the company.
+4. `DELETE /advisor-grants/{id}` withdraws an invitation or ends the engagement at once. An engagement past its `expires_on` gives no access.
+
+What a practitioner may do is checked in `require()` from `app.my_grant_scopes`: the engagements that reach them, as a person or through their firm. `/me` shows such a company with role `advisor`, home `practitioner` and the service as the title.
+
+- **Audit mode.** A statutory, tax or internal audit engagement can hold only `read` and `comment`, and must have an end date. It is a table constraint (400 `audit_read_only`), not a convention, and an auditor is never offered in "who does what".
+- **Independence.** The same firm or person cannot hold the statutory audit and the bookkeeping, internal audit or virtual CFO engagement of one company for the same year (a trigger; 409 `independence_conflict`, at invitation or at acceptance, whichever first knows who the practitioner is). Which services an auditor may not provide is set by the Companies Act and the ICAI rules: this list is a starter rule for a CA to confirm, and it does not catch a partner taking one engagement as a person and the other through their firm.
+- **A firm's staff see only the clients they are assigned to** (`firm_client_staff`; `GET /organizations/{id}/client-staff`, `PUT /organizations/{id}/client-staff/{entityId}`). Partners and admins see every client, whether it engaged the firm or the firm set it up. Only a partner or admin assigns, and someone taken off a client stops seeing it at once. Staff who existed when migration 39 ran were assigned to every client their firm had, so nobody lost access; staff added later see nothing until assigned. A business group's own people are not affected.
+- **Work.** A practitioner engaged as a person can be named to prepare a kind of work and be given tasks, and takes on what their preset usually prepares when they accept (a GST consultant prepares GST). A firm's engagement names nobody: the firm routes its own staff.
+
+Not built: sending the invitation by email, the engagement letter and UDIN on certificates, verifying the membership number, fees and billing, a practitioner asking a company for an engagement, and the directory (phase 7 of `docs/ROLES_DESIGN.md`). Module limits are still checked in the API, not in row-level security: that is the next phase and should land before practitioners outside a company's trusted circle are let in.
+
 ### Copilot
 
 1. `POST /copilot/threads` starts a conversation (only its owner can see it). `POST /copilot/threads/{id}/messages` returns the answer as JSON, or with `Accept: text/event-stream` streams `token`, `citation`, `action` and `done` events.
@@ -223,7 +241,7 @@ Not built: naming a practitioner or a firm's staff in the matrix (it comes with 
 |---|---|
 | Sign in / Create workspace | `POST /auth/otp`, `POST /auth/signup`, `POST /auth/token`, `POST /onboarding/lookups` |
 | Onboarding | `GET /onboarding/lookups/{id}`, `POST /onboarding/preview`, `POST /onboarding/workspaces` |
-| Command Center | `GET /me/work`, `POST /tasks`, `PATCH /tasks/{id}`, `GET /compliance/summary`, `GET /approvals?assigned_to=me`, `GET /compliance/calendar`, `GET /compliance/standing`, `GET /finance/summary`, `GET /audit-log?limit=5`, `/events` |
+| Command Center | `GET /me/engagements`, `POST /me/engagements/{id}/accept`, `POST /me/engagements/{id}/decline`, `GET /me/work`, `POST /tasks`, `PATCH /tasks/{id}`, `GET /compliance/summary`, `GET /approvals?assigned_to=me`, `GET /compliance/calendar`, `GET /compliance/standing`, `GET /finance/summary`, `GET /audit-log?limit=5`, `/events` |
 | Compliance Engine | `GET /obligations`, `GET /obligations/{id}`, `GET /compliance/calendar`, `GET /compliance/thresholds`, `GET /notices`, `POST /compliance/engine-runs` |
 | Exports & imports | `GET /trade/summary`, `GET /shipping-bills`, `POST /shipping-bills`, `GET /shipping-bills/{id}`, `PATCH /shipping-bills/{id}`, `POST /shipping-bills/{id}/realisations`, `GET /bills-of-entry`, `POST /bills-of-entry`, `POST /bills-of-entry/read`, `PATCH /bills-of-entry/{id}`, `GET /sales-documents?doc_type=export_invoice`, `POST /registrations` (the LUT and IEC) |
 | Startup workspace | `GET /cap-table` (`scenario=current` or `post_round&round_id=…`), `POST /share-classes`, `POST /shareholders`, `GET /funding-rounds`, `POST /funding-rounds`, `PATCH /funding-rounds/{id}` (steps come with the round), `POST /allotments`, `GET /esop-pools`, `POST /esop-pools`, `GET /esop-grants`, `POST /esop-grants`, `GET /benefits`, `POST /benefits/check`, `PUT /benefits/{scheme_code}`, `GET /finance/summary`, `GET /obligations` |
@@ -238,7 +256,7 @@ Not built: naming a practitioner or a firm's staff in the matrix (it comes with 
 | GST & Tax | `GET /gst-returns?period=…`, `GET /itc-matches`, `GET /itc-matches/summary`, `POST /itc-matches/{id}/resolve`, `POST /itc-matches/remind-suppliers`, `POST /gst-returns/{id}/compute`, `POST /gst-returns/{id}/file`, `POST /gst/inward-sync`, `GET /gst/ledger-balances`, `GET /tds-deductions`, `GET /advance-tax` |
 | Legal & Contracts | `GET /contracts?notice_within_days=30`, `GET /contracts/{id}`, `POST …/extract-terms`, `POST …/notices`, `GET /signature-requests`, `GET /contract-templates`, `GET /documents?q=…`, `GET /documents?expiring_within_days=90`, `GET /document-requests` |
 | Document Vault | `GET /documents?q=…&folder=…`, `POST /documents` (signed upload), `GET /documents?expiring_within_days=90`, `GET /document-requests`, `POST /document-requests/{id}/share`, `GET /data-rooms`, `POST /data-rooms`, `PATCH /data-rooms/{id}`, `DELETE /data-rooms/{id}` |
-| Group view | `GET /organizations/{id}/entities`, `GET /organizations/{id}/workload`, `POST /organizations/{id}/client-reminders` |
+| Group view | `GET /organizations/{id}/entities`, `GET /organizations/{id}/workload`, `GET /organizations/{id}/client-staff`, `PUT /organizations/{id}/client-staff/{entityId}`, `POST /organizations/{id}/client-reminders` |
 | Settings | `/members` (+ `PATCH /members/{id}`), `GET /role-presets`, `GET /responsibilities`, `PUT /responsibilities`, `/advisor-grants`, `/dsc-certificates`, `/portal-connections` (+ `/portal-connections/{id}/renew`), `/me/notification-preferences`, `/webhooks` (+ `/webhooks/{id}/test`, `/webhooks/{id}/deliveries`), `/api-keys`, `/audit-log`, `/audit-log/verify` |
 | Sales & Billing | `GET /sales/summary`, `GET /einvoice-status` (E-invoicing card), `POST /facts` (declare a year's turnover), `GET /sales-documents?payment_status=…`, `GET /dunning-sequences`, `GET /recurring-invoices` |
 | New GST invoice | `POST /sales-documents/preview` (every change), `POST /sales-documents`, `POST /sales-documents/{id}/issue`, `GET /sales-documents/{id}/pdf` (View PDF, Download PDF) |

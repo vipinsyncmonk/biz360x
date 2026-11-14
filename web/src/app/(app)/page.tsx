@@ -9,6 +9,7 @@ import { canOpen, homeTiles, levelOf, roleText } from "@/lib/roles";
 import { useSession } from "@/lib/session";
 import { HomeTiles } from "@/components/RoleForms";
 import { WorkQueue } from "@/components/WorkPanels";
+import { Invitations } from "@/components/EngagementPanels";
 import { ErrorNote, Icon, Loading, Pill } from "@/components/ui";
 
 const SUBJECT_ICON: Record<string, string> = {
@@ -23,7 +24,7 @@ const SUBJECT_LABEL: Record<string, string> = {
 };
 
 export default function Today() {
-  const { me, entity } = useSession();
+  const { me, entity, reload } = useSession();
   const id = entity?.id ?? null;
   const today = new Date();
   const seesCompliance = canOpen(entity, "compliance");
@@ -55,6 +56,8 @@ export default function Today() {
             {obls.loading || approvals.loading ? "" : k.needsAction + need === 0 ? "Nothing needs you today." : `${k.needsAction + need} ${k.needsAction + need === 1 ? "thing needs" : "things need"} you.`}
           </h1>
         </div>
+
+        <Invitations onAnswered={(eid) => void reload(eid ?? undefined)} />
 
         {!entity ? (
           <div className="card card-pad">You are not a member of any workspace yet. Ask an owner to invite you.</div>
