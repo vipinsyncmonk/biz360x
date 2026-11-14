@@ -126,6 +126,8 @@ def _decide(entity_id, approval_id, p, body, outcome, idem_key):
         if ar["subject"] == "obligation":
             cur.execute("UPDATE obligations SET status = %s, approver_user_id = app.current_user_id() WHERE id = %s",
                         ("ready_to_file" if outcome == "approved" else "in_preparation", ar["subject_id"]))
+        if ar["subject"] == "payroll_run":
+            require(cur, entity_id, "payroll:approve")       # the payslips are read to post the journal: an approver who cannot see pay cannot decide it
         if ar["subject"] == "payroll_run" and outcome == "approved":
             from .routes_payroll import on_run_approved
             on_run_approved(cur, entity_id, ar["subject_id"])

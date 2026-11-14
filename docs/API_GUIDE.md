@@ -220,7 +220,28 @@ What a practitioner may do is checked in `require()` from `app.my_grant_scopes`:
 - **A firm's staff see only the clients they are assigned to** (`firm_client_staff`; `GET /organizations/{id}/client-staff`, `PUT /organizations/{id}/client-staff/{entityId}`). Partners and admins see every client, whether it engaged the firm or the firm set it up. Only a partner or admin assigns, and someone taken off a client stops seeing it at once. Staff who existed when migration 39 ran were assigned to every client their firm had, so nobody lost access; staff added later see nothing until assigned. A business group's own people are not affected.
 - **Work.** A practitioner engaged as a person can be named to prepare a kind of work and be given tasks, and takes on what their preset usually prepares when they accept (a GST consultant prepares GST). A firm's engagement names nobody: the firm routes its own staff.
 
-Not built: sending the invitation by email, the engagement letter and UDIN on certificates, verifying the membership number, fees and billing, a practitioner asking a company for an engagement, and the directory (phase 7 of `docs/ROLES_DESIGN.md`). Module limits are still checked in the API, not in row-level security: that is the next phase and should land before practitioners outside a company's trusted circle are let in.
+Not built: sending the invitation by email, the engagement letter and UDIN on certificates, verifying the membership number, fees and billing, a practitioner asking a company for an engagement, and the directory (phase 7 of `docs/ROLES_DESIGN.md`). The confidential modules (pay and people, the cap table, bank lines) are also enforced by the database: see the next section.
+
+### Module confidentiality in the database
+
+The company a person can see is decided by row-level security. Which **modules** they can open was, until migration 40, decided only by `require()` in each handler. For the modules where a leak hurts people, the database now applies the module too (`db/40_module_confidentiality.sql`), so a handler that forgets the check, or a join into another module's table, returns nothing.
+
+| Tables | Open to someone who holds |
+|---|---|
+| `employees`, `salary_structures`, `salary_components`, `payslips`, `payslip_lines`, `payroll_run_inputs`, `leave_requests`, `leave_adjustments`, `onboarding_tasks`, `hr_policy_acks`, `gratuity_valuations`, `statutory_bonus` | `payroll` or `hr` |
+| `payroll_runs` (the month, status and totals; no person) | `payroll`, `hr` or `finance` |
+| `shareholders`, `share_classes`, `funding_rounds`, `share_allotments`, `share_transfers`, `esop_pools`, `esop_grants`, `esop_exercises` | `capital` |
+| `bank_transactions`, `bank_matches` (each salary paid is a line) | `finance` |
+| `documents` in the `payroll` folder, and their `document_links` | `payroll` or `hr` |
+
+- **Any level opens the module**, as in the API: a member through `memberships.scopes` (`*` counts), a practitioner through an active engagement that reaches them, an API key only for the modules its permission list names. `app.module_entity_ids('payroll', 'hr')` returns the companies where the caller holds one of them; `app.can(entity, module, level)` answers for one level.
+- **The policies are restrictive and cover writes as well as reads** (`module_access`). A read-only policy is not enough: PostgreSQL applies it to an `UPDATE` or `DELETE` only when the statement reads a column, so a person who could not see a table could still empty it. The *level* (write, approve, file) is still `require()`'s job.
+- **When you add a table that holds pay, personal HR data, the cap table or bank lines, give it the policy** in the same migration. A child table read through its parent (`via_parent`) follows the parent. If the parent is more open than the child should be (a payroll run and its payslips), write the child's own policy as `fk IN (SELECT id FROM parent WHERE entity_id IN (SELECT app.module_entity_ids(...)))`. Do not write it as a second `EXISTS`: two `EXISTS` policies on one table made reading 20,000 payslips take about 160 ms instead of 10 ms on PostgreSQL 16.
+- **Do not read these tables from another module's handler.** The caller may not hold the module, and the query then silently returns nothing (a PF challan of zero). Three narrow functions hand over the little that is needed: `app.payroll_statutory_total(entity, month, 'pf' | 'esi' | 'pt')` for a challan, `app.payslips_with_net_pay(run, amount)` for matching a salary on the bank statement, and `app.employee_names(entity)` for the ESOP register. Add another in the same style when a new need comes up; never widen a policy for it.
+- **Consequences in the API.** Deciding a payroll-run approval needs `payroll:approve` as well as `approvals:approve`, because the payslips are read to post the journal. Filing a document into the vault's `payroll` folder, or moving one there, needs `payroll` or `hr`. A person with only `documents` does not see that folder.
+- **Workers** run as `biz_worker`, which is not subject to row-level security, so nothing changes for them.
+
+Cost, measured on 20,000 payslips in one run: the run's payslips 8 ms to 16 ms, the salary register join 17 ms to 36 ms, the employee list 1.7 ms to 2.6 ms. Not covered: `bank_accounts` (the account appears on invoices), `tds_deductions` on salary (it belongs to `tds`), the other vault folders, and the remaining modules, which the API alone still limits. Tests: `server/tests/test_module_rls.py` reads every table on a raw connection as `biz_app`.
 
 ### Copilot
 

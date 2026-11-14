@@ -10,7 +10,7 @@ from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from . import storage
-from .core import ApiError, Auth, Principal, audit, require, tx
+from .core import ApiError, Auth, Principal, allowed, audit, require, tx
 from .routes_orders import js, offset_of, page
 
 router = APIRouter()
@@ -66,6 +66,12 @@ class LinkIn(BaseModel):
     role: Literal["attachment", "acknowledgement", "signed_copy", "draft", "evidence", "certificate"] = "attachment"
 
 
+def _folder_allowed(cur, entity_id, folder: str) -> None:
+    """The payroll folder is read only by people who hold payroll or HR (the database enforces it, migration 40), so only they file into it."""
+    if folder == "payroll" and not (allowed(cur, entity_id, "payroll:read") or allowed(cur, entity_id, "hr:read")):
+        raise ApiError(403, "permission_denied", "The payroll folder is open only to people with payroll or HR access")
+
+
 class DocumentIn(BaseModel):
     folder: Literal["incorporation", "tax", "mca", "payroll", "contracts", "board", "bank_finance", "sales", "purchases", "licences", "other"]
     title: str = Field(min_length=1, max_length=200)
@@ -85,6 +91,7 @@ def create_document(entity_id: uuid.UUID, body: DocumentIn, response: Response, 
     sha = body.sha256.lower()
     with tx(p.user_id) as cur:
         require(cur, entity_id, "documents:write")
+        _folder_allowed(cur, entity_id, body.folder)
         cur.execute("SELECT id, uploaded_at, storage_key FROM documents WHERE entity_id = %s AND sha256 = %s", (entity_id, sha))
         dup = cur.fetchone()
         if dup:                                                          # same bytes already registered: return that document
@@ -143,6 +150,7 @@ def update_document(entity_id: uuid.UUID, document_id: uuid.UUID, body: dict, p:
         new = {k: body.get(k, d[k]) for k in ("folder", "title", "period_label", "valid_until")}
         if new["folder"] not in FOLDERS or not str(new["title"]).strip():
             raise ApiError(400, "validation_failed", "Unknown folder or empty title")
+        _folder_allowed(cur, entity_id, new["folder"])
         try:
             new["valid_until"] = dt.date.fromisoformat(new["valid_until"]) if isinstance(new["valid_until"], str) else new["valid_until"]
         except ValueError:

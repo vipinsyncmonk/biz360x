@@ -329,7 +329,7 @@ class GrantIn(BaseModel):
 
 
 GR_SQL = """SELECT g.id, g.pool_id, g.employee_id, e.full_name AS employee_name, g.granted_on, g.options, g.strike_price::text AS strike_price, g.cliff_months, g.vesting_months, g.vesting_frequency, g.status
-              FROM esop_grants g JOIN employees e ON e.id = g.employee_id JOIN esop_pools p ON p.id = g.pool_id"""
+              FROM esop_grants g JOIN esop_pools p ON p.id = g.pool_id JOIN app.employee_names(p.entity_id) e ON e.id = g.employee_id"""
 
 
 def _grant_out(g: dict, today: dt.date) -> dict:
@@ -344,7 +344,7 @@ def create_grant(entity_id: uuid.UUID, body: GrantIn, p: Principal = Auth):
         if body.cliff_months > body.vesting_months:
             raise ApiError(400, "validation_failed", "The cliff cannot be longer than the vesting period", errors=[{"field": "cliff_months", "message": "must not exceed vesting_months"}])
         pool = _pool(cur, entity_id, body.pool_id)
-        cur.execute("SELECT 1 FROM employees WHERE id = %s AND entity_id = %s", (body.employee_id, entity_id))
+        cur.execute("SELECT 1 FROM app.employee_names(%s) WHERE id = %s", (entity_id, body.employee_id))    # names only: the cap table does not read HR
         if not cur.fetchone():
             raise ApiError(400, "validation_failed", "Unknown employee", errors=[{"field": "employee_id", "message": "not an employee of this company"}])
         if body.options > pool["free"]:

@@ -141,7 +141,7 @@ def document_for(cur, entity_id, t: dict, ws: list[str]) -> dict | None:
             best = {"kind": "tax_challan", "id": c["id"], "conf": Decimal("0.90"), "rule": "challan_amount"}
     if best:
         return best
-    cur.execute("""SELECT r.id, (SELECT count(*) FROM payslips p2 WHERE p2.run_id = r.id AND p2.net_pay = %s) AS slips,
+    cur.execute("""SELECT r.id, app.payslips_with_net_pay(r.id, %s) AS slips,
                           (SELECT count(*) FROM bank_matches m WHERE m.target_kind = 'payroll_run' AND m.target_id = r.id AND m.amount = %s AND m.status IN ('suggested', 'accepted')) AS used
                      FROM payroll_runs r WHERE r.entity_id = %s AND r.status IN ('paid', 'statutory_done') AND r.paid_on BETWEEN %s AND %s
                     ORDER BY abs(r.paid_on - %s) LIMIT 5""",
