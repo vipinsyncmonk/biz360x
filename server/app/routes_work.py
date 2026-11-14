@@ -40,8 +40,16 @@ class MatrixIn(BaseModel):
 def _people(cur, entity_id) -> list[dict]:
     cur.execute("""SELECT m.user_id, u.full_name, m.title, m.scopes FROM memberships m JOIN users u ON u.id = m.user_id
                     WHERE m.entity_id = %s AND m.revoked_at IS NULL AND u.auth_provider <> 'service' ORDER BY u.full_name""", (entity_id,))
-    return [{"user_id": str(r["user_id"]), "name": r["full_name"], "title": r["title"],
-             "approves": [k for k in routing.KINDS if roles.allows(r["scopes"], routing.approve_module(k), "approve")]} for r in cur.fetchall()]
+    out = [{"user_id": str(r["user_id"]), "name": r["full_name"], "title": r["title"], "practitioner": False,
+            "approves": [k for k in routing.KINDS if roles.allows(r["scopes"], routing.approve_module(k), "approve")]} for r in cur.fetchall()]
+    # practitioners engaged as a person can be named to prepare; approving stays with the company. A firm routes its own staff.
+    cur.execute("""SELECT DISTINCT ON (g.practitioner_user_id) g.practitioner_user_id AS user_id, u.full_name, g.service FROM advisor_grants g JOIN users u ON u.id = g.practitioner_user_id
+                    WHERE g.entity_id = %s AND g.status = 'active' AND (g.expires_on IS NULL OR g.expires_on >= current_date)
+                      AND (g.service IS NULL OR g.service <> ALL(%s)) ORDER BY g.practitioner_user_id, g.created_at""", (entity_id, list(roles.AUDIT_SERVICES)))
+    seen = {p["user_id"] for p in out}
+    out += [{"user_id": str(r["user_id"]), "name": r["full_name"], "title": roles.SERVICES.get(r["service"], "Practitioner"), "practitioner": True, "approves": []}
+            for r in cur.fetchall() if str(r["user_id"]) not in seen]
+    return out
 
 
 def _matrix(cur, entity_id) -> dict:
@@ -116,7 +124,7 @@ def put_responsibilities(entity_id: uuid.UUID, body: MatrixIn, p: Principal = Au
         for i, s in enumerate(body.data):
             who = people.get(str(s.user_id))
             if not who:
-                raise _bad(f"data.{i}.user_id", "That person is not a member of this company")
+                raise _bad(f"data.{i}.user_id", "That person is not a member of this company or a practitioner it has engaged")
             if s.step == "approve" and s.work_kind not in who["approves"]:
                 where = roles.MODULE_LABELS.get(routing.approve_module(s.work_kind), "any module")
                 raise _bad(f"data.{i}.user_id", f"{who['name']} cannot approve this: give them an approving level on {where} first")
@@ -237,9 +245,8 @@ def _task(cur, entity_id, task_id, *, lock=False) -> dict:
 def _check_assignee(cur, entity_id, user_id) -> None:
     if user_id is None:
         return
-    cur.execute("SELECT 1 FROM memberships WHERE entity_id = %s AND user_id = %s AND revoked_at IS NULL", (entity_id, user_id))
-    if not cur.fetchone():
-        raise _bad("assignee_id", "That person is not a member of this company")
+    if str(user_id) not in {p["user_id"] for p in _people(cur, entity_id)}:
+        raise _bad("assignee_id", "That person is not a member of this company or a practitioner it has engaged")
 
 
 @router.get(E + "/tasks", tags=["Approvals"])

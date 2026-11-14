@@ -11,6 +11,7 @@ import {
 } from "@/lib/onboarding";
 import { orgFromSearch } from "@/lib/group";
 import { useSession } from "@/lib/session";
+import { Invitations } from "@/components/EngagementPanels";
 import { ErrorNote, Logo } from "@/components/ui";
 
 type Lookup = components["schemas"]["RegistryLookup"];
@@ -153,6 +154,8 @@ export default function Onboarding() {
       </header>
 
       <main className="ob">
+        {/* someone invited by a company has no workspace of their own: accepting takes them to that company instead of setting one up */}
+        <Invitations onAnswered={(eid) => { if (eid) void reload(eid).then(() => router.push("/")); }} />
         {step === 1 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 56, alignItems: "flex-start" }}>
             <form style={{ flex: "3 1 480px", minWidth: 0, display: "flex", flexDirection: "column", gap: 24 }} onSubmit={(e) => { e.preventDefault(); void findCompany(); }}>

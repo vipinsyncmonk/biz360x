@@ -28,6 +28,12 @@ PRESET_WORK: dict[str, list[tuple[str, str]]] = {
     "cfo": [("gst", "approve"), ("tds", "approve"), ("income_tax", "approve"), ("other_filing", "approve"), ("vendor_payment", "approve"), ("payroll_run", "approve")],
     "hr_manager": [("pf_esi", "prepare"), ("professional_tax", "prepare"), ("leave", "approve")],
     "coo": [("mca", "approve")],
+    # practitioners only ever prepare: approving is the company's decision
+    "chartered_accountant": [("gst", "prepare"), ("tds", "prepare"), ("income_tax", "prepare")],
+    "company_secretary": [("mca", "prepare")],
+    "gst_consultant": [("gst", "prepare")],
+    "tds_consultant": [("tds", "prepare")],
+    "pf_esi_consultant": [("pf_esi", "prepare"), ("professional_tax", "prepare")],
 }
 # to be named the approver of these, a person must be able to approve in the module the decision is made in
 APPROVE_MODULE = {"leave": "hr", "payroll_run": "payroll", "vendor_payment": "purchases"}

@@ -295,6 +295,101 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
+  /me/engagements:
+    get:
+      tags:
+      - Me
+      operationId: getMyEngagements
+      summary: Invitations waiting for me, and the firms I could accept one for
+      description: An invited person cannot see the company until they accept; this is where they see the invitation.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyEngagements'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /me/engagements/{id}/accept:
+    post:
+      tags:
+      - Me
+      operationId: acceptEngagement
+      summary: Accept an invitation, as myself or for my firm
+      description: 'Access starts now. Accepting for a firm makes it the firm''s engagement: partners see the client, staff
+        once they are assigned. `independence_conflict` (409) when it would break the audit rule.'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptEngagement'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EngagementAnswer'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /me/engagements/{id}/decline:
+    post:
+      tags:
+      - Me
+      operationId: declineEngagement
+      summary: Decline an invitation
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EngagementAnswer'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /me/work:
     get:
       tags:
@@ -12473,6 +12568,73 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooMany'
+  /organizations/{id}/client-staff:
+    get:
+      tags:
+      - Organizations
+      operationId: getClientStaff
+      summary: The firm's clients and which staff work on each
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientStaff'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /organizations/{id}/client-staff/{entityId}:
+    put:
+      tags:
+      - Organizations
+      operationId: setClientStaff
+      summary: Say which staff work on a client
+      description: Only a partner or admin of the firm can. Staff see only the clients they are assigned to; someone taken
+        off a client stops seeing it at once.
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: entityId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientStaffIn'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientStaff'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
   /organizations/{id}/workload:
     get:
       tags:
@@ -13412,6 +13574,87 @@ webhooks:
       responses:
         2XX:
           description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  engagement.invited:
+    post:
+      summary: A practitioner was invited to work for the company
+      operationId: webhook_engagement_invited
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  engagement.accepted:
+    post:
+      summary: A practitioner accepted; their access has started
+      operationId: webhook_engagement_accepted
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
+  engagement.declined:
+    post:
+      summary: A practitioner declined an invitation
+      operationId: webhook_engagement_declined
+      parameters:
+      - name: Biz360X-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          examples:
+          - t=1793840000,v1=5257a869e7…
+        description: HMAC-SHA256 of `t.body` with the endpoint secret. Reject if |now − t| > 300 s.
+      - name: Biz360X-Event-Id
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Deduplicate on this
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        2XX:
+          description: Acknowledged. Non-2xx is retried with backoff for 72 h.
   sales_document.irn_generated:
     post:
       summary: IRP returned the IRN and signed QR
@@ -14113,6 +14356,125 @@ components:
         href:
           type: string
           description: The screen in the web app where it is acted on
+    EngagementInvite:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+        entity_name:
+          type: string
+        advisor_name:
+          type: string
+        advisor_kind:
+          type: string
+        service:
+          oneOf:
+          - type: string
+            enum:
+            - bookkeeping
+            - gst
+            - tds
+            - pf_esi
+            - payroll
+            - secretarial
+            - trade
+            - statutory_audit
+            - tax_audit
+            - internal_audit
+            - virtual_cfo
+            - legal
+          - type: 'null'
+        service_label:
+          oneOf:
+          - type: string
+          - type: 'null'
+        scopes:
+          type: object
+          additionalProperties:
+            type: string
+            enum:
+            - read
+            - comment
+            - prepare
+            - certify
+          examples:
+          - gst: certify
+            sales: read
+          description: 'A level per module in the practitioner''s words. Never settings, and never an approving level: approvals
+            stay with the company.'
+        period_fy:
+          oneOf:
+          - type: string
+          - type: 'null'
+        expires_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        invited_by_name:
+          oneOf:
+          - type: string
+          - type: 'null'
+        audit:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    FirmRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    MyEngagements:
+      type: object
+      properties:
+        invitations:
+          type: array
+          items:
+            $ref: '#/components/schemas/EngagementInvite'
+        firms:
+          type: array
+          items:
+            $ref: '#/components/schemas/FirmRef'
+    EngagementAnswer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - active
+          - declined
+        entity_id:
+          type: string
+          format: uuid
+        accepted_for:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        work_taken_on:
+          type: integer
+          description: Kinds of work the practitioner now prepares, from their preset
+    AcceptEngagement:
+      type: object
+      properties:
+        organization_id:
+          oneOf:
+          - type: string
+            format: uuid
+            description: A firm I am a partner or admin of. Left out, I accept as myself
+          - type: 'null'
     MyWork:
       type: object
       properties:
@@ -14618,6 +14980,11 @@ components:
           oneOf:
           - type: string
           - type: 'null'
+        service:
+          oneOf:
+          - type: string
+            description: 'For a practitioner: the service the engagement is for'
+          - type: 'null'
         scopes:
           type: object
           additionalProperties:
@@ -14671,6 +15038,7 @@ components:
           oneOf:
           - type: string
             format: uuid
+            readOnly: true
           - type: 'null'
         advisor_name:
           type: string
@@ -14683,10 +15051,34 @@ components:
           - lender
           - investor
           - auditor
+          description: Taken from the preset when one is given
         invite_email:
           type: string
           format: email
           writeOnly: true
+          description: The person to invite. Access starts when they accept. Left out, the engagement is only a record.
+        service:
+          oneOf:
+          - type: string
+            enum:
+            - bookkeeping
+            - gst
+            - tds
+            - pf_esi
+            - payroll
+            - secretarial
+            - trade
+            - statutory_audit
+            - tax_audit
+            - internal_audit
+            - virtual_cfo
+            - legal
+          - type: 'null'
+        preset:
+          oneOf:
+          - type: string
+            description: A practitioner preset from GET /role-presets; explicit scopes win over it
+          - type: 'null'
         scopes:
           type: object
           additionalProperties:
@@ -14697,30 +15089,79 @@ components:
             - prepare
             - certify
           examples:
-          - finance: read
-            gst: prepare
-            mca_financial: certify
+          - gst: certify
+            sales: read
+          description: 'A level per module in the practitioner''s words. Never settings, and never an approving level: approvals
+            stay with the company.'
+        period_fy:
+          oneOf:
+          - $ref: '#/components/schemas/FyLabel'
+          - type: 'null'
+        membership_no:
+          oneOf:
+          - type: string
+            description: As the practitioner states it; not verified
+          - type: 'null'
         document_folders:
-          type: array
-          items:
-            type: string
+          oneOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
         expires_on:
           oneOf:
           - type: string
             format: date
+            description: Required for an audit engagement
           - type: 'null'
+        invited_email:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
+        practitioner_user_id:
+          oneOf:
+          - type: string
+            format: uuid
+            readOnly: true
+          - type: 'null'
+        accepted_at:
+          oneOf:
+          - type: string
+            format: date-time
+            readOnly: true
+          - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        party:
+          type: string
+          enum:
+          - person
+          - firm
+          - record
+          readOnly: true
+          description: Engaged as a person, through a firm, or only recorded
+        audit:
+          type: boolean
+          readOnly: true
+          description: 'An audit engagement: read and raise queries only'
         status:
           type: string
           enum:
           - invited
           - active
+          - declined
           - revoked
           - expired
           readOnly: true
       required:
       - advisor_name
-      - advisor_kind
-      - scopes
+      description: Only an owner can engage a practitioner or end an engagement. `audit_read_only` (400) for an audit engagement
+        with a writing level or no end date; `independence_conflict` (409) when the same practitioner would hold the statutory
+        audit and the books, the internal audit or the CFO role for the same year. Which services an auditor may not provide
+        is a starter rule for a CA to confirm.
     AdvisorGrantPage:
       type: object
       properties:
@@ -15597,6 +16038,9 @@ components:
           oneOf:
           - type: string
           - type: 'null'
+        practitioner:
+          type: boolean
+          description: Engaged from outside; can prepare, never approve
         approves:
           type: array
           items:
@@ -23259,6 +23703,64 @@ components:
           type: string
         filings_due:
           type: integer
+    FirmClient:
+      type: object
+      properties:
+        entity_id:
+          type: string
+          format: uuid
+        legal_name:
+          type: string
+        set_up_by_firm:
+          type: boolean
+        services:
+          type: array
+          items:
+            type: string
+        staff:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The staff assigned to this client
+    FirmPerson:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          type: string
+          enum:
+          - admin
+          - partner
+          - staff
+        sees_all:
+          type: boolean
+          description: Partners and admins see every client
+    ClientStaff:
+      type: object
+      properties:
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/FirmClient'
+        people:
+          type: array
+          items:
+            $ref: '#/components/schemas/FirmPerson'
+    ClientStaffIn:
+      type: object
+      properties:
+        user_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required:
+      - user_ids
     ChaseClients:
       type: object
       properties:

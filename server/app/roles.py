@@ -30,6 +30,45 @@ class ScopeError(ValueError):
     pass
 
 
+# ---- practitioners. An engagement is for a service; its scopes use the practitioner's words: read, comment, prepare, certify.
+GRANT_LEVELS = ("read", "comment", "prepare", "certify")
+GRANT_RANK = {level: i for i, level in enumerate(GRANT_LEVELS, 1)}
+GRANT_ACTIONS = {"read": {"read"}, "comment": {"read"}, "prepare": {"read", "write"}, "certify": {"read", "write", "file"}}
+# key -> label. The audit services can only read and raise queries.
+SERVICES = {"bookkeeping": "Bookkeeping and accounts", "gst": "GST", "tds": "TDS", "pf_esi": "PF and ESI", "payroll": "Payroll", "secretarial": "Company secretarial",
+            "trade": "Exports and imports", "statutory_audit": "Statutory audit", "tax_audit": "Tax audit", "internal_audit": "Internal audit", "virtual_cfo": "Virtual CFO", "legal": "Legal"}
+AUDIT_SERVICES = ("statutory_audit", "tax_audit", "internal_audit")
+
+
+def clean_grant_scopes(scopes: dict, service: str | None = None) -> dict:
+    """Check a practitioner's scopes: known modules, the practitioner's levels, never an approving one, and for an audit only reading
+    and raising queries."""
+    if not isinstance(scopes, dict) or not scopes:
+        raise ScopeError("Give at least one module")
+    for module, level in scopes.items():
+        if module not in MODULES or module in SHARED or module == "settings":
+            raise ScopeError(f"'{module}' cannot be given to a practitioner")
+        if level not in GRANT_LEVELS:
+            raise ScopeError(f"'{level}' is not a level for a practitioner; use read, comment, prepare or certify")
+        if service in AUDIT_SERVICES and level not in ("read", "comment"):
+            raise ScopeError("An auditor can only read and raise queries")
+    return dict(scopes)
+
+
+def merge_grant_scopes(all_scopes: list[dict]) -> dict:
+    """What a person holds through several engagements with one company: the highest level on each module."""
+    out: dict = {}
+    for scopes in all_scopes:
+        for module, level in scopes.items():
+            if GRANT_RANK.get(level, 0) > GRANT_RANK.get(out.get(module), 0):
+                out[module] = level
+    return out
+
+
+def grant_allows(scopes: dict, module: str, action: str) -> bool:
+    return action in GRANT_ACTIONS.get(scopes.get(module), set())
+
+
 def level_for(scopes: dict, module: str) -> str | None:
     """The level a member holds on a module: the one named for it, else the one for `*`. Approvals and tasks follow the member's
     highest level, as they always have."""
@@ -108,21 +147,21 @@ PRESETS: dict[str, dict] = {
                      "about": "Records leave, runs onboarding checklists and policies. Does not see salaries."},
     "viewer": {"kind": "member", "title": "Observer", "owner": False, "home": "general", "scopes": {"*": "read"},
                "about": "Reads everything, changes nothing: an investor or a board observer."},
-    "chartered_accountant": {"kind": "practitioner", "title": "Chartered accountant", "advisor_kind": "chartered_accountant",
+    "chartered_accountant": {"kind": "practitioner", "service": "bookkeeping", "title": "Chartered accountant", "advisor_kind": "chartered_accountant",
                              "scopes": {"finance": "certify", "gst": "certify", "tds": "certify", "sales": "read", "purchases": "read", "inventory": "read", "payroll": "read", "documents": "read"},
                              "about": "Keeps or reviews the books and files GST and TDS."},
-    "company_secretary": {"kind": "practitioner", "title": "Company secretary", "advisor_kind": "company_secretary",
+    "company_secretary": {"kind": "practitioner", "service": "secretarial", "title": "Company secretary", "advisor_kind": "company_secretary",
                           "scopes": {"legal": "certify", "capital": "certify", "compliance": "certify", "documents": "prepare"},
                           "about": "Board and shareholder records, MCA filings, the cap table."},
-    "gst_consultant": {"kind": "practitioner", "title": "GST consultant", "advisor_kind": "chartered_accountant",
+    "gst_consultant": {"kind": "practitioner", "service": "gst", "title": "GST consultant", "advisor_kind": "chartered_accountant",
                        "scopes": {"gst": "certify", "sales": "read", "purchases": "read", "parties": "read"}, "about": "Prepares and files GST returns from the sales and purchase registers."},
-    "pf_esi_consultant": {"kind": "practitioner", "title": "PF / ESI consultant", "advisor_kind": "chartered_accountant",
+    "pf_esi_consultant": {"kind": "practitioner", "service": "pf_esi", "title": "PF / ESI consultant", "advisor_kind": "chartered_accountant",
                           "scopes": {"payroll": "read", "compliance": "certify"}, "about": "Files PF and ESI from the payroll run. Sees wages, because the work needs them."},
-    "tds_consultant": {"kind": "practitioner", "title": "TDS consultant", "advisor_kind": "chartered_accountant",
+    "tds_consultant": {"kind": "practitioner", "service": "tds", "title": "TDS consultant", "advisor_kind": "chartered_accountant",
                        "scopes": {"tds": "certify", "purchases": "read", "payroll": "read"}, "about": "Deposits and returns for TDS on bills and salaries."},
-    "trade_consultant": {"kind": "practitioner", "title": "Export–import consultant", "advisor_kind": "chartered_accountant",
+    "trade_consultant": {"kind": "practitioner", "service": "trade", "title": "Export–import consultant", "advisor_kind": "chartered_accountant",
                          "scopes": {"trade": "prepare", "sales": "read", "purchases": "read"}, "about": "Shipping bills, bills of entry, LUT and export incentives."},
-    "statutory_auditor": {"kind": "practitioner", "title": "Statutory auditor", "advisor_kind": "auditor",
+    "statutory_auditor": {"kind": "practitioner", "service": "statutory_audit", "title": "Statutory auditor", "advisor_kind": "auditor",
                           "scopes": {"finance": "comment", "sales": "read", "purchases": "read", "inventory": "read", "gst": "read", "tds": "read", "payroll": "read", "legal": "read",
                                      "capital": "read", "documents": "read", "audit": "read"},
                           "about": "Reads the books and records and raises queries. Never prepares or files."},
@@ -131,4 +170,4 @@ PRESETS: dict[str, dict] = {
 
 def presets_out() -> list[dict]:
     return [{"key": k, "kind": p["kind"], "title": p["title"], "about": p["about"], "owner": p.get("owner", False), "home": p.get("home"),
-             "advisor_kind": p.get("advisor_kind"), "scopes": p["scopes"]} for k, p in PRESETS.items()]
+             "advisor_kind": p.get("advisor_kind"), "service": p.get("service"), "scopes": p["scopes"]} for k, p in PRESETS.items()]

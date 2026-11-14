@@ -6,7 +6,9 @@ import { useLoad } from "@/lib/hooks";
 import { PortalsSection, WebhooksSection } from "@/components/IntegrationsPanels";
 import { AccessEditor } from "@/components/RoleForms";
 import { WhoDoesWhat } from "@/components/WorkPanels";
-import { AddCertificate, CreateApiKey, GrantAdvisor } from "@/components/SettingsForms";
+import { EngagePractitioner } from "@/components/EngagementPanels";
+import { AddCertificate, CreateApiKey } from "@/components/SettingsForms";
+import { ENGAGEMENT_STATUS, engagementLine, type Engagement } from "@/lib/engagements";
 import { scopesText, type Presets } from "@/lib/roles";
 import { ApiKeyRow, CHANNELS, CONN_STATUS, Dsc, EVENTS, GRANT_STATUS, Grant, KIND_LABEL, Member, PORTAL_LABEL, PortalConn, Pref, ROLE_LABEL, SCOPE_LABEL, dscStatus, modulesLabel, permissionLabel, prefBody, prefKey, prefState } from "@/lib/settings";
 import { useSession } from "@/lib/session";
@@ -19,7 +21,7 @@ export default function Settings() {
   const { entity, me } = useSession();
   const id = entity?.id ?? null;
   const members = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/members", { params: { path: { entityId: id! } } })).data as unknown as Member[], id);
-  const grants = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/advisor-grants", { params: { path: { entityId: id! } } })).data as unknown as Grant[], id);
+  const grants = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/advisor-grants", { params: { path: { entityId: id! } } })).data as unknown as Engagement[], id);
   const dsc = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/dsc-certificates", { params: { path: { entityId: id! } } })).data as unknown as Dsc[], id);
   const prefs = useLoad(async () => unwrap(await api.GET("/me/notification-preferences")) as unknown as Pref[], id);
   const keys = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/api-keys", { params: { path: { entityId: id! } } })).data as unknown as ApiKeyRow[], id);
@@ -108,16 +110,18 @@ export default function Settings() {
       <div className="cols">
         <div className="col-main">
           <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><h2 style={{ margin: 0 }}>Advisors</h2><button type="button" className="btn" onClick={() => setPanel(panel === "grant" ? null : "grant")}>+ Add advisor</button></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><h2 style={{ margin: 0 }}>Practitioners</h2>
+              {isOwner && <button type="button" className="btn" aria-expanded={panel === "grant"} onClick={() => setPanel(panel === "grant" ? null : "grant")}>+ Engage practitioner</button>}</div>
+            <span className="t13">Your CA, CS, auditor and consultants. Each sees only what their engagement gives, from the day they accept until it ends.</span>
             <ErrorNote error={grants.error} />
-            {panel === "grant" && <GrantAdvisor entityId={id!} onDone={done(grants.reload)} onCancel={() => setPanel(null)} />}
-            {!grants.loading && (grants.data ?? []).length === 0 && <span className="t13">No advisor has access.</span>}
+            {panel === "grant" && <EngagePractitioner entityId={id!} presets={presets.data} onDone={done(grants.reload)} onCancel={() => setPanel(null)} />}
+            {!grants.loading && (grants.data ?? []).length === 0 && <span className="t13">No practitioner is engaged.</span>}
             {(grants.data ?? []).map((g) => {
-              const st = GRANT_STATUS[g.status] ?? { label: g.status, tone: "prep" as const };
+              const st = ENGAGEMENT_STATUS[g.status] ?? { label: g.status, tone: "prep" as const };
               return (
                 <div key={g.id} style={{ borderTop: "1px solid var(--line-2)", paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 }}>
-                  <span>{g.advisor_name}<span className="t13" style={{ display: "block" }}>{KIND_LABEL[g.advisor_kind] ?? g.advisor_kind} · {Object.entries(g.scopes).map(([k, v]) => `${k.replace(/_/g, " ")}: ${SCOPE_LABEL[v] ?? v}`).join(", ")}{g.expires_on ? ` · until ${shortDate(g.expires_on)}` : ""}</span></span>
-                  <span style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}><Pill tone={st.tone}>{st.label}</Pill>{(g.status === "active" || g.status === "invited") && <Confirm rowId={g.id} what="Revoke access" reload={grants.reload} path="advisor-grants" />}</span>
+                  <span>{g.advisor_name}{g.audit && <span className="t13"> · read only</span>}<span className="t13" style={{ display: "block" }}>{engagementLine(g, shortDate)}</span></span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}><Pill tone={st.tone}>{st.label}</Pill>{isOwner && (g.status === "active" || g.status === "invited") && <Confirm rowId={g.id} what={g.status === "invited" ? "Withdraw invitation" : "End engagement"} reload={grants.reload} path="advisor-grants" />}</span>
                 </div>
               );
             })}

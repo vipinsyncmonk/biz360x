@@ -57,6 +57,7 @@ def seed(db):
     gst, mca = rule(db, "authority_code = 'GSTN'"), rule(db, "authority_code = 'MCA'")
     obligation(db, E1, gst, "awaiting_client", TODAY + dt.timedelta(days=3), U_STAFF)
     obligation(db, E1, mca, "overdue", TODAY - dt.timedelta(days=5), U_STAFF, "FY 2025-26")
+    db.execute("INSERT INTO firm_client_staff (organization_id, entity_id, user_id) VALUES (%s, %s, %s)", (ORG, E1, U_STAFF))      # staff see the clients they are assigned to (migration 39)
     obligation(db, E2, gst, "filed", TODAY - dt.timedelta(days=10))
     yield
     db.execute("DELETE FROM obligations WHERE entity_id IN (%s, %s, %s)", (E1, E2, E3))

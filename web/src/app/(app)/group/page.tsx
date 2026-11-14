@@ -8,6 +8,7 @@ import { useLoad } from "@/lib/hooks";
 import { CELL_COLUMNS, CELL_LABEL, StaffLoad, Standing, byTrouble, groupCounts } from "@/lib/settings";
 import { useSession } from "@/lib/session";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
+import { ClientStaffPanel } from "@/components/EngagementPanels";
 
 type Filter = "all" | "waiting_on_client" | "overdue";
 const FILTERS: Array<[Filter, string]> = [["all", "All"], ["waiting_on_client", "Waiting on client"], ["overdue", "Overdue"]];
@@ -121,6 +122,8 @@ export default function Group() {
           </section>
         </aside>
       </div>
+
+      {orgId && org?.kind !== "business_group" && <ClientStaffPanel orgId={orgId} canAssign={org?.role === "admin" || org?.role === "partner"} />}
     </main>
   );
 }

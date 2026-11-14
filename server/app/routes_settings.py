@@ -45,10 +45,8 @@ def list_advisor_grants(entity_id: uuid.UUID, p: Principal = Auth, limit: int = 
     off = offset_of(cursor)
     with tx(p.user_id) as cur:
         require(cur, entity_id, "settings:read")
-        cur.execute("""SELECT id, advisor_org_id, advisor_name, advisor_kind, scopes, document_folders, expires_on,
-                              CASE WHEN status IN ('invited', 'active') AND expires_on < current_date THEN 'expired' ELSE status END AS status
-                         FROM advisor_grants WHERE entity_id = %s ORDER BY created_at DESC, id LIMIT %s OFFSET %s""", (entity_id, limit + 1, off))
-        return page(js(cur.fetchall()), limit, off)
+        cur.execute(GRANT_SQL + " WHERE g.entity_id = %s ORDER BY g.created_at DESC, g.id LIMIT %s OFFSET %s", (entity_id, limit + 1, off))
+        return page([_grant_out(g) for g in cur.fetchall()], limit, off)
 
 
 @router.get(E + "/dsc-certificates", tags=["Entities"])
@@ -228,41 +226,97 @@ def remove_member(entity_id: uuid.UUID, member_id: uuid.UUID, p: Principal = Aut
 
 class GrantIn(BaseModel):
     advisor_name: str = Field(min_length=1, max_length=120)
-    advisor_kind: Literal["chartered_accountant", "company_secretary", "counsel", "lender", "investor", "auditor"]
+    advisor_kind: Literal["chartered_accountant", "company_secretary", "counsel", "lender", "investor", "auditor"] | None = None
     invite_email: str | None = Field(default=None, pattern=EMAIL_PATTERN, max_length=254)
-    scopes: dict[str, Literal["read", "comment", "prepare", "certify"]] = Field(min_length=1)
+    service: Literal["bookkeeping", "gst", "tds", "pf_esi", "payroll", "secretarial", "trade", "statutory_audit", "tax_audit", "internal_audit", "virtual_cfo", "legal"] | None = None
+    preset: str | None = Field(default=None, pattern=r"^[a-z_]{1,40}$")
+    scopes: dict[str, str] | None = None
+    period_fy: str | None = Field(default=None, pattern=r"^[0-9]{4}-[0-9]{2}$")
+    membership_no: str | None = Field(default=None, min_length=3, max_length=20)
     document_folders: list[str] | None = None
     expires_on: dt.date | None = None
 
 
-GRANT_COLS = "id, advisor_org_id, advisor_name, advisor_kind, scopes, document_folders, expires_on, status"
+GRANT_SQL = """SELECT g.id, g.advisor_org_id, g.advisor_name, g.advisor_kind, g.service, g.preset, g.scopes, g.document_folders, g.period_fy::text AS period_fy, g.expires_on,
+                      g.invited_email::text AS invited_email, g.membership_no, g.practitioner_user_id, g.accepted_at, g.created_at,
+                      CASE WHEN g.status IN ('invited', 'active') AND g.expires_on < current_date THEN 'expired' ELSE g.status END AS status,
+                      CASE WHEN g.advisor_org_id IS NOT NULL THEN 'firm' WHEN g.practitioner_user_id IS NOT NULL THEN 'person' ELSE 'record' END AS party
+                 FROM advisor_grants g"""
+
+
+def _grant_out(g: dict) -> dict:
+    out = js(g)
+    out["audit"] = g["service"] in roles.AUDIT_SERVICES
+    return out
 
 
 @router.post(E + "/advisor-grants", status_code=201, tags=["Entities"])
 def create_advisor_grant(entity_id: uuid.UUID, body: GrantIn, p: Principal = Auth):
-    """Invites an advisor. The grant starts as `invited` and becomes active when their firm accepts."""
-    for k in body.scopes:
-        if not MODULE_RE.match(k):
-            raise ApiError(400, "validation_failed", f"'{k}' is not a module name")
-    if body.expires_on and body.expires_on <= dt.date.today():
-        raise ApiError(400, "validation_failed", "expires_on must be in the future")
+    """Engage a practitioner. With `invite_email` the person is invited and access starts when they accept, as themselves or for their
+    firm; without it the engagement is only a record. An audit engagement can only read and raise queries and needs an end date."""
+    base = None
+    if body.preset:
+        base = roles.PRESETS.get(body.preset)
+        if not base or base["kind"] != "practitioner":
+            raise _bad("preset", f"'{body.preset}' is not a preset for a practitioner")
+    service = body.service or (base["service"] if base else None)
+    kind = body.advisor_kind or (base["advisor_kind"] if base else None)
+    if not kind:
+        raise _bad("advisor_kind", "Say what kind of advisor this is, or choose a preset")
+    scopes = body.scopes if body.scopes is not None else (base["scopes"] if base else None)
+    if scopes is None:
+        raise _bad("scopes", "Choose a preset or give the modules this practitioner may use")
+    try:
+        scopes = roles.clean_grant_scopes(scopes, service)
+    except roles.ScopeError as e:
+        raise _bad("scopes", str(e))
+    today = dt.date.today()
+    if body.expires_on and body.expires_on <= today:
+        raise _bad("expires_on", "The engagement must end after today")
+    if service in roles.AUDIT_SERVICES and not body.expires_on:
+        raise _bad("expires_on", "An audit engagement needs an end date")
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "settings:write")
-        cur.execute(f"""INSERT INTO advisor_grants (entity_id, advisor_name, advisor_kind, scopes, document_folders, expires_on)
-                        VALUES (%s, %s, %s, %s, %s, %s) RETURNING {GRANT_COLS}""",
-                    (entity_id, body.advisor_name.strip(), body.advisor_kind, json.dumps(body.scopes), body.document_folders, body.expires_on))
-        g = cur.fetchone()
-        audit(cur, entity_id, "advisor_grant.created", "advisor_grants", g["id"], after={"advisor": body.advisor_name, "scopes": body.scopes})
-        return js(g)
+        require_owner(cur, entity_id)
+        user_id = None
+        if body.invite_email:
+            cur.execute("SELECT app.invite_practitioner(%s, %s, %s) AS id", (entity_id, str(body.invite_email).lower(), body.advisor_name))
+            user_id = cur.fetchone()["id"]
+            cur.execute("SELECT 1 FROM memberships WHERE entity_id = %s AND user_id = %s AND revoked_at IS NULL", (entity_id, user_id))
+            if cur.fetchone():
+                raise ApiError(409, "conflict", "That person is already on your team", "Change what they may do under People, or remove them there first.")
+            cur.execute("SELECT 1 FROM advisor_grants WHERE entity_id = %s AND practitioner_user_id = %s AND status IN ('invited', 'active') AND service IS NOT DISTINCT FROM %s",
+                        (entity_id, user_id, service))
+            if cur.fetchone():
+                raise ApiError(409, "conflict", "That practitioner is already engaged for this")
+        cur.execute("""INSERT INTO advisor_grants (entity_id, advisor_name, advisor_kind, service, preset, scopes, document_folders, period_fy, expires_on, invited_email,
+                                                   membership_no, practitioner_user_id, invited_by)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, app.current_user_id()) RETURNING id""",
+                    (entity_id, body.advisor_name.strip(), kind, service, body.preset if body.scopes is None else None, json.dumps(scopes), body.document_folders, body.period_fy,
+                     body.expires_on, str(body.invite_email).lower() if body.invite_email else None, body.membership_no, user_id))
+        gid = cur.fetchone()["id"]
+        cur.execute(GRANT_SQL + " WHERE g.id = %s", (gid,))
+        out = _grant_out(cur.fetchone())
+        audit(cur, entity_id, "advisor_grant.created", "advisor_grants", gid, after={"advisor": body.advisor_name, "service": service, "scopes": scopes, "invited": bool(user_id)})
+        if user_id:
+            emit(cur, entity_id, "engagement.invited", "advisor_grants", gid, {"advisor": body.advisor_name, "service": service})
+        return out
 
 
 @router.delete(E + "/advisor-grants/{grant_id}", status_code=204, tags=["Entities"])
 def revoke_advisor_grant(entity_id: uuid.UUID, grant_id: uuid.UUID, p: Principal = Auth):
+    """End an engagement, or withdraw an invitation. Access stops at once, and work the practitioner was named for goes back to unassigned."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "settings:write")
-        cur.execute("UPDATE advisor_grants SET status = 'revoked' WHERE id = %s AND entity_id = %s RETURNING id", (grant_id, entity_id))
-        if not cur.fetchone():
+        require_owner(cur, entity_id)
+        cur.execute("UPDATE advisor_grants SET status = 'revoked' WHERE id = %s AND entity_id = %s AND status IN ('invited', 'active') RETURNING practitioner_user_id",
+                    (grant_id, entity_id))
+        g = cur.fetchone()
+        if not g:
             raise ApiError(404, "not_found", "Not found")
+        if g["practitioner_user_id"]:
+            cur.execute("""DELETE FROM responsibilities r WHERE r.entity_id = %s AND r.user_id = %s
+                              AND NOT EXISTS (SELECT 1 FROM advisor_grants g WHERE g.entity_id = r.entity_id AND g.practitioner_user_id = r.user_id AND g.status = 'active')
+                              AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.entity_id = r.entity_id AND m.user_id = r.user_id AND m.revoked_at IS NULL)""",
+                        (entity_id, g["practitioner_user_id"]))
         audit(cur, entity_id, "advisor_grant.revoked", "advisor_grants", grant_id)
     return Response(status_code=204)
 

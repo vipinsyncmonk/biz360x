@@ -267,6 +267,20 @@ _op("put", "/me/notification-preferences", "Me", "replaceNotificationPreferences
     body=ARR(ref("NotificationPreference")), resp=ARR(ref("NotificationPreference")))
 schema("WorkItem", {"kind": ENUM("approval", "filing", "task", "leave", "document_request", "holiday"), "id": NULLABLE(UUID), "entity_id": UUID, "entity_name": S(), "title": S(),
                     "detail": NULLABLE(S()), "due_on": NULLABLE(DATE), "overdue": B(), "href": S(description="The screen in the web app where it is acted on")})
+SERVICE = ENUM("bookkeeping", "gst", "tds", "pf_esi", "payroll", "secretarial", "trade", "statutory_audit", "tax_audit", "internal_audit", "virtual_cfo", "legal")
+GRANT_SCOPES = {"type": "object", "additionalProperties": ENUM("read", "comment", "prepare", "certify"), "examples": [{"gst": "certify", "sales": "read"}],
+                "description": "A level per module in the practitioner's words. Never settings, and never an approving level: approvals stay with the company."}
+schema("EngagementInvite", {"id": UUID, "entity_id": UUID, "entity_name": S(), "advisor_name": S(), "advisor_kind": S(), "service": NULLABLE(SERVICE), "service_label": NULLABLE(S()),
+                            "scopes": GRANT_SCOPES, "period_fy": NULLABLE(S()), "expires_on": NULLABLE(DATE), "invited_by_name": NULLABLE(S()), "audit": B(), "created_at": RO_TS})
+_op("get", "/me/engagements", "Me", "getMyEngagements", "Invitations waiting for me, and the firms I could accept one for",
+    resp=schema("MyEngagements", {"invitations": ARR(ref("EngagementInvite")), "firms": ARR(schema("FirmRef", {"id": UUID, "name": S()}))}),
+    desc="An invited person cannot see the company until they accept; this is where they see the invitation.")
+ENGAGEMENT_ANSWER = schema("EngagementAnswer", {"id": UUID, "status": ENUM("active", "declined"), "entity_id": UUID, "accepted_for": NULLABLE(UUID),
+                                                "work_taken_on": I(description="Kinds of work the practitioner now prepares, from their preset")})
+action("/me/engagements/{id}/accept", "Me", "acceptEngagement", "Accept an invitation, as myself or for my firm", None, resp=ENGAGEMENT_ANSWER,
+       body=schema("AcceptEngagement", {"organization_id": NULLABLE({**UUID, "description": "A firm I am a partner or admin of. Left out, I accept as myself"})}),
+       desc="Access starts now. Accepting for a firm makes it the firm's engagement: partners see the client, staff once they are assigned. `independence_conflict` (409) when it would break the audit rule.")
+action("/me/engagements/{id}/decline", "Me", "declineEngagement", "Decline an invitation", None, resp=ENGAGEMENT_ANSWER)
 _op("get", "/me/work", "Me", "getMyWork", "Everything waiting on me, across my companies", params=[q("entity_id", UUID, "One company only"), P("Limit")],
     resp=schema("MyWork", {"data": ARR(ref("WorkItem")), "total": I(), "overdue": I(), "counts": {"type": "object", "additionalProperties": I()}}),
     desc="Tasks given to me, filings I own, approvals for me to decide, leave for me to decide and document requests I can answer; overdue first, then by due date.")
@@ -337,19 +351,26 @@ schema("Member", {"id": RO_UUID, "user_id": UUID, "email": S(format="email"), "f
                   "accepted_at": NULLABLE(RO_TS), "auth": S(readOnly=True, examples=["SSO · 2FA"])}, required=("email",),
        desc="Only an owner can invite a person, change their access or remove them (403 for anyone else).")
 schema("RolePreset", {"key": S(), "kind": ENUM("member", "practitioner"), "title": S(), "about": S(), "owner": B(), "home": NULLABLE(HOME), "advisor_kind": NULLABLE(S()),
+                      "service": NULLABLE(S(description="For a practitioner: the service the engagement is for")),
                       "scopes": {"type": "object", "additionalProperties": S(), "description": "For a member, levels on the member scale; for a practitioner, an advisor grant's levels (read, comment, prepare, certify)"}})
 _op("get", "/role-presets", "Entities", "listRolePresets", "The presets a person or a practitioner can start from", security=None,
     resp=schema("RolePresets", {"presets": ARR(ref("RolePreset")), "levels": ARR(S()), "modules": ARR(schema("ModuleLabel", {"key": S(), "label": S()}))}),
     desc="A title is not a permission: a preset fills the scopes and the home screen, and every line can be changed.")
 collection(E + "/members", "Entities", "Member", "settings", create_schema=ref("Member"))
 item(E + "/members", "Entities", "Member", "settings", delete=True, delete_note="Revokes access; history keeps the person's name.")
-schema("AdvisorGrant", {"id": RO_UUID, "advisor_org_id": NULLABLE(UUID), "advisor_name": S(),
-                        "advisor_kind": ENUM("chartered_accountant", "company_secretary", "counsel", "lender", "investor", "auditor"),
-                        "invite_email": S(format="email", writeOnly=True),
-                        "scopes": {"type": "object", "additionalProperties": ENUM("read", "comment", "prepare", "certify"),
-                                   "examples": [{"finance": "read", "gst": "prepare", "mca_financial": "certify"}]},
-                        "document_folders": ARR(S()), "expires_on": NULLABLE(DATE),
-                        "status": ENUM("invited", "active", "revoked", "expired", readOnly=True)}, required=("advisor_name", "advisor_kind", "scopes"))
+schema("AdvisorGrant", {"id": RO_UUID, "advisor_org_id": NULLABLE(RO_UUID), "advisor_name": S(),
+                        "advisor_kind": ENUM("chartered_accountant", "company_secretary", "counsel", "lender", "investor", "auditor", description="Taken from the preset when one is given"),
+                        "invite_email": S(format="email", writeOnly=True, description="The person to invite. Access starts when they accept. Left out, the engagement is only a record."),
+                        "service": NULLABLE(SERVICE), "preset": NULLABLE(S(description="A practitioner preset from GET /role-presets; explicit scopes win over it")),
+                        "scopes": GRANT_SCOPES, "period_fy": NULLABLE(FY), "membership_no": NULLABLE(S(description="As the practitioner states it; not verified")),
+                        "document_folders": NULLABLE(ARR(S())), "expires_on": NULLABLE({**DATE, "description": "Required for an audit engagement"}),
+                        "invited_email": NULLABLE(S(readOnly=True)), "practitioner_user_id": NULLABLE(RO_UUID), "accepted_at": NULLABLE(RO_TS), "created_at": RO_TS,
+                        "party": ENUM("person", "firm", "record", readOnly=True, description="Engaged as a person, through a firm, or only recorded"),
+                        "audit": B(readOnly=True, description="An audit engagement: read and raise queries only"),
+                        "status": ENUM("invited", "active", "declined", "revoked", "expired", readOnly=True)}, required=("advisor_name",),
+       desc="Only an owner can engage a practitioner or end an engagement. `audit_read_only` (400) for an audit engagement with a writing level or no end date; "
+            "`independence_conflict` (409) when the same practitioner would hold the statutory audit and the books, the internal audit or the CFO role for the same year. "
+            "Which services an auditor may not provide is a starter rule for a CA to confirm.")
 collection(E + "/advisor-grants", "Entities", "AdvisorGrant", "settings")
 item(E + "/advisor-grants", "Entities", "AdvisorGrant", "settings", delete=True, delete_note="Revokes the grant immediately.")
 schema("Fact", {"fact_key": S(examples=["aato", "headcount", "paid_up_capital", "cash_receipts_pct"]),
@@ -469,7 +490,7 @@ schema("ResponsibilitySlot", {"work_kind": WORK_KIND, "step": ENUM("prepare", "a
 schema("Responsibilities", {
     "data": ARR(ref("ResponsibilitySlot")),
     "kinds": {**ARR(schema("WorkKind", {"key": S(), "label": S(), "about": S(), "steps": ARR(S())})), "readOnly": True},
-    "people": {**ARR(schema("ResponsiblePerson", {"user_id": UUID, "name": S(), "title": NULLABLE(S()), "approves": ARR(S(), description="The kinds of work this person could be named approver of")})), "readOnly": True},
+    "people": {**ARR(schema("ResponsiblePerson", {"user_id": UUID, "name": S(), "title": NULLABLE(S()), "practitioner": B(description="Engaged from outside; can prepare, never approve"), "approves": ARR(S(), description="The kinds of work this person could be named approver of")})), "readOnly": True},
     "filings_reassigned": I(readOnly=True, description="On a save: open filings that moved to the person now named")}, required=("data",))
 _op("get", E + "/responsibilities", "Entities", "getResponsibilities", "Who prepares and who approves each kind of work", "tasks:read", resp=ref("Responsibilities"),
     desc="Anyone in the company can read it. A new filing takes its owner and approver from it, and a request for approval goes to the approver it names (never to the person who raised it).")
@@ -1422,6 +1443,13 @@ _op("get", "/organizations/{id}", "Organizations", "getOrganization", "Get an or
 _op("get", "/organizations/{id}/entities", "Organizations", "listOrganizationEntities", "Entities the organisation owns or advises, with standing",
     params=[P("Limit"), P("Cursor"), q("filter", ENUM("all", "waiting_on_client", "overdue")), q("staff", UUID)], resp=page_of("EntityStanding"))
 schema("StaffLoad", {"user_id": UUID, "name": S(), "filings_due": I()})
+schema("ClientStaff", {
+    "clients": ARR(schema("FirmClient", {"entity_id": UUID, "legal_name": S(), "set_up_by_firm": B(), "services": ARR(S()), "staff": ARR(UUID, description="The staff assigned to this client")})),
+    "people": ARR(schema("FirmPerson", {"user_id": UUID, "name": S(), "role": ENUM("admin", "partner", "staff"), "sees_all": B(description="Partners and admins see every client")}))})
+_op("get", "/organizations/{id}/client-staff", "Organizations", "getClientStaff", "The firm's clients and which staff work on each", resp=ref("ClientStaff"))
+_op("put", "/organizations/{id}/client-staff/{entityId}", "Organizations", "setClientStaff", "Say which staff work on a client",
+    params=[{"name": "entityId", "in": "path", "required": True, "schema": UUID}], body=schema("ClientStaffIn", {"user_ids": ARR(UUID)}, required=("user_ids",)), resp=ref("ClientStaff"),
+    desc="Only a partner or admin of the firm can. Staff see only the clients they are assigned to; someone taken off a client stops seeing it at once.")
 _op("get", "/organizations/{id}/workload", "Organizations", "getStaffWorkload", "Filings assigned per staff member this week", resp=ARR(ref("StaffLoad")))
 action("/organizations/{id}/client-reminders", "Organizations", "chaseClients", "Send document / approval reminders to clients that are blocking filings",
        None, body=schema("ChaseClients", {"entity_ids": ARR(UUID, maxItems=200, description="Leave out to chase every client that has filings waiting on them.")}),
@@ -1475,6 +1503,9 @@ EVENTS = {
     "hr_policy.changed": "The HR policy or a handbook document changed",
     "responsibilities.changed": "Who prepares or approves a kind of work changed",
     "task.assigned": "A task was given to a person",
+    "engagement.invited": "A practitioner was invited to work for the company",
+    "engagement.accepted": "A practitioner accepted; their access has started",
+    "engagement.declined": "A practitioner declined an invitation",
     "sales_document.irn_generated": "IRP returned the IRN and signed QR",
     "sales_document.paid": "Fully settled",
     "receipt.created": "Money received and allocated",

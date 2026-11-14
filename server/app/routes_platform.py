@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Response
 from pydantic import BaseModel, Field
 
-from . import auth
+from . import auth, roles
 from .core import ApiError, Auth, Principal, tx
 
 router = APIRouter()
@@ -73,17 +73,20 @@ def get_me(p: Principal = Auth):
         cur.execute("SELECT id, email, full_name, mobile_e164, mfa_enabled FROM users WHERE id = app.current_user_id()")
         me = cur.fetchone()
         cur.execute("""
-            SELECT e.id, e.legal_name, e.constitution::text, e.track::text,
-                   coalesce(m.role::text, CASE WHEN g.id IS NOT NULL THEN 'advisor' ELSE 'org_staff' END) AS role,
-                   coalesce(m.modules, ARRAY(SELECT jsonb_object_keys(g.scopes))) AS modules,
-                   coalesce(m.scopes, g.scopes, '{}'::jsonb) AS scopes, m.title,
-                   coalesce(m.home, CASE WHEN m.id IS NULL THEN 'practitioner' ELSE 'general' END) AS home
+            SELECT e.id, e.legal_name, e.constitution::text, e.track::text, m.role::text AS role, m.modules, m.scopes, m.title, coalesce(m.home, 'general') AS home
               FROM entities e
               LEFT JOIN memberships m ON m.entity_id = e.id AND m.user_id = app.current_user_id() AND m.revoked_at IS NULL
-              LEFT JOIN advisor_grants g ON g.entity_id = e.id AND g.status = 'active'
-                    AND g.advisor_org_id IN (SELECT app.my_org_ids())
              ORDER BY e.legal_name""")
-        me["entities"] = cur.fetchall()
+        entities = cur.fetchall()
+        for e in entities:
+            if e["role"] is None:                       # not a member: a practitioner through an engagement, or staff of the organisation the company is under
+                cur.execute("SELECT scopes, service FROM app.my_grant_scopes(%s)", (e["id"],))
+                grants = cur.fetchall()
+                scopes = roles.merge_grant_scopes([g["scopes"] for g in grants])
+                services = sorted({g["service"] for g in grants if g["service"]})
+                e.update(role="advisor" if grants else "org_staff", scopes=scopes, modules=sorted(scopes), home="practitioner",
+                         title=" · ".join(roles.SERVICES[x] for x in services) or None)
+        me["entities"] = entities
         cur.execute("""SELECT o.id, o.name, o.kind::text, om.role FROM org_members om
                         JOIN organizations o ON o.id = om.organization_id WHERE om.user_id = app.current_user_id()""")
         me["organizations"] = cur.fetchall()
