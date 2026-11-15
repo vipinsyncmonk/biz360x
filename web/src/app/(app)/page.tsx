@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ApiProblem, api, newIdempotencyKey, unwrap, type ApprovalRequest, type Obligation } from "@/lib/api";
 import { addDays, formatInr, greeting, isoDate, shortDate } from "@/lib/format";
@@ -10,6 +11,7 @@ import { useSession } from "@/lib/session";
 import { HomeTiles } from "@/components/RoleForms";
 import { WorkQueue } from "@/components/WorkPanels";
 import { Invitations } from "@/components/EngagementPanels";
+import { EmploymentInvitations } from "@/components/SelfPanels";
 import { ErrorNote, Icon, Loading, Pill } from "@/components/ui";
 
 const SUBJECT_ICON: Record<string, string> = {
@@ -25,6 +27,7 @@ const SUBJECT_LABEL: Record<string, string> = {
 
 export default function Today() {
   const { me, entity, reload } = useSession();
+  const router = useRouter();
   const id = entity?.id ?? null;
   const today = new Date();
   const seesCompliance = canOpen(entity, "compliance");
@@ -58,6 +61,7 @@ export default function Today() {
         </div>
 
         <Invitations onAnswered={(eid) => void reload(eid ?? undefined)} />
+        <EmploymentInvitations onAccepted={() => void reload().then(() => router.push("/self"))} />
 
         {!entity ? (
           <div className="card card-pad">You are not a member of any workspace yet. Ask an owner to invite you.</div>

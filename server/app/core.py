@@ -81,6 +81,7 @@ CONSTRAINT_CODES = {
     "share_allotments_check": (400, "allotment_late", "Shares must be allotted within 60 days of receiving the money"),
     "stock_not_negative": (409, "insufficient_stock", "Not enough stock"),
     "audit_engagement_read_only": (400, "audit_read_only", "An audit engagement can only read and raise queries, and needs an end date"),
+    "leave_within_employment": (400, "validation_failed", "The leave falls outside your time with the company"),
     "engagement_independence": (409, "independence_conflict", "The same practitioner cannot audit the company and keep its books"),
 }
 

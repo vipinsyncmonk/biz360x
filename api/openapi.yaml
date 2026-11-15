@@ -58,6 +58,10 @@ tags:
   description: Chart of accounts, journals, periods, banking, reconciliation, close and reports
 - name: Payroll & HR
   description: Employees, salary structures, payroll runs, payslips, labour-law checks
+- name: Employee self-service
+  description: 'A person''s own payslips, leave, handbook and joining checklist. An employee is not a member of the company:
+    these run as a database role that can read no table and can only call functions that return the caller''s own record (migration
+    41). Someone else''s record is a 404.'
 - name: Legal & board
   description: Contracts, extracted terms, templates, meetings and resolutions
 - name: Capital
@@ -8995,6 +8999,494 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: hr:write
+  /me/employments:
+    get:
+      tags:
+      - Employee self-service
+      operationId: getMyEmployments
+      summary: Where I am an employee with my own sign-in, and the invitations waiting for me
+      description: An invitation shows only to the person signed in with the email on the employee record.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyEmployments'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /me/employments/{id}/accept:
+    post:
+      tags:
+      - Employee self-service
+      operationId: acceptEmployment
+      summary: Accept the invitation to my employee record
+      description: '`{id}` is the employee record. Not addressed to my email, already taken or withdrawn: 404.'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmploymentAccepted'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /entities/{entityId}/employees/{id}/self-service:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: openEmployeeSelfService
+      summary: Let a person sign in to their own payslips, leave and policies
+      description: They sign in with the email on their record and accept. `employee_email_missing` (409) when the record
+        has no email. Nothing is emailed yet. Twice changes nothing.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfServiceState'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
+    delete:
+      tags:
+      - Payroll & HR
+      operationId: closeEmployeeSelfService
+      summary: Withdraw the invitation or end the person's access
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfServiceState'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
+  /self/{employeeId}:
+    get:
+      tags:
+      - Employee self-service
+      operationId: getMyRecord
+      summary: Who I am at this company, and my joining checklist
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyRecord'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /self/{employeeId}/leave:
+    get:
+      tags:
+      - Employee self-service
+      operationId: getMyLeave
+      summary: My balances, my requests and the year's holidays
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      - name: as_of
+        in: query
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyLeave'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /self/{employeeId}/leave-requests:
+    post:
+      tags:
+      - Employee self-service
+      operationId: applyForLeave
+      summary: Apply for leave for myself
+      description: Counted in working days, as when HR records it. `leave_balance_short` (409) when the balance does not cover
+        it and the policy does not allow unpaid leave. It waits for whoever approves leave at the company.
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MyLeaveRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyLeaveRequest'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /self/{employeeId}/leave-requests/{id}/cancel:
+    post:
+      tags:
+      - Employee self-service
+      operationId: withdrawMyLeave
+      summary: Withdraw my request while it is waiting
+      description: Once approved it is HR's to cancel (409), because pay may already depend on it.
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyLeaveRequest'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /self/{employeeId}/payslips:
+    get:
+      tags:
+      - Employee self-service
+      operationId: listMyPayslips
+      summary: My payslips from approved payroll runs
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      - name: fy
+        in: query
+        schema:
+          $ref: '#/components/schemas/FyLabel'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeePayslips'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /self/{employeeId}/payslips/{id}:
+    get:
+      tags:
+      - Employee self-service
+      operationId: getMyPayslip
+      summary: One of my payslips with its lines and the year so far
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayslipDetail'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /self/{employeeId}/payslips/{id}/pdf:
+    get:
+      tags:
+      - Employee self-service
+      operationId: getMyPayslipPdf
+      summary: My payslip as a PDF
+      description: '`application/pdf`.'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      - name: download
+        in: query
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /self/{employeeId}/policies:
+    get:
+      tags:
+      - Employee self-service
+      operationId: listMyPolicies
+      summary: The handbook, and what I have acknowledged
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyPolicyDocumentList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /self/{employeeId}/policies/{id}:
+    get:
+      tags:
+      - Employee self-service
+      operationId: getMyPolicy
+      summary: Read a handbook document
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyPolicyDocument'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /self/{employeeId}/policies/{id}/acknowledge:
+    post:
+      tags:
+      - Employee self-service
+      operationId: acknowledgeMyPolicy
+      summary: Say that I have read and accept it
+      description: My own act, recorded with my name and the date. Twice changes nothing.
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyPolicyDocument'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /entities/{entityId}/contracts:
     get:
       tags:
@@ -14265,6 +14757,27 @@ components:
           type: string
         role:
           type: string
+    EmploymentSummary:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+        legal_name:
+          type: string
+        employee_code:
+          type: string
+        full_name:
+          type: string
+        designation:
+          oneOf:
+          - type: string
+          - type: 'null'
+        status:
+          type: string
     Me:
       type: object
       properties:
@@ -14289,6 +14802,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrgSummary'
+        employments:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmploymentSummary'
+          description: 'Companies where the caller is an employee with their own sign-in (`/self`). Not a membership: none
+            of the company''s data is open to them.'
     NotificationPreference:
       type: object
       properties:
@@ -20151,6 +20670,16 @@ components:
           type: boolean
         has_bank_account:
           type: boolean
+        email:
+          oneOf:
+          - type: string
+          - type: 'null'
+        self_service:
+          type: string
+          enum:
+          - 'off'
+          - invited
+          - active
     HrPeople:
       type: object
       properties:
@@ -20719,6 +21248,321 @@ components:
           - type: 'null'
       required:
       - employee_id
+    Employment:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+        legal_name:
+          type: string
+        employee_code:
+          type: string
+        full_name:
+          type: string
+        designation:
+          oneOf:
+          - type: string
+          - type: 'null'
+        status:
+          type: string
+    EmploymentInvite:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+        legal_name:
+          type: string
+        employee_code:
+          type: string
+        full_name:
+          type: string
+        designation:
+          oneOf:
+          - type: string
+          - type: 'null'
+        invited_at:
+          type: string
+          format: date-time
+    MyEmployments:
+      type: object
+      properties:
+        employments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Employment'
+        invitations:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmploymentInvite'
+    EmploymentAccepted:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+    SelfServiceState:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        self_service:
+          type: string
+          enum:
+          - 'off'
+          - invited
+          - active
+        email:
+          oneOf:
+          - type: string
+          - type: 'null'
+    MyChecklist:
+      type: object
+      properties:
+        checklist:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingTask'
+        open_required:
+          type: array
+          items:
+            type: string
+        done:
+          type: integer
+        total:
+          type: integer
+        to_acknowledge:
+          type: integer
+          description: Handbook documents still to acknowledge
+    MyEmployee:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        entity_id:
+          type: string
+          format: uuid
+        legal_name:
+          type: string
+        registered_address:
+          oneOf:
+          - type: string
+          - type: 'null'
+        employee_code:
+          type: string
+        full_name:
+          type: string
+        email:
+          oneOf:
+          - type: string
+          - type: 'null'
+        mobile_e164:
+          oneOf:
+          - type: string
+          - type: 'null'
+        designation:
+          oneOf:
+          - type: string
+          - type: 'null'
+        department:
+          oneOf:
+          - type: string
+          - type: 'null'
+        date_of_joining:
+          type: string
+          format: date
+        date_of_leaving:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        status:
+          type: string
+        employment_type:
+          type: string
+        work_state:
+          type: string
+        tax_regime:
+          type: string
+        pan_last4:
+          oneOf:
+          - type: string
+          - type: 'null'
+        uan:
+          oneOf:
+          - type: string
+          - type: 'null'
+        bank_ifsc:
+          oneOf:
+          - type: string
+          - type: 'null'
+        bank_on_file:
+          type: boolean
+          description: Whether a bank account is on the record; the number is never shown here
+        has_salary:
+          type: boolean
+    MyRecord:
+      type: object
+      properties:
+        employee:
+          $ref: '#/components/schemas/MyEmployee'
+        onboarding:
+          $ref: '#/components/schemas/MyChecklist'
+    MyLeaveRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        leave_type:
+          type: string
+          description: The leave type's code
+        leave_type_name:
+          type: string
+          readOnly: true
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        days:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+          readOnly: true
+        lop_days:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+          readOnly: true
+        half_day:
+          type: boolean
+        reason:
+          oneOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          - cancelled
+          readOnly: true
+        requested_at:
+          type: string
+          format: date-time
+          readOnly: true
+        decided_at:
+          oneOf:
+          - type: string
+            format: date-time
+            readOnly: true
+          - type: 'null'
+        decision_note:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
+        can_cancel:
+          type: boolean
+          readOnly: true
+      required:
+      - leave_type
+      - from
+      - to
+    MyHoliday:
+      type: object
+      properties:
+        holiday_date:
+          type: string
+          format: date
+        name:
+          type: string
+    MyLeave:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date
+        leave_year_start:
+          type: string
+          format: date
+        leave_year_end:
+          type: string
+          format: date
+        week_off:
+          type: array
+          items:
+            type: integer
+          description: Weekly off days, Monday is 0
+        unpaid_when_exhausted:
+          type: boolean
+        can_apply:
+          type: boolean
+        balances:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaveBalance'
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyLeaveRequest'
+        holidays:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyHoliday'
+    MyPolicyDocument:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+        version:
+          type: integer
+        requires_ack:
+          type: boolean
+        published_at:
+          type: string
+          format: date-time
+        acknowledged_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        body:
+          type: string
+          description: Only when one document is read
+    MyPolicyDocumentList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyPolicyDocument'
     ContractTerm:
       type: object
       properties:

@@ -258,7 +258,9 @@ schema("EntitySummary", {"id": UUID, "legal_name": S(), "constitution": S(), "tr
                          "title": NULLABLE(S(description="What the company calls the caller")),
                          "home": ENUM("leadership", "finance", "people", "general", "practitioner", description="The home screen the caller lands on")})
 schema("Me", {"id": RO_UUID, "email": S(format="email"), "full_name": S(), "mobile_e164": S(), "mfa_enabled": B(),
-              "entities": ARR(ref("EntitySummary")), "organizations": ARR(schema("OrgSummary", {"id": UUID, "name": S(), "kind": S(), "role": S()}))})
+              "entities": ARR(ref("EntitySummary")), "organizations": ARR(schema("OrgSummary", {"id": UUID, "name": S(), "kind": S(), "role": S()})),
+              "employments": ARR(schema("EmploymentSummary", {"employee_id": UUID, "entity_id": UUID, "legal_name": S(), "employee_code": S(), "full_name": S(), "designation": NULLABLE(S()), "status": S()}),
+                                 description="Companies where the caller is an employee with their own sign-in (`/self`). Not a membership: none of the company's data is open to them.")})
 _op("get", "/me", "Me", "getMe", "Who am I, and which entities can I act on", resp=ref("Me"))
 schema("NotificationPreference", {"entity_id": UUID, "event_type": ENUM("due_in_7_days", "due_tomorrow", "approval_requested", "notice_received", "threshold_crossed", "copilot_suggestion"),
                                   "channel": ENUM("email", "whatsapp", "push", "sms"), "enabled": B()}, required=("entity_id", "event_type", "channel", "enabled"))
@@ -1016,7 +1018,8 @@ action(E + "/employees/{id}/activate", "Payroll & HR", "activateEmployee", "Fini
        desc="Every required item must be done (`onboarding_incomplete`). The person becomes active and is paid from the joining date.")
 _op("get", E + "/hr/people", "Payroll & HR", "listHrPeople", "The company's people for HR work, without anything about pay", "hr:read", params=[q("status", ENUM("onboarding", "active", "notice", "exited"))],
     resp=schema("HrPeople", {"data": ARR(schema("HrPerson", {"id": UUID, "employee_code": S(), "full_name": S(), "designation": NULLABLE(S()), "department": NULLABLE(S()),
-                                                            "date_of_joining": DATE, "date_of_leaving": NULLABLE(DATE), "status": S(), "has_pan": B(), "has_bank_account": B()}))}))
+                                                            "date_of_joining": DATE, "date_of_leaving": NULLABLE(DATE), "status": S(), "has_pan": B(), "has_bank_account": B(),
+                                                            "email": NULLABLE(S()), "self_service": ENUM("off", "invited", "active")}))}))
 schema("Holiday", {"id": RO_UUID, "date": DATE, "name": S()}, required=("date", "name"))
 _op("get", E + "/holidays", "Payroll & HR", "listHolidays", "Company holidays", "hr:read", params=[q("year", I())], resp=schema("HolidayList", {"data": ARR(ref("Holiday"))}))
 _op("post", E + "/holidays", "Payroll & HR", "createHoliday", "Add a holiday", "hr:write", body=ref("Holiday"), resp=ref("Holiday"), status="201")
@@ -1080,6 +1083,52 @@ _op("post", E + "/hr/policy-documents", "Payroll & HR", "publishHrPolicyDocument
 _op("get", E + "/hr/policy-documents/{id}", "Payroll & HR", "getHrPolicyDocument", "A handbook document with who has acknowledged it", "hr:read", resp=ref("HrPolicyDocument"))
 action(E + "/hr/policy-documents/{id}/acknowledgements", "Payroll & HR", "acknowledgeHrPolicyDocument", "Record that a person has read and accepted it", "hr:write",
        body=schema("PolicyAckIn", {"employee_id": UUID, "acknowledged_on": NULLABLE(DATE)}, required=("employee_id",)), resp=ref("HrPolicyDocument"))
+
+# =================================================================== EMPLOYEE SELF-SERVICE
+tag("Employee self-service", "A person's own payslips, leave, handbook and joining checklist. An employee is not a member of the company: these run as a database role "
+    "that can read no table and can only call functions that return the caller's own record (migration 41). Someone else's record is a 404.")
+EMP = {"name": "employeeId", "in": "path", "required": True, "schema": UUID, "description": "The caller's own employee record at one company, from `/me/employments`"}
+schema("Employment", {"employee_id": UUID, "entity_id": UUID, "legal_name": S(), "employee_code": S(), "full_name": S(), "designation": NULLABLE(S()), "status": S()})
+schema("EmploymentInvite", {"employee_id": UUID, "entity_id": UUID, "legal_name": S(), "employee_code": S(), "full_name": S(), "designation": NULLABLE(S()), "invited_at": TS})
+_op("get", "/me/employments", "Employee self-service", "getMyEmployments", "Where I am an employee with my own sign-in, and the invitations waiting for me",
+    resp=schema("MyEmployments", {"employments": ARR(ref("Employment")), "invitations": ARR(ref("EmploymentInvite"))}),
+    desc="An invitation shows only to the person signed in with the email on the employee record.")
+action("/me/employments/{id}/accept", "Employee self-service", "acceptEmployment", "Accept the invitation to my employee record", None,
+       resp=schema("EmploymentAccepted", {"employee_id": UUID, "entity_id": UUID}), desc="`{id}` is the employee record. Not addressed to my email, already taken or withdrawn: 404.")
+SELF_SERVICE_STATE = schema("SelfServiceState", {"employee_id": UUID, "self_service": ENUM("off", "invited", "active"), "email": NULLABLE(S())})
+action(E + "/employees/{id}/self-service", "Payroll & HR", "openEmployeeSelfService", "Let a person sign in to their own payslips, leave and policies", "hr:write", resp=SELF_SERVICE_STATE,
+       desc="They sign in with the email on their record and accept. `employee_email_missing` (409) when the record has no email. Nothing is emailed yet. Twice changes nothing.")
+_op("delete", E + "/employees/{id}/self-service", "Payroll & HR", "closeEmployeeSelfService", "Withdraw the invitation or end the person's access", "hr:write", resp=SELF_SERVICE_STATE)
+schema("MyChecklist", {"checklist": ARR(ref("OnboardingTask")), "open_required": ARR(S()), "done": I(), "total": I(), "to_acknowledge": I(description="Handbook documents still to acknowledge")})
+schema("MyRecord", {"employee": schema("MyEmployee", {
+    "employee_id": UUID, "entity_id": UUID, "legal_name": S(), "registered_address": NULLABLE(S()), "employee_code": S(), "full_name": S(), "email": NULLABLE(S()),
+    "mobile_e164": NULLABLE(S()), "designation": NULLABLE(S()), "department": NULLABLE(S()), "date_of_joining": DATE, "date_of_leaving": NULLABLE(DATE), "status": S(),
+    "employment_type": S(), "work_state": S(), "tax_regime": S(), "pan_last4": NULLABLE(S()), "uan": NULLABLE(S()), "bank_ifsc": NULLABLE(S()),
+    "bank_on_file": B(description="Whether a bank account is on the record; the number is never shown here"), "has_salary": B()}), "onboarding": ref("MyChecklist")})
+_op("get", "/self/{employeeId}", "Employee self-service", "getMyRecord", "Who I am at this company, and my joining checklist", params=[EMP], resp=ref("MyRecord"))
+schema("MyLeaveRequest", {"id": RO_UUID, "leave_type": S(description="The leave type's code"), "leave_type_name": S(readOnly=True), "from": DATE, "to": DATE, "days": {**DAYS, "readOnly": True},
+                          "lop_days": {**DAYS, "readOnly": True}, "half_day": B(), "reason": NULLABLE(S(maxLength=300)), "status": ENUM("pending", "approved", "rejected", "cancelled", readOnly=True),
+                          "requested_at": RO_TS, "decided_at": NULLABLE(RO_TS), "decision_note": NULLABLE(S(readOnly=True)), "can_cancel": B(readOnly=True)},
+       required=("leave_type", "from", "to"))
+_op("get", "/self/{employeeId}/leave", "Employee self-service", "getMyLeave", "My balances, my requests and the year's holidays", params=[EMP, q("as_of", DATE)],
+    resp=schema("MyLeave", {"as_of": DATE, "leave_year_start": DATE, "leave_year_end": DATE, "week_off": ARR(I(), description="Weekly off days, Monday is 0"),
+                            "unpaid_when_exhausted": B(), "can_apply": B(), "balances": ARR(ref("LeaveBalance")), "requests": ARR(ref("MyLeaveRequest")),
+                            "holidays": ARR(schema("MyHoliday", {"holiday_date": DATE, "name": S()}))}))
+action("/self/{employeeId}/leave-requests", "Employee self-service", "applyForLeave", "Apply for leave for myself", None, params=[EMP], body=ref("MyLeaveRequest"), resp=ref("MyLeaveRequest"),
+       status="201", desc="Counted in working days, as when HR records it. `leave_balance_short` (409) when the balance does not cover it and the policy does not allow unpaid leave. "
+                          "It waits for whoever approves leave at the company.")
+action("/self/{employeeId}/leave-requests/{id}/cancel", "Employee self-service", "withdrawMyLeave", "Withdraw my request while it is waiting", None, params=[EMP], resp=ref("MyLeaveRequest"),
+       desc="Once approved it is HR's to cancel (409), because pay may already depend on it.")
+_op("get", "/self/{employeeId}/payslips", "Employee self-service", "listMyPayslips", "My payslips from approved payroll runs", params=[EMP, q("fy", FY)], resp=ref("EmployeePayslips"))
+_op("get", "/self/{employeeId}/payslips/{id}", "Employee self-service", "getMyPayslip", "One of my payslips with its lines and the year so far", params=[EMP], resp=ref("PayslipDetail"))
+_op("get", "/self/{employeeId}/payslips/{id}/pdf", "Employee self-service", "getMyPayslipPdf", "My payslip as a PDF", params=[EMP, q("download", B())], desc="`application/pdf`.")
+schema("MyPolicyDocument", {"id": UUID, "slug": S(), "title": S(), "category": S(), "version": I(), "requires_ack": B(), "published_at": TS,
+                            "acknowledged_on": NULLABLE(DATE), "body": S(description="Only when one document is read")})
+_op("get", "/self/{employeeId}/policies", "Employee self-service", "listMyPolicies", "The handbook, and what I have acknowledged", params=[EMP],
+    resp=schema("MyPolicyDocumentList", {"data": ARR(ref("MyPolicyDocument"))}))
+_op("get", "/self/{employeeId}/policies/{id}", "Employee self-service", "getMyPolicy", "Read a handbook document", params=[EMP], resp=ref("MyPolicyDocument"))
+action("/self/{employeeId}/policies/{id}/acknowledge", "Employee self-service", "acknowledgeMyPolicy", "Say that I have read and accept it", None, params=[EMP], resp=ref("MyPolicyDocument"),
+       desc="My own act, recorded with my name and the date. Twice changes nothing.")
 
 # =================================================================== LEGAL, BOARD, CAPITAL, SCHEMES
 tag("Legal & board", "Contracts, extracted terms, templates, meetings and resolutions")
