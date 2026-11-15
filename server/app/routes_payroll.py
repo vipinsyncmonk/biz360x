@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import adapters, hrdb, ledger, payroll as pr, secretbox
+from . import adapters, hrdb, ledger, payroll as pr, secretbox, taxdecl
 from .core import ApiError, Auth, Principal, allowed as may, audit, emit, idempotency_begin, idempotency_finish, jsonable, money, require, tx
 from .routes_orders import js, offset_of, page
 
@@ -329,6 +329,21 @@ def _history(cur, entity_id, employee_id, month_start: dt.date) -> dict:
     return {"prior_payslips": h["n"], "prior_gross": h["gross"], "tds_so_far": h["tds"]}
 
 
+def _declared(cur, entity_id, employee_id, month_start: dt.date, default_regime: str):
+    """The regime and verified deductions from the employee's declaration for the month's financial year (taxdecl.py); none when they made none."""
+    fy = taxdecl.fy_of(month_start)
+    cur.execute("SELECT id, regime, status FROM tax_declarations WHERE employee_id = %s AND fy = %s AND entity_id = %s", (employee_id, fy, entity_id))
+    d = cur.fetchone()
+    if not d:
+        return default_regime, None
+    cur.execute("SELECT section, status, verified_amount, declared_amount FROM tax_declaration_items WHERE declaration_id = %s", (d["id"],))
+    items = cur.fetchall()
+    cur.execute("SELECT code, annual_cap FROM tax_deduction_sections WHERE fy = %s", (fy,))
+    caps = {r["code"]: r["annual_cap"] for r in cur.fetchall()}
+    dec = taxdecl.declared_for_payroll(d["regime"], d["status"], items, caps)
+    return dec.regime or default_regime, dec
+
+
 def compute_run(cur, entity_id, run: dict) -> dict:
     month = run["period_month"]
     cur.execute("SELECT 1 FROM entity_registrations WHERE entity_id = %s AND kind = 'epf' AND status = 'active' LIMIT 1", (entity_id,))
@@ -352,9 +367,10 @@ def compute_run(cur, entity_id, run: dict) -> dict:
         comps = [pr.Component(c["code"], c["monthly_amount"], c["kind"], c["in_wages"], c["taxable"]) for c in cur.fetchall()]
         raw = stored.get(str(e["id"]), {})
         inp = pr.Inputs(**{k: Decimal(v) for k, v in raw.items() if k in ("lop_days", "overtime", "bonus", "reimbursements", "other_deductions")})
+        regime, declared = _declared(cur, entity_id, e["id"], month, e["tax_regime"])
         slips.append((e, pr.compute_payslip(month_start=month, joined=e["date_of_joining"], left=e["date_of_leaving"], work_state=e["work_state"],
-                                            regime=e["tax_regime"], components=comps, inputs=inp, pf_applicable=pf_on, esi_applicable=esi_on,
-                                            tds_history=_history(cur, entity_id, e["id"], month))))
+                                            regime=regime, components=comps, inputs=inp, pf_applicable=pf_on, esi_applicable=esi_on,
+                                            tds_history=_history(cur, entity_id, e["id"], month), declared=declared)))
     if missing:
         raise ApiError(409, "conflict", "Some employees have no salary structure for this month", ", ".join(missing))
     cur.execute("DELETE FROM payslips WHERE run_id = %s", (run["id"],))

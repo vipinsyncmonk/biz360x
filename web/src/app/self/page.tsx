@@ -7,6 +7,7 @@ import { useLoad } from "@/lib/hooks";
 import { employmentLine, pickEmployment, type Employment, type MyRecord } from "@/lib/self";
 import { useSession } from "@/lib/session";
 import { EmploymentInvitations, MyLeavePanel, MyPayslipsPanel, MyPoliciesPanel, MyRecordCard } from "@/components/SelfPanels";
+import { MyTaxPanel } from "@/components/TaxPanels";
 import { ErrorNote, Loading, Logo } from "@/components/ui";
 
 const PICK_KEY = "bzx.employment";
@@ -74,6 +75,7 @@ export default function Self() {
             {record.data ? <MyRecordCard rec={record.data} /> : !record.error && <Loading what="your record" />}
             <MyLeavePanel employeeId={current.employee_id} />
             <MyPayslipsPanel employeeId={current.employee_id} />
+            <MyTaxPanel employeeId={current.employee_id} />
             <MyPoliciesPanel employeeId={current.employee_id} onChanged={() => record.reload()} />
             <span className="t13">You see only your own record here. Your PAN and bank account are entered by HR; if something is wrong, ask them to correct it.</span>
           </>

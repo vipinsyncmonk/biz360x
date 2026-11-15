@@ -135,6 +135,9 @@ class TdsInput:
     prior_payslips: int = 0
     tds_so_far: D = ZERO
     employee_pf_this_month: D = ZERO
+    declared_80c: D = ZERO                    # verified 80C items from the employee's declaration (old regime), before their PF is added
+    declared_other: D = ZERO                  # verified items of the other sections, each already held to its cap
+    cap_80c: D = SEC_80C_CAP
 
 
 def tds_on_salary(i: TdsInput) -> D:
@@ -147,8 +150,8 @@ def tds_on_salary(i: TdsInput) -> D:
     unknown = i.months_in_fy_before - i.prior_payslips
     annual_income = i.prior_gross + i.gross_this_month * (remaining + unknown)
     deduction = STANDARD_DEDUCTION[i.regime]
-    if i.regime == "old":                                               # no declarations yet: only the employee's PF counts under 80C
-        deduction += min(i.employee_pf_this_month * 12, SEC_80C_CAP)
+    if i.regime == "old":                                               # the employee's PF counts under 80C, with whatever HR has verified
+        deduction += min(i.employee_pf_this_month * 12 + i.declared_80c, i.cap_80c) + i.declared_other
     tax = annual_tax(annual_income - deduction, i.regime)
     return rupee(max(tax - i.tds_so_far, ZERO) / remaining)
 
@@ -210,7 +213,7 @@ def service_days(month_start: dt.date, joined: dt.date, left: dt.date | None) ->
 
 
 def compute_payslip(*, month_start: dt.date, joined: dt.date, left: dt.date | None, work_state: str, regime: str, components: list[Component],
-                    inputs: Inputs, pf_applicable: bool, esi_applicable: bool, tds_history: dict | None = None) -> Payslip:
+                    inputs: Inputs, pf_applicable: bool, esi_applicable: bool, tds_history: dict | None = None, declared=None) -> Payslip:
     month_days = days_in(month_start)
     employed = service_days(month_start, joined, left)
     if employed == 0:
@@ -244,7 +247,8 @@ def compute_payslip(*, month_start: dt.date, joined: dt.date, left: dt.date | No
         flags.append("pt_state_not_configured")
     h = tds_history or {}
     tds = tds_on_salary(TdsInput(regime, taxable_gross, months_before_in_fy(month_start), D(h.get("prior_gross", 0)), int(h.get("prior_payslips", 0)),
-                                 D(h.get("tds_so_far", 0)), p["employee"]))
+                                 D(h.get("tds_so_far", 0)), p["employee"],
+                                 *((declared.claimed_80c, declared.other, declared.cap_80c) if declared else ())))
     other = D(inputs.other_deductions)
     net = gross - p["employee"] - e["employee"] - pt - tds - other
     if net < 0:

@@ -62,6 +62,10 @@ tags:
   description: 'A person''s own payslips, leave, handbook and joining checklist. An employee is not a member of the company:
     these run as a database role that can read no table and can only call functions that return the caller''s own record (migration
     41). Someone else''s record is a 404.'
+- name: Tax declarations
+  description: An employee chooses a tax regime for the financial year and declares deductions; HR verifies each figure; payroll
+    deducts TDS on the verified ones. The sections and limits are a starter library that a CA must review before they drive
+    a deduction.
 - name: Legal & board
   description: Contracts, extracted terms, templates, meetings and resolutions
 - name: Capital
@@ -9487,6 +9491,358 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
+  /self/{employeeId}/tax-declaration:
+    get:
+      tags:
+      - Tax declarations
+      operationId: getMyTaxDeclaration
+      summary: My declaration for a year, and the sections I can claim under
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      - name: fy
+        in: query
+        schema:
+          $ref: '#/components/schemas/FyLabel'
+        description: The financial year, like 2026-27; the current one by default
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxDeclaration'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+    put:
+      tags:
+      - Tax declarations
+      operationId: saveMyTaxDeclaration
+      summary: Save my declaration as a draft
+      description: Replaces the regime and the whole list of items. 409 while it waits with HR or once verified; HR returns
+        it to unlock it.
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      - name: fy
+        in: query
+        schema:
+          $ref: '#/components/schemas/FyLabel'
+        description: The financial year, like 2026-27; the current one by default
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxDeclarationIn'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxDeclaration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /self/{employeeId}/tax-declaration/submit:
+    post:
+      tags:
+      - Tax declarations
+      operationId: submitMyTaxDeclaration
+      summary: Send my declaration to HR to verify
+      description: Twice changes nothing.
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      - name: fy
+        in: query
+        schema:
+          $ref: '#/components/schemas/FyLabel'
+        description: The financial year, like 2026-27; the current one by default
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxDeclaration'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /self/{employeeId}/form16:
+    get:
+      tags:
+      - Tax declarations
+      operationId: getMyForm16
+      summary: Form 16 Part B for a year, from my payslips and verified declaration
+      description: 'Part A comes from TRACES and is not here. Starter figures: a CA must review before this is issued.'
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      - name: fy
+        in: query
+        schema:
+          $ref: '#/components/schemas/FyLabel'
+        description: The financial year, like 2026-27; the current one by default
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Form16PartB'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /entities/{entityId}/tax-declarations:
+    get:
+      tags:
+      - Tax declarations
+      operationId: listTaxDeclarations
+      summary: Declarations for a year; those waiting for HR come first
+      description: Payroll at `read` may also call this.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: fy
+        in: query
+        schema:
+          $ref: '#/components/schemas/FyLabel'
+        description: The financial year, like 2026-27; the current one by default
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - draft
+          - submitted
+          - verified
+          - returned
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxDeclarationList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:read
+  /entities/{entityId}/tax-declarations/{id}:
+    get:
+      tags:
+      - Tax declarations
+      operationId: getTaxDeclaration
+      summary: One declaration with its items
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxDeclarationDetail'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:read
+  /entities/{entityId}/tax-declarations/{id}/verify:
+    post:
+      tags:
+      - Tax declarations
+      operationId: verifyTaxDeclaration
+      summary: Verify a submitted declaration
+      description: An item not listed is verified at the amount declared. 409 unless the declaration is submitted. TDS uses
+        the verified figures from the next payroll computation. Payroll at `write` may also call this.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxDeclarationVerify'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxDeclarationDetail'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
+  /entities/{entityId}/tax-declarations/{id}/return:
+    post:
+      tags:
+      - Tax declarations
+      operationId: returnTaxDeclaration
+      summary: Send a declaration back to the employee with a note
+      description: A verified one can be returned too; its deductions stop counting from the next payroll computation.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxDeclarationReturn'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxDeclarationDetail'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
+  /entities/{entityId}/employees/{id}/form16:
+    get:
+      tags:
+      - Tax declarations
+      operationId: getEmployeeForm16
+      summary: Form 16 Part B for an employee and a year
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: fy
+        in: query
+        schema:
+          $ref: '#/components/schemas/FyLabel'
+        description: The financial year, like 2026-27; the current one by default
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Form16PartB'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:read
   /entities/{entityId}/contracts:
     get:
       tags:
@@ -21563,6 +21919,347 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MyPolicyDocument'
+    TaxSection:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        annual_cap:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        old_regime_only:
+          type: boolean
+        note:
+          oneOf:
+          - type: string
+          - type: 'null'
+    TaxItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        section:
+          type: string
+          pattern: ^[0-9A-Z]{2,10}$
+        description:
+          type: string
+          maxLength: 200
+        declared_amount:
+          $ref: '#/components/schemas/Money'
+        proof_ref:
+          oneOf:
+          - type: string
+            maxLength: 200
+            description: 'What the proof is: a policy or receipt number. Files are not uploaded here yet'
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - pending
+          - verified
+          - rejected
+          readOnly: true
+        verified_amount:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+            readOnly: true
+          - type: 'null'
+        hr_note:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
+      required:
+      - section
+      - description
+      - declared_amount
+    TaxSectionSummary:
+      type: object
+      properties:
+        section:
+          type: string
+        declared:
+          $ref: '#/components/schemas/Money'
+        verified:
+          $ref: '#/components/schemas/Money'
+        cap:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        counts:
+          $ref: '#/components/schemas/Money'
+    TaxDeclaration:
+      type: object
+      properties:
+        fy:
+          type: string
+          pattern: ^[0-9]{4}-[0-9]{2}$
+        regime:
+          type: string
+          enum:
+          - new
+          - old
+        status:
+          type: string
+          enum:
+          - none
+          - draft
+          - submitted
+          - verified
+          - returned
+        id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        submitted_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        verified_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        hr_note:
+          oneOf:
+          - type: string
+          - type: 'null'
+        editable:
+          type: boolean
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxSection'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxItem'
+        summary:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxSectionSummary'
+        note:
+          type: string
+    TaxDeclarationDetail:
+      type: object
+      properties:
+        fy:
+          type: string
+          pattern: ^[0-9]{4}-[0-9]{2}$
+        regime:
+          type: string
+          enum:
+          - new
+          - old
+        status:
+          type: string
+          enum:
+          - none
+          - draft
+          - submitted
+          - verified
+          - returned
+        id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        submitted_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        verified_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        hr_note:
+          oneOf:
+          - type: string
+          - type: 'null'
+        editable:
+          type: boolean
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxSection'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxItem'
+        summary:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxSectionSummary'
+        note:
+          type: string
+        employee_id:
+          type: string
+          format: uuid
+        employee_code:
+          type: string
+        employee_name:
+          type: string
+    TaxDeclarationIn:
+      type: object
+      properties:
+        regime:
+          type: string
+          enum:
+          - new
+          - old
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxItem'
+      required:
+      - regime
+    Form16Deduction:
+      type: object
+      properties:
+        section:
+          type: string
+        label:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+    Form16PartB:
+      type: object
+      properties:
+        fy:
+          type: string
+        assessment_year:
+          type: string
+        regime:
+          type: string
+          enum:
+          - new
+          - old
+        employee_name:
+          type: string
+        months:
+          type: integer
+        gross_salary:
+          $ref: '#/components/schemas/Money'
+        standard_deduction:
+          $ref: '#/components/schemas/Money'
+        chapter_vi_a:
+          type: array
+          items:
+            $ref: '#/components/schemas/Form16Deduction'
+        chapter_vi_a_total:
+          $ref: '#/components/schemas/Money'
+        taxable_income:
+          $ref: '#/components/schemas/Money'
+        tax_with_cess:
+          $ref: '#/components/schemas/Money'
+        tds_deducted:
+          $ref: '#/components/schemas/Money'
+        difference:
+          $ref: '#/components/schemas/Money'
+          description: Tax on the total income less TDS deducted; negative means more was deducted
+        deductions_verified:
+          type: boolean
+        note:
+          type: string
+    TaxDeclarationRow:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        employee_id:
+          type: string
+          format: uuid
+        employee_code:
+          type: string
+        employee_name:
+          type: string
+        regime:
+          type: string
+          enum:
+          - new
+          - old
+        status:
+          type: string
+          enum:
+          - draft
+          - submitted
+          - verified
+          - returned
+        items:
+          type: integer
+        declared:
+          $ref: '#/components/schemas/Money'
+        submitted_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        verified_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+    TaxDeclarationList:
+      type: object
+      properties:
+        fy:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxDeclarationRow'
+    TaxItemDecision:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - verified
+          - rejected
+        verified_amount:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        note:
+          oneOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+      required:
+      - id
+    TaxDeclarationVerify:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxItemDecision'
+        note:
+          oneOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+    TaxDeclarationReturn:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 300
+      required:
+      - note
     ContractTerm:
       type: object
       properties:
