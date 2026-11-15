@@ -241,7 +241,7 @@ Phase 6 must land before any practitioner outside the company's own trusted circ
 
 1. **Split `hr` from `payroll`?** Recommended: yes. Without it an HR executive who handles leave can also see every salary.
 2. **Employee access: separate door (A) or membership level (B)?** Recommended: A.
-3. **Do managers approve leave, or only HR?** It decides whether `employees.manager_id` and a "my reports" rule are built in phase 4.
+3. **Do managers approve leave, or only HR?** Built in migration 44 as: both. A manager (`employees.manager_id`) decides their reports' leave from their own page, except leave with unpaid days, which stays with HR because it changes pay; HR can decide any request. Change this here if the company wants otherwise.
 4. **Firm staff see only assigned clients?** Recommended: yes, with existing staff assigned to all current clients on migration.
 5. **How is the marketplace paid for?** It decides nothing before phase 7, but the answer to the fee-sharing question may rule out commission.
 6. **May a practitioner be given `approve`?** Recommended: no. Approvals stay with the company.

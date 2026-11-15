@@ -13,6 +13,7 @@ these is wrong. `BIZ_ENV` must be `dev`, `test`, `staging` or `production`; any 
 | `JWT_SECRET` | Random, at least 32 characters. The development default is refused. |
 | `BIZ_FIELD_KEY` | A Fernet key from the secret manager (encrypts `*_enc` columns, webhook secrets, TOTP secrets, OTPs held by paused jobs). |
 | `BIZ_OTP_PROVIDER` | A real provider. `sandbox` is refused, which is what keeps the development code `000000` out of production. |
+| `BIZ_MAIL_PROVIDER` | A real provider. `sandbox` is refused: invitations would be queued and never delivered. Also set `BIZ_WEB_URL` to the public address of the web app. |
 | `BIZ_ADAPTERS` | A real adapter for every portal family (see `docs/PROVIDERS.md`). Sandboxes are refused. |
 | `BIZ_IDP_PROVIDER` | Optional. Unset means single sign-on is off; the sandbox identity provider is switched off in production. |
 | `BIZ_ALERT_WEBHOOK` | Recommended: where the audit verification job posts an alert. |

@@ -9,10 +9,11 @@ import { canOpen } from "@/lib/roles";
 import { useSession } from "@/lib/session";
 import { ApplyLeave, HolidayAdd } from "@/components/HrForms";
 import { DetailRequestsPanel, SelfServicePanel } from "@/components/SelfPanels";
+import { PeopleFilesPanel } from "@/components/PeoplePanels";
 import { TaxDeclarationsPanel } from "@/components/TaxPanels";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
-type Tab = "requests" | "balances" | "holidays" | "signin" | "tax" | "details";
+type Tab = "requests" | "balances" | "holidays" | "signin" | "tax" | "details" | "files";
 
 export default function Leave() {
   const { entity } = useSession();
@@ -76,6 +77,7 @@ export default function Leave() {
         <button type="button" role="tab" aria-selected={tab === "signin"} onClick={() => setTab("signin")}>Employee sign-in</button>
         <button type="button" role="tab" aria-selected={tab === "tax"} onClick={() => setTab("tax")}>Tax declarations</button>
         <button type="button" role="tab" aria-selected={tab === "details"} onClick={() => setTab("details")}>Detail changes</button>
+        <button type="button" role="tab" aria-selected={tab === "files"} onClick={() => setTab("files")}>People files</button>
       </div>
 
       {tab === "requests" && (
@@ -86,7 +88,7 @@ export default function Leave() {
             return (
               <div key={r.id} style={{ borderTop: "1px solid var(--line-2)", padding: "14px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, alignItems: "start" }}>
                 <span style={{ fontWeight: 600 }}>{r.employee_name}<span className="t13 mono" style={{ display: "block", fontWeight: 400 }}>{r.employee_code} · {r.leave_type_name}</span></span>
-                <span>{r.from === r.to ? shortDate(r.from) : `${shortDate(r.from)} to ${shortDate(r.to)}`}<span className="t13" style={{ display: "block" }}>{daysText(r)}{r.reason ? ` · ${r.reason}` : ""}</span></span>
+                <span>{r.from === r.to ? shortDate(r.from) : `${shortDate(r.from)} to ${shortDate(r.to)}`}<span className="t13" style={{ display: "block" }}>{daysText(r)}{r.reason ? ` · ${r.reason}` : ""}{(r as { decided_by_manager?: string | null }).decided_by_manager ? ` · decided by ${(r as { decided_by_manager?: string | null }).decided_by_manager}, their manager` : ""}</span></span>
                 <span><Pill tone={st.tone}>{st.label}</Pill></span>
                 <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {r.status === "pending" && <button type="button" className="btn primary" disabled={busy === r.id} aria-label={`Approve leave of ${r.employee_name} from ${r.from}`} onClick={() => void decide(r, "approve")}>Approve</button>}
@@ -118,6 +120,7 @@ export default function Leave() {
       {tab === "signin" && <SelfServicePanel entityId={id!} />}
       {tab === "tax" && <TaxDeclarationsPanel entityId={id!} />}
       {tab === "details" && <DetailRequestsPanel entityId={id!} />}
+      {tab === "files" && <PeopleFilesPanel entityId={id!} />}
 
       {tab === "holidays" && (
         <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }} aria-label="Holidays">

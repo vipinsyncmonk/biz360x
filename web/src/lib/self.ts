@@ -155,7 +155,7 @@ export async function openMyPayslipPdf(employeeId: string, payslipId: string): P
 export type SelfService = "off" | "invited" | "active";
 export const SELF_SERVICE: Record<SelfService, { label: string; hint: string }> = {
   off: { label: "Not opened", hint: "They cannot sign in" },
-  invited: { label: "Invited", hint: "Waiting for them to sign in and accept" },
+  invited: { label: "Invited", hint: "Emailed; waiting for them to sign in and accept" },
   active: { label: "Active", hint: "They see their own payslips, leave and policies" },
 };
 /** What the button does next, or why it cannot. */

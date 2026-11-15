@@ -7,6 +7,7 @@ import { useLoad } from "@/lib/hooks";
 import { employmentLine, pickEmployment, type Employment, type MyRecord } from "@/lib/self";
 import { useSession } from "@/lib/session";
 import { EmploymentInvitations, MyDetailsPanel, MyLeavePanel, MyPayslipsPanel, MyPoliciesPanel, MyRecordCard } from "@/components/SelfPanels";
+import { MyContactPanel, MyProofsPanel, MyTasksPanel, MyTeamPanel } from "@/components/PeoplePanels";
 import { MyTaxPanel } from "@/components/TaxPanels";
 import { ErrorNote, Loading, Logo } from "@/components/ui";
 
@@ -73,7 +74,11 @@ export default function Self() {
             </div>
             <ErrorNote error={record.error} />
             {record.data ? <MyRecordCard rec={record.data} onChanged={() => record.reload()} /> : !record.error && <Loading what="your record" />}
+            <MyTasksPanel employeeId={current.employee_id} />
             <MyDetailsPanel employeeId={current.employee_id} onChanged={() => record.reload()} />
+            <MyContactPanel employeeId={current.employee_id} />
+            <MyProofsPanel employeeId={current.employee_id} />
+            <MyTeamPanel employeeId={current.employee_id} />
             <MyLeavePanel employeeId={current.employee_id} />
             <MyPayslipsPanel employeeId={current.employee_id} />
             <MyTaxPanel employeeId={current.employee_id} />

@@ -43,7 +43,7 @@ test.describe.serial("employee self-service: HR opens it, and what the employee 
     await expect(panel).toContainText("They are not a member of the company and see nothing else");
     await page.getByRole("button", { name: `Open sign-in for ${NAME}` }).click();
     await expect(page.getByRole("button", { name: `Withdraw for ${NAME}` })).toBeVisible();
-    await expect(panel).toContainText("Waiting for them to sign in and accept");
+    await expect(panel).toContainText("waiting for them to sign in and accept");
     expect(problems()).toEqual([]);
   });
 

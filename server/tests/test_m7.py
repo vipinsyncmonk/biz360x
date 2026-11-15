@@ -514,6 +514,7 @@ def test_a_fully_configured_production_starts(production, monkeypatch):
     monkeypatch.setattr(security, "JWT_SECRET", "x" * 40)
     monkeypatch.setenv("BIZ_FIELD_KEY", "k")
     monkeypatch.setenv("BIZ_OTP_PROVIDER", "acme")
+    monkeypatch.setenv("BIZ_MAIL_PROVIDER", "acme")
     for fam in adapters.IMPLEMENTATIONS:
         adapters.use(fam, Real())
     assert security.problems() == []
