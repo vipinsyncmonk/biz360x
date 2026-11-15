@@ -116,6 +116,7 @@ export default function HrPolicy() {
               <div key={c.key} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 <input aria-label={`Checklist item ${i + 1}`} className="input" style={{ ...h40, flex: "1 1 240px" }} value={c.title} onChange={(e) => list((l) => l.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} />
                 <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={c.required} onChange={(e) => list((l) => l.map((x, j) => (j === i ? { ...x, required: e.target.checked } : x)))} /><span>Required</span></label>
+                {!c.auto && <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={!!c.by_employee} onChange={(e) => list((l) => l.map((x, j) => (j === i ? { ...x, by_employee: e.target.checked } : x)))} /><span>Employee ticks it</span></label>}
                 {c.auto ? <span className="t13">Ticks itself</span> : <button type="button" className="linkbtn" aria-label={`Remove ${c.title}`} onClick={() => list((l) => l.filter((_, j) => j !== i))}>Remove</button>}
               </div>
             ))}

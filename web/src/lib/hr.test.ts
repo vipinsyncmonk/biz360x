@@ -23,7 +23,7 @@ describe("the HR policy", () => {
     const body = policyBody(policy(), "2026-11-12");
     expect(body.effective_from).toBe("2026-11-12");
     expect(body.leave.week_off).toEqual([5, 6]);
-    expect(body.onboarding.checklist[0]).toEqual({ key: "offer", title: "Offer letter signed", required: true, auto: null });
+    expect(body.onboarding.checklist[0]).toEqual({ key: "offer", title: "Offer letter signed", required: true, auto: null, by_employee: false });
     expect(Object.keys(body).sort()).toEqual(["effective_from", "leave", "onboarding", "payroll", "salary"]);
   });
   it("explains a policy that cannot be saved", () => {

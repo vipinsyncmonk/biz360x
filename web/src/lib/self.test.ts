@@ -39,7 +39,7 @@ describe("what needs my attention", () => {
   it("lists policies to acknowledge, and what HR still needs from a new joiner", () => {
     expect(myToDo(record({}, { to_acknowledge: 1 }))).toEqual(["Read and acknowledge 1 policy"]);
     expect(myToDo(record({ status: "onboarding", pan_last4: null, bank_on_file: false }, { to_acknowledge: 2 })))
-      .toEqual(["Read and acknowledge 2 policies", "Give HR your PAN", "Give HR your bank account for salary"]);
+      .toEqual(["Read and acknowledge 2 policies", "Add your PAN under My details", "Add your bank account for salary under My details"]);
     expect(myToDo(record({ status: "active", pan_last4: null, bank_on_file: false }))).toEqual([]);          // only while joining
   });
   it("sums the checklist up", () => {

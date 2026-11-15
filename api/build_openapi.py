@@ -977,7 +977,8 @@ schema("LeaveType", {"id": RO_UUID, "code": S(pattern="^[A-Za-z]{2,6}$"), "name"
                      "accrual": ENUM("yearly", "monthly", description="Granted at the start of the leave year, or earned month by month"),
                      "paid": B(description="false: every day of it is loss of pay"), "carry_forward_max": DAYS, "encashable": B(), "is_active": B()}, required=("code", "name"))
 schema("HrChecklistItem", {"key": S(pattern="^[a-z0-9_]{1,30}$"), "title": S(), "required": B(),
-                           "auto": NULLABLE(ENUM("pan", "bank", "salary", "handbook", description="Read from the employee's record instead of ticked by a person"))}, required=("key", "title"))
+                           "auto": NULLABLE(ENUM("pan", "bank", "salary", "handbook", description="Read from the employee's record instead of ticked by a person")),
+                           "by_employee": B(description="The employee ticks this one themselves on their own page")}, required=("key", "title"))
 schema("HrPolicy", {
     "effective_from": NULLABLE({**DATE, "description": "Today or later when saving. None while the company is on the starter policy"}),
     "is_default": B(readOnly=True), "next_change_on": NULLABLE(DATE_RO),
@@ -1001,7 +1002,7 @@ _op("get", E + "/payroll/ctc-breakup", "Payroll & HR", "previewCtcBreakup", "Wha
                                "employee_pf": MONEY, "employee_esi": MONEY, "take_home_before_tax": {**MONEY, "description": "Gross less the employee's PF and ESI; income tax and professional tax come off this"},
                                "wage_pct": NULLABLE(N(description="Basic as a share of gross earnings; the Code on Wages looks for 50"))}),
     desc="Saves nothing. Basic and HRA follow the policy, the employer's PF, ESI and gratuity are taken out when the policy says the CTC includes them, and the special allowance is the rest.")
-schema("OnboardingTask", {"key": S(), "title": S(), "required": B(), "auto": NULLABLE(S()), "done": B()})
+schema("OnboardingTask", {"key": S(), "title": S(), "required": B(), "auto": NULLABLE(S()), "done": B(), "by_employee": B(description="The employee ticks it themselves")})
 schema("Onboarding", {"employee": ref("Employee"), "checklist": ARR(ref("OnboardingTask")), "open_required": ARR(S(), description="Required items still to do"),
                       "ready": B(description="Every required item is done and the person can be activated"), "done": I(), "total": I()})
 action(E + "/employees/onboard", "Payroll & HR", "onboardEmployee", "Enter a new hire with a CTC", "hr:write", status="201", resp=ref("Onboarding"),
@@ -1129,6 +1130,29 @@ _op("get", "/self/{employeeId}/policies", "Employee self-service", "listMyPolici
 _op("get", "/self/{employeeId}/policies/{id}", "Employee self-service", "getMyPolicy", "Read a handbook document", params=[EMP], resp=ref("MyPolicyDocument"))
 action("/self/{employeeId}/policies/{id}/acknowledge", "Employee self-service", "acknowledgeMyPolicy", "Say that I have read and accept it", None, params=[EMP], resp=ref("MyPolicyDocument"),
        desc="My own act, recorded with my name and the date. Twice changes nothing.")
+
+schema("MyDetailsCurrent", {"pan_last4": NULLABLE(S()), "bank_on_file": B(), "bank_ifsc": NULLABLE(S()), "mobile": NULLABLE(S())})
+schema("MyDetailsRequest", {"id": UUID, "pan_last4": NULLABLE(S()), "bank_last4": NULLABLE(S()), "bank_ifsc": NULLABLE(S()), "mobile": NULLABLE(S()), "requested_at": TS,
+                            "decided_at": NULLABLE(TS), "hr_note": NULLABLE(S())})
+schema("MyDetails", {"status": ENUM("none", "pending", "confirmed", "rejected", "withdrawn"), "current": ref("MyDetailsCurrent"), "request": NULLABLE(ref("MyDetailsRequest"))})
+schema("MyDetailsIn", {"pan": S(pattern="^[A-Za-z]{5}[0-9]{4}[A-Za-z]$"), "bank_account": schema("MyBankDetails", {"account_no": S(pattern="^[0-9]{6,18}$"), "ifsc": S(pattern="^[A-Z]{4}0[A-Z0-9]{6}$")}, required=("account_no", "ifsc")),
+                       "mobile": S(pattern="^\\+[1-9][0-9]{7,14}$", description="With the country code")})
+_op("get", "/self/{employeeId}/details", "Employee self-service", "getMyDetails", "What is on my record and the latest change I asked for", params=[EMP], resp=ref("MyDetails"))
+_op("put", "/self/{employeeId}/details", "Employee self-service", "requestMyDetails", "Ask for my PAN, bank account or mobile to be changed", params=[EMP], body=ref("MyDetailsIn"), resp=ref("MyDetails"),
+    desc="Nothing on my record changes until HR confirms. Asking again replaces a request that is still waiting. The bank account is stored encrypted and shown back only as its last four digits.")
+_op("delete", "/self/{employeeId}/details", "Employee self-service", "withdrawMyDetails", "Take back a change I asked for while it is waiting", params=[EMP], resp=ref("MyDetails"))
+_op("put", "/self/{employeeId}/checklist/{key}", "Employee self-service", "tickMyChecklistItem", "Tick or untick a checklist item that is mine to do", params=[EMP, {"name": "key", "in": "path", "required": True, "schema": S(), "description": "The checklist item's key"}], body=schema("MyTick", {"done": B()}, required=("done",)),
+    resp=ref("MyChecklist"), desc="409 for an item HR does or one read from the record.")
+schema("DetailRequest", {"id": UUID, "employee_id": UUID, "employee_code": S(), "employee_name": S(), "status": ENUM("pending", "confirmed", "rejected", "withdrawn"), "requested_at": TS,
+                         "decided_at": NULLABLE(TS), "hr_note": NULLABLE(S()), "pan": NULLABLE(S()), "current_pan": NULLABLE(S()), "bank_account": NULLABLE(S(description="Last four digits")),
+                         "bank_ifsc": NULLABLE(S()), "current_bank_account": NULLABLE(S()), "current_bank_ifsc": NULLABLE(S()), "mobile": NULLABLE(S()), "current_mobile": NULLABLE(S())})
+_op("get", E + "/employee-detail-requests", "Payroll & HR", "listEmployeeDetailRequests", "Changes employees asked for to their PAN, bank account or mobile", "hr:read",
+    params=[q("status", ENUM("pending", "confirmed", "rejected", "withdrawn"))], resp=schema("DetailRequestList", {"data": ARR(ref("DetailRequest"))}))
+action(E + "/employee-detail-requests/{id}/confirm", "Payroll & HR", "confirmEmployeeDetailRequest", "Apply an employee's requested change to their record", "hr:write",
+       body=schema("DetailDecision", {"note": NULLABLE(S(maxLength=300))}), resp=ref("DetailRequest"),
+       desc="Check it against their documents first: the bank account is where salary is paid. `two_person_rule` (403) for the person who raised it.")
+action(E + "/employee-detail-requests/{id}/reject", "Payroll & HR", "rejectEmployeeDetailRequest", "Refuse an employee's requested change", "hr:write",
+       body=schema("DetailReject", {"note": S(maxLength=300)}, required=("note",)), resp=ref("DetailRequest"))
 
 # =================================================================== YEAR-END TAX DECLARATIONS
 tag("Tax declarations", "An employee chooses a tax regime for the financial year and declares deductions; HR verifies each figure; payroll deducts TDS on the verified ones. "

@@ -6,7 +6,7 @@ import { api, unwrap } from "@/lib/api";
 import { useLoad } from "@/lib/hooks";
 import { employmentLine, pickEmployment, type Employment, type MyRecord } from "@/lib/self";
 import { useSession } from "@/lib/session";
-import { EmploymentInvitations, MyLeavePanel, MyPayslipsPanel, MyPoliciesPanel, MyRecordCard } from "@/components/SelfPanels";
+import { EmploymentInvitations, MyDetailsPanel, MyLeavePanel, MyPayslipsPanel, MyPoliciesPanel, MyRecordCard } from "@/components/SelfPanels";
 import { MyTaxPanel } from "@/components/TaxPanels";
 import { ErrorNote, Loading, Logo } from "@/components/ui";
 
@@ -72,12 +72,13 @@ export default function Self() {
               )}
             </div>
             <ErrorNote error={record.error} />
-            {record.data ? <MyRecordCard rec={record.data} /> : !record.error && <Loading what="your record" />}
+            {record.data ? <MyRecordCard rec={record.data} onChanged={() => record.reload()} /> : !record.error && <Loading what="your record" />}
+            <MyDetailsPanel employeeId={current.employee_id} onChanged={() => record.reload()} />
             <MyLeavePanel employeeId={current.employee_id} />
             <MyPayslipsPanel employeeId={current.employee_id} />
             <MyTaxPanel employeeId={current.employee_id} />
             <MyPoliciesPanel employeeId={current.employee_id} onChanged={() => record.reload()} />
-            <span className="t13">You see only your own record here. Your PAN and bank account are entered by HR; if something is wrong, ask them to correct it.</span>
+            <span className="t13">You see only your own record here. Changes to your PAN, bank account or mobile are checked by HR before they apply.</span>
           </>
         )}
       </main>
