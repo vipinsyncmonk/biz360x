@@ -3802,6 +3802,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/self/{employeeId}/tax-declaration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My declaration for a year, and the sections I can claim under */
+        get: operations["getMyTaxDeclaration"];
+        /**
+         * Save my declaration as a draft
+         * @description Replaces the regime and the whole list of items. 409 while it waits with HR or once verified; HR returns it to unlock it.
+         */
+        put: operations["saveMyTaxDeclaration"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/self/{employeeId}/tax-declaration/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send my declaration to HR to verify
+         * @description Twice changes nothing.
+         */
+        post: operations["submitMyTaxDeclaration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/self/{employeeId}/form16": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Form 16 Part B for a year, from my payslips and verified declaration
+         * @description Part A comes from TRACES and is not here. Starter figures: a CA must review before this is issued.
+         */
+        get: operations["getMyForm16"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/tax-declarations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Declarations for a year; those waiting for HR come first
+         * @description Payroll at `read` may also call this.
+         */
+        get: operations["listTaxDeclarations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/tax-declarations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One declaration with its items */
+        get: operations["getTaxDeclaration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/tax-declarations/{id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify a submitted declaration
+         * @description An item not listed is verified at the amount declared. 409 unless the declaration is submitted. TDS uses the verified figures from the next payroll computation. Payroll at `write` may also call this.
+         */
+        post: operations["verifyTaxDeclaration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/tax-declarations/{id}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a declaration back to the employee with a note
+         * @description A verified one can be returned too; its deductions stop counting from the next payroll computation.
+         */
+        post: operations["returnTaxDeclaration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/form16": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Form 16 Part B for an employee and a year */
+        get: operations["getEmployeeForm16"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entityId}/contracts": {
         parameters: {
             query?: never;
@@ -8560,6 +8715,132 @@ export interface components {
         };
         MyPolicyDocumentList: {
             data?: components["schemas"]["MyPolicyDocument"][];
+        };
+        TaxSection: {
+            code?: string;
+            label?: string;
+            annual_cap?: components["schemas"]["Money"] | null;
+            old_regime_only?: boolean;
+            note?: string | null;
+        };
+        TaxItem: {
+            /** Format: uuid */
+            readonly id?: string;
+            section: string;
+            description: string;
+            declared_amount: components["schemas"]["Money"];
+            proof_ref?: string | null;
+            /** @enum {string} */
+            readonly status?: "pending" | "verified" | "rejected";
+            verified_amount?: components["schemas"]["Money"] | null;
+            hr_note?: string | null;
+        };
+        TaxSectionSummary: {
+            section?: string;
+            declared?: components["schemas"]["Money"];
+            verified?: components["schemas"]["Money"];
+            cap?: components["schemas"]["Money"] | null;
+            counts?: components["schemas"]["Money"];
+        };
+        TaxDeclaration: {
+            fy?: string;
+            /** @enum {string} */
+            regime?: "new" | "old";
+            /** @enum {string} */
+            status?: "none" | "draft" | "submitted" | "verified" | "returned";
+            id?: string | null;
+            submitted_at?: string | null;
+            verified_at?: string | null;
+            hr_note?: string | null;
+            editable?: boolean;
+            sections?: components["schemas"]["TaxSection"][];
+            items?: components["schemas"]["TaxItem"][];
+            summary?: components["schemas"]["TaxSectionSummary"][];
+            note?: string;
+        };
+        TaxDeclarationDetail: {
+            fy?: string;
+            /** @enum {string} */
+            regime?: "new" | "old";
+            /** @enum {string} */
+            status?: "none" | "draft" | "submitted" | "verified" | "returned";
+            id?: string | null;
+            submitted_at?: string | null;
+            verified_at?: string | null;
+            hr_note?: string | null;
+            editable?: boolean;
+            sections?: components["schemas"]["TaxSection"][];
+            items?: components["schemas"]["TaxItem"][];
+            summary?: components["schemas"]["TaxSectionSummary"][];
+            note?: string;
+            /** Format: uuid */
+            employee_id?: string;
+            employee_code?: string;
+            employee_name?: string;
+        };
+        TaxDeclarationIn: {
+            /** @enum {string} */
+            regime: "new" | "old";
+            items?: components["schemas"]["TaxItem"][];
+        };
+        Form16Deduction: {
+            section?: string;
+            label?: string;
+            amount?: components["schemas"]["Money"];
+        };
+        Form16PartB: {
+            fy?: string;
+            assessment_year?: string;
+            /** @enum {string} */
+            regime?: "new" | "old";
+            employee_name?: string;
+            months?: number;
+            gross_salary?: components["schemas"]["Money"];
+            standard_deduction?: components["schemas"]["Money"];
+            chapter_vi_a?: components["schemas"]["Form16Deduction"][];
+            chapter_vi_a_total?: components["schemas"]["Money"];
+            taxable_income?: components["schemas"]["Money"];
+            tax_with_cess?: components["schemas"]["Money"];
+            tds_deducted?: components["schemas"]["Money"];
+            /** @description Tax on the total income less TDS deducted; negative means more was deducted */
+            difference?: components["schemas"]["Money"];
+            deductions_verified?: boolean;
+            note?: string;
+        };
+        TaxDeclarationRow: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            employee_id?: string;
+            employee_code?: string;
+            employee_name?: string;
+            /** @enum {string} */
+            regime?: "new" | "old";
+            /** @enum {string} */
+            status?: "draft" | "submitted" | "verified" | "returned";
+            items?: number;
+            declared?: components["schemas"]["Money"];
+            submitted_at?: string | null;
+            verified_at?: string | null;
+        };
+        TaxDeclarationList: {
+            fy?: string;
+            data?: components["schemas"]["TaxDeclarationRow"][];
+        };
+        TaxItemDecision: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status?: "verified" | "rejected";
+            verified_amount?: components["schemas"]["Money"] | null;
+            note?: string | null;
+        };
+        TaxDeclarationVerify: {
+            items?: components["schemas"]["TaxItemDecision"][];
+            note?: string | null;
+        };
+        TaxDeclarationReturn: {
+            note: string;
         };
         ContractTerm: {
             /**
@@ -18774,6 +19055,304 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getMyTaxDeclaration: {
+        parameters: {
+            query?: {
+                /** @description The financial year, like 2026-27; the current one by default */
+                fy?: components["schemas"]["FyLabel"];
+            };
+            header?: never;
+            path: {
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxDeclaration"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    saveMyTaxDeclaration: {
+        parameters: {
+            query?: {
+                /** @description The financial year, like 2026-27; the current one by default */
+                fy?: components["schemas"]["FyLabel"];
+            };
+            header?: never;
+            path: {
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxDeclarationIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxDeclaration"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    submitMyTaxDeclaration: {
+        parameters: {
+            query?: {
+                /** @description The financial year, like 2026-27; the current one by default */
+                fy?: components["schemas"]["FyLabel"];
+            };
+            header?: never;
+            path: {
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxDeclaration"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getMyForm16: {
+        parameters: {
+            query?: {
+                /** @description The financial year, like 2026-27; the current one by default */
+                fy?: components["schemas"]["FyLabel"];
+            };
+            header?: never;
+            path: {
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Form16PartB"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listTaxDeclarations: {
+        parameters: {
+            query?: {
+                /** @description The financial year, like 2026-27; the current one by default */
+                fy?: components["schemas"]["FyLabel"];
+                status?: "draft" | "submitted" | "verified" | "returned";
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxDeclarationList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getTaxDeclaration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxDeclarationDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    verifyTaxDeclaration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxDeclarationVerify"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxDeclarationDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    returnTaxDeclaration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxDeclarationReturn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxDeclarationDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getEmployeeForm16: {
+        parameters: {
+            query?: {
+                /** @description The financial year, like 2026-27; the current one by default */
+                fy?: components["schemas"]["FyLabel"];
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Form16PartB"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooMany"];
         };
     };

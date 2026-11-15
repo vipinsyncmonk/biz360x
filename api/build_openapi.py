@@ -1130,6 +1130,47 @@ _op("get", "/self/{employeeId}/policies/{id}", "Employee self-service", "getMyPo
 action("/self/{employeeId}/policies/{id}/acknowledge", "Employee self-service", "acknowledgeMyPolicy", "Say that I have read and accept it", None, params=[EMP], resp=ref("MyPolicyDocument"),
        desc="My own act, recorded with my name and the date. Twice changes nothing.")
 
+# =================================================================== YEAR-END TAX DECLARATIONS
+tag("Tax declarations", "An employee chooses a tax regime for the financial year and declares deductions; HR verifies each figure; payroll deducts TDS on the verified ones. "
+    "The sections and limits are a starter library that a CA must review before they drive a deduction.")
+schema("TaxSection", {"code": S(), "label": S(), "annual_cap": NULLABLE(MONEY), "old_regime_only": B(), "note": NULLABLE(S())})
+schema("TaxItem", {"id": RO_UUID, "section": S(pattern="^[0-9A-Z]{2,10}$"), "description": S(maxLength=200), "declared_amount": MONEY, "proof_ref": NULLABLE(S(maxLength=200, description="What the proof is: a policy or receipt number. Files are not uploaded here yet")),
+                   "status": ENUM("pending", "verified", "rejected", readOnly=True), "verified_amount": NULLABLE({**MONEY, "readOnly": True}), "hr_note": NULLABLE(S(readOnly=True))},
+       required=("section", "description", "declared_amount"))
+schema("TaxSectionSummary", {"section": S(), "declared": MONEY, "verified": MONEY, "cap": NULLABLE(MONEY), "counts": MONEY})
+TAX_DECL_FIELDS = {"fy": S(pattern="^[0-9]{4}-[0-9]{2}$"), "regime": ENUM("new", "old"), "status": ENUM("none", "draft", "submitted", "verified", "returned"), "id": NULLABLE(UUID),
+                   "submitted_at": NULLABLE(TS), "verified_at": NULLABLE(TS), "hr_note": NULLABLE(S()), "editable": B(), "sections": ARR(ref("TaxSection")), "items": ARR(ref("TaxItem")),
+                   "summary": ARR(ref("TaxSectionSummary")), "note": S()}
+schema("TaxDeclaration", TAX_DECL_FIELDS)
+schema("TaxDeclarationDetail", {**TAX_DECL_FIELDS, "employee_id": UUID, "employee_code": S(), "employee_name": S()})
+schema("TaxDeclarationIn", {"regime": ENUM("new", "old"), "items": ARR(ref("TaxItem"))}, required=("regime",))
+FYQ = q("fy", FY, "The financial year, like 2026-27; the current one by default")
+_op("get", "/self/{employeeId}/tax-declaration", "Tax declarations", "getMyTaxDeclaration", "My declaration for a year, and the sections I can claim under", params=[EMP, FYQ], resp=ref("TaxDeclaration"))
+_op("put", "/self/{employeeId}/tax-declaration", "Tax declarations", "saveMyTaxDeclaration", "Save my declaration as a draft", params=[EMP, FYQ], body=ref("TaxDeclarationIn"), resp=ref("TaxDeclaration"),
+    desc="Replaces the regime and the whole list of items. 409 while it waits with HR or once verified; HR returns it to unlock it.")
+action("/self/{employeeId}/tax-declaration/submit", "Tax declarations", "submitMyTaxDeclaration", "Send my declaration to HR to verify", None, params=[EMP, FYQ], resp=ref("TaxDeclaration"),
+       desc="Twice changes nothing.")
+schema("Form16PartB", {"fy": S(), "assessment_year": S(), "regime": ENUM("new", "old"), "employee_name": S(), "months": I(), "gross_salary": MONEY, "standard_deduction": MONEY,
+                       "chapter_vi_a": ARR(schema("Form16Deduction", {"section": S(), "label": S(), "amount": MONEY})), "chapter_vi_a_total": MONEY, "taxable_income": MONEY,
+                       "tax_with_cess": MONEY, "tds_deducted": MONEY, "difference": {**MONEY, "description": "Tax on the total income less TDS deducted; negative means more was deducted"},
+                       "deductions_verified": B(), "note": S()})
+_op("get", "/self/{employeeId}/form16", "Tax declarations", "getMyForm16", "Form 16 Part B for a year, from my payslips and verified declaration", params=[EMP, FYQ], resp=ref("Form16PartB"),
+    desc="Part A comes from TRACES and is not here. Starter figures: a CA must review before this is issued.")
+schema("TaxDeclarationRow", {"id": UUID, "employee_id": UUID, "employee_code": S(), "employee_name": S(), "regime": ENUM("new", "old"), "status": ENUM("draft", "submitted", "verified", "returned"),
+                             "items": I(), "declared": MONEY, "submitted_at": NULLABLE(TS), "verified_at": NULLABLE(TS)})
+_op("get", E + "/tax-declarations", "Tax declarations", "listTaxDeclarations", "Declarations for a year; those waiting for HR come first", "hr:read",
+    params=[FYQ, q("status", ENUM("draft", "submitted", "verified", "returned"))], resp=schema("TaxDeclarationList", {"fy": S(), "data": ARR(ref("TaxDeclarationRow"))}),
+    desc="Payroll at `read` may also call this.")
+_op("get", E + "/tax-declarations/{id}", "Tax declarations", "getTaxDeclaration", "One declaration with its items", "hr:read", resp=ref("TaxDeclarationDetail"))
+action(E + "/tax-declarations/{id}/verify", "Tax declarations", "verifyTaxDeclaration", "Verify a submitted declaration", "hr:write",
+       body=schema("TaxDeclarationVerify", {"items": ARR(schema("TaxItemDecision", {"id": UUID, "status": ENUM("verified", "rejected"), "verified_amount": NULLABLE(MONEY), "note": NULLABLE(S(maxLength=300))}, required=("id",))),
+                                            "note": NULLABLE(S(maxLength=300))}),
+       resp=ref("TaxDeclarationDetail"), desc="An item not listed is verified at the amount declared. 409 unless the declaration is submitted. TDS uses the verified figures from the next payroll computation. Payroll at `write` may also call this.")
+action(E + "/tax-declarations/{id}/return", "Tax declarations", "returnTaxDeclaration", "Send a declaration back to the employee with a note", "hr:write",
+       body=schema("TaxDeclarationReturn", {"note": S(maxLength=300)}, required=("note",)), resp=ref("TaxDeclarationDetail"),
+       desc="A verified one can be returned too; its deductions stop counting from the next payroll computation.")
+_op("get", E + "/employees/{id}/form16", "Tax declarations", "getEmployeeForm16", "Form 16 Part B for an employee and a year", "hr:read", params=[FYQ], resp=ref("Form16PartB"))
+
 # =================================================================== LEGAL, BOARD, CAPITAL, SCHEMES
 tag("Legal & board", "Contracts, extracted terms, templates, meetings and resolutions")
 schema("ContractTerm", {"term_key": S(examples=["renewal", "payment", "liability_cap"]), "value_text": S(), "value_json": {"type": "object"},

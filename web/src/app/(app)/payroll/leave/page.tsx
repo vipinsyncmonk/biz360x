@@ -9,9 +9,10 @@ import { canOpen } from "@/lib/roles";
 import { useSession } from "@/lib/session";
 import { ApplyLeave, HolidayAdd } from "@/components/HrForms";
 import { SelfServicePanel } from "@/components/SelfPanels";
+import { TaxDeclarationsPanel } from "@/components/TaxPanels";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
-type Tab = "requests" | "balances" | "holidays" | "signin";
+type Tab = "requests" | "balances" | "holidays" | "signin" | "tax";
 
 export default function Leave() {
   const { entity } = useSession();
@@ -73,6 +74,7 @@ export default function Leave() {
         <button type="button" role="tab" aria-selected={tab === "balances"} onClick={() => setTab("balances")}>Balances</button>
         <button type="button" role="tab" aria-selected={tab === "holidays"} onClick={() => setTab("holidays")}>Holidays</button>
         <button type="button" role="tab" aria-selected={tab === "signin"} onClick={() => setTab("signin")}>Employee sign-in</button>
+        <button type="button" role="tab" aria-selected={tab === "tax"} onClick={() => setTab("tax")}>Tax declarations</button>
       </div>
 
       {tab === "requests" && (
@@ -113,6 +115,7 @@ export default function Leave() {
       )}
 
       {tab === "signin" && <SelfServicePanel entityId={id!} />}
+      {tab === "tax" && <TaxDeclarationsPanel entityId={id!} />}
 
       {tab === "holidays" && (
         <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }} aria-label="Holidays">
