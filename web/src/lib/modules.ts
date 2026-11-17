@@ -44,7 +44,7 @@ export const LAYERS: Layer[] = [
     m("Banking & Payments", "Vendor runs, payout approvals, UPI collections.", I.bank, ALL, null),
     m("Sales & Receivables", "Quotes, invoices, dunning, MSME-aware ageing.", I.up, ALL, "/billing"),
     m("Procurement & Vendors", "Purchase orders, bills, vendor KYC, 45-day payment tracking.", I.cart, ["Business", "MSME"], null),
-    m("Inventory & Dispatch", "Stock, BOM, dispatch orders linked to e-way bills.", I.box, ["MSME", "Business"], null),
+    m("Inventory & Dispatch", "Stock on hand at average cost, movements, counts and write-offs. BOM and dispatch come later.", I.box, ["MSME", "Business"], "/inventory"),
     m("Exports & Imports", "Shipping bills, the nine-month clock for proceeds, LUT, RoDTEP and drawback, bills of entry.", I.ship, ["Business", "MSME"], "/trade"),
   ] },
   { key: "L1 · FOUNDATION", title: "Foundation", about: "Shared core every module writes to. Always on.", modules: [

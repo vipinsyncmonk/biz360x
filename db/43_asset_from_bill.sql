@@ -1,5 +1,5 @@
 -- =====================================================================
--- Part 35 · Registering an asset from a purchase bill line
+-- Part 43 · Registering an asset from a purchase bill line
 -- An asset can now say which line of which purchase bill it was capitalised from, so the same line cannot be capitalised twice over
 -- (the API checks what is left on the line) and the register can show where the cost came from.
 -- =====================================================================

@@ -253,15 +253,42 @@ _op("post", "/auth/logout", "Auth", "logout", "Revoke the refresh token and its 
 
 tag("Me", "The signed-in user, their entities and preferences")
 schema("EntitySummary", {"id": UUID, "legal_name": S(), "constitution": S(), "track": ENUM("business", "startup", "msme"),
-                         "role": ENUM("owner", "approver", "maker", "viewer", "advisor", "org_staff"), "modules": ARR(S())})
+                         "role": ENUM("owner", "approver", "maker", "viewer", "advisor", "org_staff"), "modules": ARR(S(), description="The modules the caller can open; `*` is all of them"),
+                         "scopes": {"type": "object", "additionalProperties": S(), "description": "The caller's level on each module. A member's levels are read, comment, write, approve, file; a practitioner's are their grant's"},
+                         "title": NULLABLE(S(description="What the company calls the caller")),
+                         "home": ENUM("leadership", "finance", "people", "general", "practitioner", description="The home screen the caller lands on")})
 schema("Me", {"id": RO_UUID, "email": S(format="email"), "full_name": S(), "mobile_e164": S(), "mfa_enabled": B(),
-              "entities": ARR(ref("EntitySummary")), "organizations": ARR(schema("OrgSummary", {"id": UUID, "name": S(), "kind": S(), "role": S()}))})
+              "entities": ARR(ref("EntitySummary")), "organizations": ARR(schema("OrgSummary", {"id": UUID, "name": S(), "kind": S(), "role": S()})),
+              "employments": ARR(schema("EmploymentSummary", {"employee_id": UUID, "entity_id": UUID, "legal_name": S(), "employee_code": S(), "full_name": S(), "designation": NULLABLE(S()), "status": S()}),
+                                 description="Companies where the caller is an employee with their own sign-in (`/self`). Not a membership: none of the company's data is open to them.")})
 _op("get", "/me", "Me", "getMe", "Who am I, and which entities can I act on", resp=ref("Me"))
 schema("NotificationPreference", {"entity_id": UUID, "event_type": ENUM("due_in_7_days", "due_tomorrow", "approval_requested", "notice_received", "threshold_crossed", "copilot_suggestion"),
                                   "channel": ENUM("email", "whatsapp", "push", "sms"), "enabled": B()}, required=("entity_id", "event_type", "channel", "enabled"))
 _op("get", "/me/notification-preferences", "Me", "listNotificationPreferences", "My notification matrix", resp=ARR(ref("NotificationPreference")))
 _op("put", "/me/notification-preferences", "Me", "replaceNotificationPreferences", "Replace my notification matrix",
     body=ARR(ref("NotificationPreference")), resp=ARR(ref("NotificationPreference")))
+schema("WorkItem", {"kind": ENUM("approval", "filing", "task", "leave", "document_request", "holiday"), "id": NULLABLE(UUID), "entity_id": UUID, "entity_name": S(), "title": S(),
+                    "detail": NULLABLE(S()), "due_on": NULLABLE(DATE), "overdue": B(), "href": S(description="The screen in the web app where it is acted on")})
+SERVICE = ENUM("bookkeeping", "gst", "tds", "pf_esi", "payroll", "secretarial", "trade", "statutory_audit", "tax_audit", "internal_audit", "virtual_cfo", "legal")
+GRANT_SCOPES = {"type": "object", "additionalProperties": ENUM("read", "comment", "prepare", "certify"), "examples": [{"gst": "certify", "sales": "read"}],
+                "description": "A level per module in the practitioner's words. Never settings, and never an approving level: approvals stay with the company."}
+schema("EngagementInvite", {"id": UUID, "entity_id": UUID, "entity_name": S(), "advisor_name": S(), "advisor_kind": S(), "service": NULLABLE(SERVICE), "service_label": NULLABLE(S()),
+                            "scopes": GRANT_SCOPES, "period_fy": NULLABLE(S()), "expires_on": NULLABLE(DATE), "invited_by_name": NULLABLE(S()), "audit": B(), "created_at": RO_TS})
+_op("get", "/me/engagements", "Me", "getMyEngagements", "Invitations waiting for me, and the firms I could accept one for",
+    resp=schema("MyEngagements", {"invitations": ARR(ref("EngagementInvite")), "firms": ARR(schema("FirmRef", {"id": UUID, "name": S()}))}),
+    desc="An invited person cannot see the company until they accept; this is where they see the invitation.")
+ENGAGEMENT_ANSWER = schema("EngagementAnswer", {"id": UUID, "status": ENUM("active", "declined"), "entity_id": UUID, "accepted_for": NULLABLE(UUID),
+                                                "work_taken_on": I(description="Kinds of work the practitioner now prepares, from their preset")})
+action("/me/engagements/{id}/accept", "Me", "acceptEngagement", "Accept an invitation, as myself or for my firm", None, resp=ENGAGEMENT_ANSWER,
+       body=schema("AcceptEngagement", {"organization_id": NULLABLE({**UUID, "description": "A firm I am a partner or admin of. Left out, I accept as myself"})}),
+       desc="Access starts now. Accepting for a firm makes it the firm's engagement: partners see the client, staff once they are assigned. `independence_conflict` (409) when it would break the audit rule.")
+action("/me/engagements/{id}/decline", "Me", "declineEngagement", "Decline an invitation", None, resp=ENGAGEMENT_ANSWER)
+_op("get", "/me/work", "Me", "getMyWork", "Everything waiting on me, across my companies", params=[q("entity_id", UUID, "One company only"), P("Limit")],
+    resp=schema("MyWork", {"data": ARR(ref("WorkItem")), "total": I(), "overdue": I(), "counts": {"type": "object", "additionalProperties": I()}}),
+    desc="Tasks given to me, filings I own, approvals for me to decide, leave for me to decide and document requests I can answer; overdue first, then by due date.")
+_op("get", "/me/calendar", "Me", "getMyCalendar", "My dated work and my companies' holidays, day by day", params=[P("From"), P("To"), q("entity_id", UUID)],
+    resp=schema("MyCalendar", {"from": DATE, "to": DATE, "days": ARR(schema("MyCalendarDay", {"date": DATE, "items": ARR(ref("WorkItem"))}))}),
+    desc="Five weeks from today when no range is given.")
 
 # =================================================================== ONBOARDING & ENTITIES
 tag("Onboarding", "Look an identifier up in public registries and turn it into a workspace and an obligation graph")
@@ -314,18 +341,38 @@ collection(E + "/registrations", "Entities", "Registration", "settings", filters
            create_schema=schema("RegistrationCreate", {"kind": ENUM("lut", "iec"), "number": S(pattern="^[A-Z0-9]{10,20}$"), "valid_from": NULLABLE(DATE), "valid_until": NULLABLE(DATE), "label": S()},
                                 desc="Records the Letter of Undertaking (dates required) or the Importer-Exporter Code. GSTINs come from onboarding."))
 item(E + "/registrations", "Entities", "Registration", "settings")
-schema("Member", {"id": RO_UUID, "user_id": UUID, "email": S(format="email"), "full_name": S(readOnly=True),
-                  "role": ENUM("owner", "approver", "maker", "viewer"), "modules": ARR(S(), examples=[["gst", "finance"]]),
-                  "accepted_at": NULLABLE(RO_TS), "auth": S(readOnly=True, examples=["SSO · 2FA"])}, required=("role",))
+SCOPES = {"type": "object", "additionalProperties": ENUM("read", "comment", "write", "approve", "file"), "examples": [{"finance": "file", "payroll": "approve", "hr": "read"}],
+          "description": "A level for each module: read < comment < write < approve < file. `*` stands for every module not named."}
+HOME = ENUM("leadership", "finance", "people", "general")
+schema("Member", {"id": RO_UUID, "user_id": UUID, "email": S(format="email"), "full_name": S(),
+                  "preset": NULLABLE(S(description="A starting point from GET /role-presets (ceo, cfo, accountant, hr_manager…). Explicit scopes, title and home win over it.")),
+                  "scopes": SCOPES, "owner": B(writeOnly=True, description="An owner has every module and is the only one who manages people"),
+                  "title": NULLABLE(S(maxLength=80, description="What the company calls the person: CFO, Accounts executive")), "home": NULLABLE(HOME),
+                  "role": ENUM("owner", "approver", "maker", "viewer", description="Derived from the scopes: owner, or the highest level held. Accepted on create with `modules` as the earlier way to invite."),
+                  "modules": ARR(S(), examples=[["gst", "finance"]]),
+                  "accepted_at": NULLABLE(RO_TS), "auth": S(readOnly=True, examples=["SSO · 2FA"])}, required=("email",),
+       desc="Only an owner can invite a person, change their access or remove them (403 for anyone else).")
+schema("RolePreset", {"key": S(), "kind": ENUM("member", "practitioner"), "title": S(), "about": S(), "owner": B(), "home": NULLABLE(HOME), "advisor_kind": NULLABLE(S()),
+                      "service": NULLABLE(S(description="For a practitioner: the service the engagement is for")),
+                      "scopes": {"type": "object", "additionalProperties": S(), "description": "For a member, levels on the member scale; for a practitioner, an advisor grant's levels (read, comment, prepare, certify)"}})
+_op("get", "/role-presets", "Entities", "listRolePresets", "The presets a person or a practitioner can start from", security=None,
+    resp=schema("RolePresets", {"presets": ARR(ref("RolePreset")), "levels": ARR(S()), "modules": ARR(schema("ModuleLabel", {"key": S(), "label": S()}))}),
+    desc="A title is not a permission: a preset fills the scopes and the home screen, and every line can be changed.")
 collection(E + "/members", "Entities", "Member", "settings", create_schema=ref("Member"))
 item(E + "/members", "Entities", "Member", "settings", delete=True, delete_note="Revokes access; history keeps the person's name.")
-schema("AdvisorGrant", {"id": RO_UUID, "advisor_org_id": NULLABLE(UUID), "advisor_name": S(),
-                        "advisor_kind": ENUM("chartered_accountant", "company_secretary", "counsel", "lender", "investor", "auditor"),
-                        "invite_email": S(format="email", writeOnly=True),
-                        "scopes": {"type": "object", "additionalProperties": ENUM("read", "comment", "prepare", "certify"),
-                                   "examples": [{"finance": "read", "gst": "prepare", "mca_financial": "certify"}]},
-                        "document_folders": ARR(S()), "expires_on": NULLABLE(DATE),
-                        "status": ENUM("invited", "active", "revoked", "expired", readOnly=True)}, required=("advisor_name", "advisor_kind", "scopes"))
+schema("AdvisorGrant", {"id": RO_UUID, "advisor_org_id": NULLABLE(RO_UUID), "advisor_name": S(),
+                        "advisor_kind": ENUM("chartered_accountant", "company_secretary", "counsel", "lender", "investor", "auditor", description="Taken from the preset when one is given"),
+                        "invite_email": S(format="email", writeOnly=True, description="The person to invite. Access starts when they accept. Left out, the engagement is only a record."),
+                        "service": NULLABLE(SERVICE), "preset": NULLABLE(S(description="A practitioner preset from GET /role-presets; explicit scopes win over it")),
+                        "scopes": GRANT_SCOPES, "period_fy": NULLABLE(FY), "membership_no": NULLABLE(S(description="As the practitioner states it; not verified")),
+                        "document_folders": NULLABLE(ARR(S())), "expires_on": NULLABLE({**DATE, "description": "Required for an audit engagement"}),
+                        "invited_email": NULLABLE(S(readOnly=True)), "practitioner_user_id": NULLABLE(RO_UUID), "accepted_at": NULLABLE(RO_TS), "created_at": RO_TS,
+                        "party": ENUM("person", "firm", "record", readOnly=True, description="Engaged as a person, through a firm, or only recorded"),
+                        "audit": B(readOnly=True, description="An audit engagement: read and raise queries only"),
+                        "status": ENUM("invited", "active", "declined", "revoked", "expired", readOnly=True)}, required=("advisor_name",),
+       desc="Only an owner can engage a practitioner or end an engagement. `audit_read_only` (400) for an audit engagement with a writing level or no end date; "
+            "`independence_conflict` (409) when the same practitioner would hold the statutory audit and the books, the internal audit or the CFO role for the same year. "
+            "Which services an auditor may not provide is a starter rule for a CA to confirm.")
 collection(E + "/advisor-grants", "Entities", "AdvisorGrant", "settings")
 item(E + "/advisor-grants", "Entities", "AdvisorGrant", "settings", delete=True, delete_note="Revokes the grant immediately.")
 schema("Fact", {"fact_key": S(examples=["aato", "headcount", "paid_up_capital", "cash_receipts_pct"]),
@@ -434,10 +481,23 @@ action(E + "/signature-requests/{id}/signers/{signerId}/sign", "Approvals", "sig
        desc="Signers sign in order. When the last one signs the request completes; a contract becomes active with this document as its signed copy.")
 action(E + "/signature-requests/{id}/signers/{signerId}/decline", "Approvals", "declineAsSigner", "Decline to sign", "approvals:read",
        body=schema("DeclineAction", {"reason": S()}), resp=ref("SignatureRequest"), params=[{"name": "signerId", "in": "path", "required": True, "schema": UUID}])
-schema("Task", {"id": RO_UUID, "title": S(), "subject": NULLABLE(S()), "subject_id": NULLABLE(UUID), "assignee_id": NULLABLE(UUID),
-                "due_on": NULLABLE(DATE), "status": ENUM("open", "done", "cancelled"), "source": ENUM("user", "engine", "dunning", "copilot", "advisor", readOnly=True)},
-       required=("title",))
-collection(E + "/tasks", "Approvals", "Task", "tasks", filters=[q("assignee", S()), q("status", S())])
+schema("Task", {"id": RO_UUID, "title": S(), "description": NULLABLE(S()), "subject": NULLABLE(S()), "subject_id": NULLABLE(UUID), "assignee_id": NULLABLE(UUID),
+                "assignee_name": NULLABLE(S(readOnly=True)), "due_on": NULLABLE(DATE), "status": ENUM("open", "done", "cancelled"),
+                "source": ENUM("user", "engine", "dunning", "copilot", "advisor", readOnly=True), "created_by": NULLABLE(RO_UUID), "created_by_name": NULLABLE(S(readOnly=True)),
+                "created_at": RO_TS, "completed_at": NULLABLE(RO_TS)},
+       required=("title",), desc="The person a task is assigned to can always finish it; anything else needs `tasks:write`.")
+collection(E + "/tasks", "Approvals", "Task", "tasks", filters=[q("assignee", S(), "`me`, `none`, or a person's id"), q("status", ENUM("open", "done", "cancelled"))])
+WORK_KIND = ENUM("gst", "tds", "pf_esi", "professional_tax", "mca", "income_tax", "other_filing", "payroll_run", "vendor_payment", "leave")
+schema("ResponsibilitySlot", {"work_kind": WORK_KIND, "step": ENUM("prepare", "approve"), "user_id": UUID, "name": S(readOnly=True)}, required=("work_kind", "step", "user_id"))
+schema("Responsibilities", {
+    "data": ARR(ref("ResponsibilitySlot")),
+    "kinds": {**ARR(schema("WorkKind", {"key": S(), "label": S(), "about": S(), "steps": ARR(S())})), "readOnly": True},
+    "people": {**ARR(schema("ResponsiblePerson", {"user_id": UUID, "name": S(), "title": NULLABLE(S()), "practitioner": B(description="Engaged from outside; can prepare, never approve"), "approves": ARR(S(), description="The kinds of work this person could be named approver of")})), "readOnly": True},
+    "filings_reassigned": I(readOnly=True, description="On a save: open filings that moved to the person now named")}, required=("data",))
+_op("get", E + "/responsibilities", "Entities", "getResponsibilities", "Who prepares and who approves each kind of work", "tasks:read", resp=ref("Responsibilities"),
+    desc="Anyone in the company can read it. A new filing takes its owner and approver from it, and a request for approval goes to the approver it names (never to the person who raised it).")
+_op("put", E + "/responsibilities", "Entities", "setResponsibilities", "Replace the responsibility matrix", "settings:write", body=ref("Responsibilities"), resp=ref("Responsibilities"),
+    desc="Only an owner can (403 otherwise). An approver must be able to approve where the decision is made. Open filings nobody chose an owner for follow the new matrix; an owner chosen by hand stays.")
 item(E + "/tasks", "Approvals", "Task", "tasks")
 
 # =================================================================== PARTIES & ITEMS
@@ -862,7 +922,7 @@ tag("Payroll & HR", "Employees, salary structures, payroll runs, payslips, labou
 schema("SalaryComponent", {"code": S(), "monthly_amount": MONEY, "kind": ENUM("earning", "employer_contribution", "reimbursement"), "in_wages": B(), "taxable": B()},
        required=("code", "monthly_amount", "kind", "in_wages"))
 schema("SalaryStructure", {"id": RO_UUID, "effective_from": DATE, "effective_to": NULLABLE(DATE), "ctc_annual": MONEY, "components": ARR(ref("SalaryComponent"))},
-       required=("effective_from", "ctc_annual", "components"))
+       required=("effective_from", "ctc_annual"), desc="Leave `components` out and they are worked out from the CTC by the HR policy.")
 schema("Employee", {"id": RO_UUID, "employee_code": S(), "full_name": S(), "pan": PAN, "uan": NULLABLE(S()), "esic_ip_no": NULLABLE(S()),
                     "email": S(format="email"), "date_of_joining": DATE, "date_of_leaving": NULLABLE(DATE), "designation": S(), "department": S(),
                     "work_state": STATE, "employment_type": S(), "tax_regime": ENUM("new", "old"),
@@ -911,9 +971,205 @@ _op("get", E + "/committees", "Payroll & HR", "listCommittees", "Statutory commi
 action(E + "/committees", "Payroll & HR", "createCommittee", "Constitute a committee (e.g. the POSH Internal Committee)", "payroll:write", body=ref("Committee"),
        resp=ref("Committee"), status="201")
 _op("get", E + "/payroll/wage-code-check", "Payroll & HR", "getWageCodeCheck", "Employees whose wages are under 50% of pay", "payroll:read", resp=ARR(ref("WageCodeCheck")))
-schema("LeaveRequest", {"id": RO_UUID, "employee_id": UUID, "leave_type": S(), "from": DATE, "to": DATE, "days": N(), "status": ENUM("pending", "approved", "rejected", "cancelled", readOnly=True)},
+# ---- HR: policy, onboarding from a CTC, leave, holidays, the handbook, payslips for a person, run readiness
+DAYS = S(description="Leave days as text, in half days: 2, 0.5, 7.5", examples=["2"])
+schema("LeaveType", {"id": RO_UUID, "code": S(pattern="^[A-Za-z]{2,6}$"), "name": S(), "annual_quota": NULLABLE({**DAYS, "description": "Days a year; none for unpaid leave"}),
+                     "accrual": ENUM("yearly", "monthly", description="Granted at the start of the leave year, or earned month by month"),
+                     "paid": B(description="false: every day of it is loss of pay"), "carry_forward_max": DAYS, "encashable": B(), "is_active": B()}, required=("code", "name"))
+schema("HrChecklistItem", {"key": S(pattern="^[a-z0-9_]{1,30}$"), "title": S(), "required": B(),
+                           "auto": NULLABLE(ENUM("pan", "bank", "salary", "handbook", description="Read from the employee's record instead of ticked by a person"))}, required=("key", "title"))
+schema("HrPolicy", {
+    "effective_from": NULLABLE({**DATE, "description": "Today or later when saving. None while the company is on the starter policy"}),
+    "is_default": B(readOnly=True), "next_change_on": NULLABLE(DATE_RO),
+    "salary": schema("HrSalaryPolicy", {"basic_pct_of_ctc": S(description="Basic pay as a share of the CTC"), "hra_pct_of_basic": S(), "employer_pf_in_ctc": B(), "pf_on_full_basic": B(description="PF on the whole basic, not capped at the wage ceiling"),
+                                        "employer_esi_in_ctc": B(), "gratuity_in_ctc": B()}, required=("basic_pct_of_ctc", "hra_pct_of_basic")),
+    "leave": schema("HrLeavePolicy", {"leave_year": ENUM("financial", "calendar"), "week_off": ARR(I(minimum=0, maximum=6), description="Weekdays off, 0 for Monday to 6 for Sunday"),
+                                      "lop_when_exhausted": B(description="Leave beyond the balance is taken as loss of pay; when false it is refused")}),
+    "payroll": schema("HrPayrollPolicy", {"inputs_cutoff_day": I(), "pay_day": I(), "probation_months": I(), "notice_days": I()}),
+    "onboarding": schema("HrOnboardingPolicy", {"checklist": ARR(ref("HrChecklistItem"), minItems=1)}, required=("checklist",)),
+    "leave_types": {**ARR(ref("LeaveType")), "readOnly": True}}, required=("effective_from", "salary", "leave", "payroll", "onboarding"))
+_op("get", E + "/hr/policy", "Payroll & HR", "getHrPolicy", "The HR policy in force today", "hr:read", resp=ref("HrPolicy"),
+    desc="A company that has saved none sees the starter policy (`is_default`). The starter values need the company's and a CA's review.")
+_op("put", E + "/hr/policy", "Payroll & HR", "saveHrPolicy", "Save the HR policy from a date", "hr:approve", body=ref("HrPolicy"), resp=ref("HrPolicy"),
+    desc="A policy takes effect from today or later and is never changed for the past.")
+_op("get", E + "/leave-types", "Payroll & HR", "listLeaveTypes", "Leave types", "hr:read", resp=schema("LeaveTypeList", {"data": ARR(ref("LeaveType"))}))
+_op("post", E + "/leave-types", "Payroll & HR", "saveLeaveType", "Add a leave type, or change the one with the same code", "hr:approve", body=ref("LeaveType"), resp=ref("LeaveType"))
+schema("CtcComponent", {"code": S(), "monthly_amount": MONEY, "annual_amount": MONEY, "kind": ENUM("earning", "employer_contribution", "reimbursement"), "in_wages": B(), "taxable": B()})
+_op("get", E + "/payroll/ctc-breakup", "Payroll & HR", "previewCtcBreakup", "What a yearly CTC becomes under the policy", "payroll:read",
+    params=[q("ctc_annual", S(), "The yearly CTC in rupees"), q("as_of", DATE)],
+    resp=schema("CtcBreakup", {"ctc_annual": MONEY, "components": ARR(ref("CtcComponent")), "monthly_ctc": MONEY, "monthly_gross": MONEY, "employer_contributions": MONEY,
+                               "employee_pf": MONEY, "employee_esi": MONEY, "take_home_before_tax": {**MONEY, "description": "Gross less the employee's PF and ESI; income tax and professional tax come off this"},
+                               "wage_pct": NULLABLE(N(description="Basic as a share of gross earnings; the Code on Wages looks for 50"))}),
+    desc="Saves nothing. Basic and HRA follow the policy, the employer's PF, ESI and gratuity are taken out when the policy says the CTC includes them, and the special allowance is the rest.")
+schema("OnboardingTask", {"key": S(), "title": S(), "required": B(), "auto": NULLABLE(S()), "done": B()})
+schema("Onboarding", {"employee": ref("Employee"), "checklist": ARR(ref("OnboardingTask")), "open_required": ARR(S(), description="Required items still to do"),
+                      "ready": B(description="Every required item is done and the person can be activated"), "done": I(), "total": I()})
+action(E + "/employees/onboard", "Payroll & HR", "onboardEmployee", "Enter a new hire with a CTC", "hr:write", status="201", resp=ref("Onboarding"),
+       body=schema("OnboardEmployee", {"full_name": S(), "employee_code": NULLABLE(S(description="Left out, the next EMP- number is used")), "date_of_joining": DATE, "work_state": STATE,
+                                       "ctc_annual": MONEY, "designation": NULLABLE(S()), "department": NULLABLE(S()), "email": NULLABLE(S()), "pan": NULLABLE(PAN),
+                                       "uan": NULLABLE(S()), "employment_type": S(), "tax_regime": ENUM("new", "old"), "bank_account": NULLABLE(ref("BankDetails"))},
+                   required=("full_name", "date_of_joining", "work_state", "ctc_annual")),
+       desc="Creates the employee as `onboarding` (outside payroll), the salary structure from the policy and the checklist from the policy. It sets a salary, so it needs `payroll:write` as well as `hr:write`.")
+_op("get", E + "/employees/{id}/onboarding", "Payroll & HR", "getOnboarding", "A new hire's checklist", "hr:read", resp=ref("Onboarding"))
+_op("put", E + "/employees/{id}/onboarding/{key}", "Payroll & HR", "setOnboardingTask", "Tick or untick a checklist item", "hr:write",
+    params=[{"name": "key", "in": "path", "required": True, "schema": S()}], body=schema("OnboardingTaskDone", {"done": B()}, required=("done",)), resp=ref("Onboarding"),
+    desc="Items read from the record (PAN, bank account, salary, handbook) cannot be ticked by hand (409).")
+action(E + "/employees/{id}/activate", "Payroll & HR", "activateEmployee", "Finish onboarding", "hr:write", resp=ref("Onboarding"),
+       desc="Every required item must be done (`onboarding_incomplete`). The person becomes active and is paid from the joining date.")
+_op("get", E + "/hr/people", "Payroll & HR", "listHrPeople", "The company's people for HR work, without anything about pay", "hr:read", params=[q("status", ENUM("onboarding", "active", "notice", "exited"))],
+    resp=schema("HrPeople", {"data": ARR(schema("HrPerson", {"id": UUID, "employee_code": S(), "full_name": S(), "designation": NULLABLE(S()), "department": NULLABLE(S()),
+                                                            "date_of_joining": DATE, "date_of_leaving": NULLABLE(DATE), "status": S(), "has_pan": B(), "has_bank_account": B(),
+                                                            "email": NULLABLE(S()), "self_service": ENUM("off", "invited", "active")}))}))
+schema("Holiday", {"id": RO_UUID, "date": DATE, "name": S()}, required=("date", "name"))
+_op("get", E + "/holidays", "Payroll & HR", "listHolidays", "Company holidays", "hr:read", params=[q("year", I())], resp=schema("HolidayList", {"data": ARR(ref("Holiday"))}))
+_op("post", E + "/holidays", "Payroll & HR", "createHoliday", "Add a holiday", "hr:write", body=ref("Holiday"), resp=ref("Holiday"), status="201")
+_op("delete", E + "/holidays/{id}", "Payroll & HR", "deleteHoliday", "Remove a holiday", "hr:write", status="204")
+schema("LeaveRequest", {"id": RO_UUID, "employee_id": UUID, "employee_name": S(readOnly=True), "employee_code": S(readOnly=True), "leave_type": S(description="The leave type's code"),
+                        "leave_type_name": S(readOnly=True), "from": DATE, "to": DATE, "half_day": B(), "reason": NULLABLE(S()),
+                        "days": {**DAYS, "readOnly": True, "description": "Working days in the range: not the weekly off, not a holiday"},
+                        "lop_days": {**DAYS, "readOnly": True, "description": "The days of it that are not paid"},
+                        "status": ENUM("pending", "approved", "rejected", "cancelled", readOnly=True), "requested_at": RO_TS, "decided_at": NULLABLE(RO_TS), "decision_note": NULLABLE(S(readOnly=True)),
+                        "payroll_note": NULLABLE(S(readOnly=True, description="Set when a month the leave touches already has an approved payroll"))},
        required=("employee_id", "leave_type", "from", "to"))
-collection(E + "/leave-requests", "Payroll & HR", "LeaveRequest", "payroll", filters=[q("status", S()), q("employee_id", UUID)])
+collection(E + "/leave-requests", "Payroll & HR", "LeaveRequest", "hr", filters=[q("status", ENUM("pending", "approved", "rejected", "cancelled")), q("employee_id", UUID), P("From"), P("To")])
+LEAVE_DECISION = schema("LeaveDecision", {"note": NULLABLE(S(maxLength=300))})
+action(E + "/leave-requests/{id}/approve", "Payroll & HR", "approveLeaveRequest", "Approve a leave request", "hr:approve", body=LEAVE_DECISION, resp=ref("LeaveRequest"),
+       desc="Its unpaid days go into the open payroll run of each month it touches.")
+action(E + "/leave-requests/{id}/reject", "Payroll & HR", "rejectLeaveRequest", "Reject a leave request", "hr:approve", body=LEAVE_DECISION, resp=ref("LeaveRequest"))
+action(E + "/leave-requests/{id}/cancel", "Payroll & HR", "cancelLeaveRequest", "Withdraw a leave request", "hr:write", body=LEAVE_DECISION, resp=ref("LeaveRequest"),
+       desc="Refused (409) when its unpaid days were already deducted in an approved payroll.")
+schema("LeaveBalance", {"leave_type": S(), "name": S(), "paid": B(), "annual_quota": NULLABLE(DAYS), "accrual": S(), "earned": NULLABLE(DAYS), "adjustments": DAYS, "taken": DAYS,
+                        "pending": DAYS, "unpaid_taken": DAYS, "available": NULLABLE(DAYS)})
+_op("get", E + "/leave-balances", "Payroll & HR", "listLeaveBalances", "Leave earned, taken and left, per person", "hr:read", params=[q("employee_id", UUID), q("as_of", DATE)],
+    resp=schema("LeaveBalances", {"as_of": DATE, "leave_year_start": DATE, "leave_year_end": DATE,
+                                  "data": ARR(schema("EmployeeLeave", {"employee_id": UUID, "employee_code": S(), "employee_name": S(), "balances": ARR(ref("LeaveBalance"))}))}))
+action(E + "/leave-adjustments", "Payroll & HR", "adjustLeaveBalance", "Add days to a balance or take them off", "hr:approve", status="201",
+       body=schema("LeaveAdjustment", {"employee_id": UUID, "leave_type": S(), "days": S(description="Negative to take days off"), "kind": ENUM("opening", "carry_forward", "correction"),
+                                       "as_of": NULLABLE(DATE), "note": NULLABLE(S())}, required=("employee_id", "leave_type", "days")),
+       resp=schema("LeaveAdjustmentResult", {"id": UUID, "employee_id": UUID, "leave_year_start": DATE, "balance": ref("LeaveBalance")}),
+       desc="What a person carried in when the company started here, a carry-forward, or a correction.")
+PERSON = schema("EmployeeRef", {"employee_id": UUID, "employee_code": S(), "name": S()})
+schema("ReadinessItem", {"code": S(), "title": S(), "employees": ARR(PERSON)})
+_op("get", E + "/payroll-runs/{id}/readiness", "Payroll & HR", "getPayrollReadiness", "What a payroll run still needs", "payroll:read",
+    resp=schema("PayrollReadiness", {"run_id": UUID, "period_month": DATE, "status": S(), "ready": B(), "headcount": I(), "blockers": ARR(ref("ReadinessItem")), "warnings": ARR(ref("ReadinessItem")),
+                                     "joiners": ARR(PERSON), "leavers": ARR(PERSON),
+                                     "lop_from_leave": ARR(schema("LopFromLeave", {"employee_id": UUID, "employee_code": S(), "name": S(), "lop_days": DAYS}))}),
+    desc="`blockers` stop the run from being computed (no salary set); `warnings` are worth a look first (onboarding not finished, no bank account, no PAN, leave awaiting a decision).")
+action(E + "/payroll-runs/{id}/inputs/from-leave", "Payroll & HR", "pullLeaveIntoPayroll", "Bring approved unpaid leave into the run's inputs", "payroll:write",
+       resp=schema("LopPulled", {"data": ARR(schema("LopRow", {"employee_id": UUID, "lop_days": DAYS}))}),
+       desc="Starting a run and deciding a leave request do this by themselves; this does it again on request. Figures typed for the month are kept.")
+schema("PayslipLine", {"code": S(), "label": S(), "kind": ENUM("earning", "deduction", "employer_contribution"), "amount": MONEY})
+schema("PayslipDetail", {"id": UUID, "run_id": UUID, "period_month": DATE, "run_status": S(), "final": B(description="From an approved run; a payslip that is not final is a draft"),
+                         "paid_on": NULLABLE(DATE), "employee_id": UUID, "employee_code": S(), "employee_name": S(), "designation": NULLABLE(S()), "department": NULLABLE(S()),
+                         "pan_last4": NULLABLE(S()), "uan": NULLABLE(S()), "date_of_joining": DATE, "paid_days": N(), "lop_days": N(), "gross": MONEY, "wages": MONEY, "pf_wage": MONEY,
+                         "pf_employee": MONEY, "pf_employer_epf": MONEY, "pf_employer_eps": MONEY, "esi_applicable": B(), "esi_employee": MONEY, "esi_employer": MONEY,
+                         "professional_tax": MONEY, "tds": MONEY, "other_deductions": MONEY, "net_pay": MONEY, "pdf_url": S(),
+                         "lines": ARR(ref("PayslipLine")), "year_to_date": schema("PayslipYtd", {"gross": MONEY, "tds": MONEY, "pf": MONEY, "net": MONEY})}, extra={"readOnly": True})
+_op("get", E + "/employees/{id}/payslips", "Payroll & HR", "listEmployeePayslips", "A person's payslips from approved runs", "payroll:read", params=[q("fy", FY)],
+    resp=schema("EmployeePayslips", {"data": ARR(ref("PayslipDetail"))}))
+_op("get", E + "/payslips/{id}", "Payroll & HR", "getPayslip", "One payslip with its lines and the year so far", "payroll:read", resp=ref("PayslipDetail"))
+_op("get", E + "/payslips/{id}/pdf", "Payroll & HR", "getPayslipPdf", "The payslip as a PDF", "payroll:read", params=[q("download", B())],
+    desc="`application/pdf`. A payslip from a run that is not approved carries a DRAFT mark.")
+schema("PolicyAck", {"employee_id": UUID, "employee_name": S(), "employee_code": S(), "acknowledged_on": DATE})
+schema("HrPolicyDocument", {"id": RO_UUID, "slug": NULLABLE(S(pattern="^[a-z0-9-]{1,60}$", description="Publishing with an existing slug adds its next version")), "title": S(),
+                            "category": ENUM("general", "leave", "conduct", "posh", "payroll", "it_security", "travel", "exit"), "body": S(), "requires_ack": B(),
+                            "version": I(readOnly=True), "is_current": B(readOnly=True), "published_at": RO_TS, "acknowledged": I(readOnly=True), "people": I(readOnly=True),
+                            "acknowledgements": {**ARR(ref("PolicyAck")), "readOnly": True}, "waiting": {**ARR(schema("PolicyWaiting", {"employee_id": UUID, "employee_name": S(), "employee_code": S()})), "readOnly": True}},
+       required=("title", "body"))
+_op("get", E + "/hr/policy-documents", "Payroll & HR", "listHrPolicyDocuments", "The handbook: the current version of each document", "hr:read",
+    resp=schema("HrPolicyDocumentList", {"data": ARR(ref("HrPolicyDocument"))}))
+_op("post", E + "/hr/policy-documents", "Payroll & HR", "publishHrPolicyDocument", "Publish a handbook document or its next version", "hr:approve",
+    body=ref("HrPolicyDocument"), resp=ref("HrPolicyDocument"), status="201", desc="A published version is never edited; people acknowledge the new one afresh.")
+_op("get", E + "/hr/policy-documents/{id}", "Payroll & HR", "getHrPolicyDocument", "A handbook document with who has acknowledged it", "hr:read", resp=ref("HrPolicyDocument"))
+action(E + "/hr/policy-documents/{id}/acknowledgements", "Payroll & HR", "acknowledgeHrPolicyDocument", "Record that a person has read and accepted it", "hr:write",
+       body=schema("PolicyAckIn", {"employee_id": UUID, "acknowledged_on": NULLABLE(DATE)}, required=("employee_id",)), resp=ref("HrPolicyDocument"))
+
+# =================================================================== EMPLOYEE SELF-SERVICE
+tag("Employee self-service", "A person's own payslips, leave, handbook and joining checklist. An employee is not a member of the company: these run as a database role "
+    "that can read no table and can only call functions that return the caller's own record (migration 41). Someone else's record is a 404.")
+EMP = {"name": "employeeId", "in": "path", "required": True, "schema": UUID, "description": "The caller's own employee record at one company, from `/me/employments`"}
+schema("Employment", {"employee_id": UUID, "entity_id": UUID, "legal_name": S(), "employee_code": S(), "full_name": S(), "designation": NULLABLE(S()), "status": S()})
+schema("EmploymentInvite", {"employee_id": UUID, "entity_id": UUID, "legal_name": S(), "employee_code": S(), "full_name": S(), "designation": NULLABLE(S()), "invited_at": TS})
+_op("get", "/me/employments", "Employee self-service", "getMyEmployments", "Where I am an employee with my own sign-in, and the invitations waiting for me",
+    resp=schema("MyEmployments", {"employments": ARR(ref("Employment")), "invitations": ARR(ref("EmploymentInvite"))}),
+    desc="An invitation shows only to the person signed in with the email on the employee record.")
+action("/me/employments/{id}/accept", "Employee self-service", "acceptEmployment", "Accept the invitation to my employee record", None,
+       resp=schema("EmploymentAccepted", {"employee_id": UUID, "entity_id": UUID}), desc="`{id}` is the employee record. Not addressed to my email, already taken or withdrawn: 404.")
+SELF_SERVICE_STATE = schema("SelfServiceState", {"employee_id": UUID, "self_service": ENUM("off", "invited", "active"), "email": NULLABLE(S())})
+action(E + "/employees/{id}/self-service", "Payroll & HR", "openEmployeeSelfService", "Let a person sign in to their own payslips, leave and policies", "hr:write", resp=SELF_SERVICE_STATE,
+       desc="They sign in with the email on their record and accept. `employee_email_missing` (409) when the record has no email. Nothing is emailed yet. Twice changes nothing.")
+_op("delete", E + "/employees/{id}/self-service", "Payroll & HR", "closeEmployeeSelfService", "Withdraw the invitation or end the person's access", "hr:write", resp=SELF_SERVICE_STATE)
+schema("MyChecklist", {"checklist": ARR(ref("OnboardingTask")), "open_required": ARR(S()), "done": I(), "total": I(), "to_acknowledge": I(description="Handbook documents still to acknowledge")})
+schema("MyRecord", {"employee": schema("MyEmployee", {
+    "employee_id": UUID, "entity_id": UUID, "legal_name": S(), "registered_address": NULLABLE(S()), "employee_code": S(), "full_name": S(), "email": NULLABLE(S()),
+    "mobile_e164": NULLABLE(S()), "designation": NULLABLE(S()), "department": NULLABLE(S()), "date_of_joining": DATE, "date_of_leaving": NULLABLE(DATE), "status": S(),
+    "employment_type": S(), "work_state": S(), "tax_regime": S(), "pan_last4": NULLABLE(S()), "uan": NULLABLE(S()), "bank_ifsc": NULLABLE(S()),
+    "bank_on_file": B(description="Whether a bank account is on the record; the number is never shown here"), "has_salary": B()}), "onboarding": ref("MyChecklist")})
+_op("get", "/self/{employeeId}", "Employee self-service", "getMyRecord", "Who I am at this company, and my joining checklist", params=[EMP], resp=ref("MyRecord"))
+schema("MyLeaveRequest", {"id": RO_UUID, "leave_type": S(description="The leave type's code"), "leave_type_name": S(readOnly=True), "from": DATE, "to": DATE, "days": {**DAYS, "readOnly": True},
+                          "lop_days": {**DAYS, "readOnly": True}, "half_day": B(), "reason": NULLABLE(S(maxLength=300)), "status": ENUM("pending", "approved", "rejected", "cancelled", readOnly=True),
+                          "requested_at": RO_TS, "decided_at": NULLABLE(RO_TS), "decision_note": NULLABLE(S(readOnly=True)), "can_cancel": B(readOnly=True)},
+       required=("leave_type", "from", "to"))
+_op("get", "/self/{employeeId}/leave", "Employee self-service", "getMyLeave", "My balances, my requests and the year's holidays", params=[EMP, q("as_of", DATE)],
+    resp=schema("MyLeave", {"as_of": DATE, "leave_year_start": DATE, "leave_year_end": DATE, "week_off": ARR(I(), description="Weekly off days, Monday is 0"),
+                            "unpaid_when_exhausted": B(), "can_apply": B(), "balances": ARR(ref("LeaveBalance")), "requests": ARR(ref("MyLeaveRequest")),
+                            "holidays": ARR(schema("MyHoliday", {"holiday_date": DATE, "name": S()}))}))
+action("/self/{employeeId}/leave-requests", "Employee self-service", "applyForLeave", "Apply for leave for myself", None, params=[EMP], body=ref("MyLeaveRequest"), resp=ref("MyLeaveRequest"),
+       status="201", desc="Counted in working days, as when HR records it. `leave_balance_short` (409) when the balance does not cover it and the policy does not allow unpaid leave. "
+                          "It waits for whoever approves leave at the company.")
+action("/self/{employeeId}/leave-requests/{id}/cancel", "Employee self-service", "withdrawMyLeave", "Withdraw my request while it is waiting", None, params=[EMP], resp=ref("MyLeaveRequest"),
+       desc="Once approved it is HR's to cancel (409), because pay may already depend on it.")
+_op("get", "/self/{employeeId}/payslips", "Employee self-service", "listMyPayslips", "My payslips from approved payroll runs", params=[EMP, q("fy", FY)], resp=ref("EmployeePayslips"))
+_op("get", "/self/{employeeId}/payslips/{id}", "Employee self-service", "getMyPayslip", "One of my payslips with its lines and the year so far", params=[EMP], resp=ref("PayslipDetail"))
+_op("get", "/self/{employeeId}/payslips/{id}/pdf", "Employee self-service", "getMyPayslipPdf", "My payslip as a PDF", params=[EMP, q("download", B())], desc="`application/pdf`.")
+schema("MyPolicyDocument", {"id": UUID, "slug": S(), "title": S(), "category": S(), "version": I(), "requires_ack": B(), "published_at": TS,
+                            "acknowledged_on": NULLABLE(DATE), "body": S(description="Only when one document is read")})
+_op("get", "/self/{employeeId}/policies", "Employee self-service", "listMyPolicies", "The handbook, and what I have acknowledged", params=[EMP],
+    resp=schema("MyPolicyDocumentList", {"data": ARR(ref("MyPolicyDocument"))}))
+_op("get", "/self/{employeeId}/policies/{id}", "Employee self-service", "getMyPolicy", "Read a handbook document", params=[EMP], resp=ref("MyPolicyDocument"))
+action("/self/{employeeId}/policies/{id}/acknowledge", "Employee self-service", "acknowledgeMyPolicy", "Say that I have read and accept it", None, params=[EMP], resp=ref("MyPolicyDocument"),
+       desc="My own act, recorded with my name and the date. Twice changes nothing.")
+
+# =================================================================== YEAR-END TAX DECLARATIONS
+tag("Tax declarations", "An employee chooses a tax regime for the financial year and declares deductions; HR verifies each figure; payroll deducts TDS on the verified ones. "
+    "The sections and limits are a starter library that a CA must review before they drive a deduction.")
+schema("TaxSection", {"code": S(), "label": S(), "annual_cap": NULLABLE(MONEY), "old_regime_only": B(), "note": NULLABLE(S())})
+schema("TaxItem", {"id": RO_UUID, "section": S(pattern="^[0-9A-Z]{2,10}$"), "description": S(maxLength=200), "declared_amount": MONEY, "proof_ref": NULLABLE(S(maxLength=200, description="What the proof is: a policy or receipt number. Files are not uploaded here yet")),
+                   "status": ENUM("pending", "verified", "rejected", readOnly=True), "verified_amount": NULLABLE({**MONEY, "readOnly": True}), "hr_note": NULLABLE(S(readOnly=True))},
+       required=("section", "description", "declared_amount"))
+schema("TaxSectionSummary", {"section": S(), "declared": MONEY, "verified": MONEY, "cap": NULLABLE(MONEY), "counts": MONEY})
+TAX_DECL_FIELDS = {"fy": S(pattern="^[0-9]{4}-[0-9]{2}$"), "regime": ENUM("new", "old"), "status": ENUM("none", "draft", "submitted", "verified", "returned"), "id": NULLABLE(UUID),
+                   "submitted_at": NULLABLE(TS), "verified_at": NULLABLE(TS), "hr_note": NULLABLE(S()), "editable": B(), "sections": ARR(ref("TaxSection")), "items": ARR(ref("TaxItem")),
+                   "summary": ARR(ref("TaxSectionSummary")), "note": S()}
+schema("TaxDeclaration", TAX_DECL_FIELDS)
+schema("TaxDeclarationDetail", {**TAX_DECL_FIELDS, "employee_id": UUID, "employee_code": S(), "employee_name": S()})
+schema("TaxDeclarationIn", {"regime": ENUM("new", "old"), "items": ARR(ref("TaxItem"))}, required=("regime",))
+FYQ = q("fy", FY, "The financial year, like 2026-27; the current one by default")
+_op("get", "/self/{employeeId}/tax-declaration", "Tax declarations", "getMyTaxDeclaration", "My declaration for a year, and the sections I can claim under", params=[EMP, FYQ], resp=ref("TaxDeclaration"))
+_op("put", "/self/{employeeId}/tax-declaration", "Tax declarations", "saveMyTaxDeclaration", "Save my declaration as a draft", params=[EMP, FYQ], body=ref("TaxDeclarationIn"), resp=ref("TaxDeclaration"),
+    desc="Replaces the regime and the whole list of items. 409 while it waits with HR or once verified; HR returns it to unlock it.")
+action("/self/{employeeId}/tax-declaration/submit", "Tax declarations", "submitMyTaxDeclaration", "Send my declaration to HR to verify", None, params=[EMP, FYQ], resp=ref("TaxDeclaration"),
+       desc="Twice changes nothing.")
+schema("Form16PartB", {"fy": S(), "assessment_year": S(), "regime": ENUM("new", "old"), "employee_name": S(), "months": I(), "gross_salary": MONEY, "standard_deduction": MONEY,
+                       "chapter_vi_a": ARR(schema("Form16Deduction", {"section": S(), "label": S(), "amount": MONEY})), "chapter_vi_a_total": MONEY, "taxable_income": MONEY,
+                       "tax_with_cess": MONEY, "tds_deducted": MONEY, "difference": {**MONEY, "description": "Tax on the total income less TDS deducted; negative means more was deducted"},
+                       "deductions_verified": B(), "note": S()})
+_op("get", "/self/{employeeId}/form16", "Tax declarations", "getMyForm16", "Form 16 Part B for a year, from my payslips and verified declaration", params=[EMP, FYQ], resp=ref("Form16PartB"),
+    desc="Part A comes from TRACES and is not here. Starter figures: a CA must review before this is issued.")
+schema("TaxDeclarationRow", {"id": UUID, "employee_id": UUID, "employee_code": S(), "employee_name": S(), "regime": ENUM("new", "old"), "status": ENUM("draft", "submitted", "verified", "returned"),
+                             "items": I(), "declared": MONEY, "submitted_at": NULLABLE(TS), "verified_at": NULLABLE(TS)})
+_op("get", E + "/tax-declarations", "Tax declarations", "listTaxDeclarations", "Declarations for a year; those waiting for HR come first", "hr:read",
+    params=[FYQ, q("status", ENUM("draft", "submitted", "verified", "returned"))], resp=schema("TaxDeclarationList", {"fy": S(), "data": ARR(ref("TaxDeclarationRow"))}),
+    desc="Payroll at `read` may also call this.")
+_op("get", E + "/tax-declarations/{id}", "Tax declarations", "getTaxDeclaration", "One declaration with its items", "hr:read", resp=ref("TaxDeclarationDetail"))
+action(E + "/tax-declarations/{id}/verify", "Tax declarations", "verifyTaxDeclaration", "Verify a submitted declaration", "hr:write",
+       body=schema("TaxDeclarationVerify", {"items": ARR(schema("TaxItemDecision", {"id": UUID, "status": ENUM("verified", "rejected"), "verified_amount": NULLABLE(MONEY), "note": NULLABLE(S(maxLength=300))}, required=("id",))),
+                                            "note": NULLABLE(S(maxLength=300))}),
+       resp=ref("TaxDeclarationDetail"), desc="An item not listed is verified at the amount declared. 409 unless the declaration is submitted. TDS uses the verified figures from the next payroll computation. Payroll at `write` may also call this.")
+action(E + "/tax-declarations/{id}/return", "Tax declarations", "returnTaxDeclaration", "Send a declaration back to the employee with a note", "hr:write",
+       body=schema("TaxDeclarationReturn", {"note": S(maxLength=300)}, required=("note",)), resp=ref("TaxDeclarationDetail"),
+       desc="A verified one can be returned too; its deductions stop counting from the next payroll computation.")
+_op("get", E + "/employees/{id}/form16", "Tax declarations", "getEmployeeForm16", "Form 16 Part B for an employee and a year", "hr:read", params=[FYQ], resp=ref("Form16PartB"))
 
 # =================================================================== LEGAL, BOARD, CAPITAL, SCHEMES
 tag("Legal & board", "Contracts, extracted terms, templates, meetings and resolutions")
@@ -1099,7 +1355,9 @@ schema("BillOfEntry", {
     "id": RO_UUID, "boe_number": CODE20, "boe_date": DATE, "port_code": PORT_CODE, "currency": CCY, "cif_foreign": MONEY, "exchange_rate": S(), "cif_inr": {**MONEY, "readOnly": True},
     "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "duty_total": {**MONEY, "readOnly": True},
     "status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": NULLABLE(DATE), "supplier_party_id": NULLABLE(UUID), "supplier_name": NULLABLE(S(readOnly=True)),
-    "purchase_bill_id": NULLABLE(UUID), "igst_credit": {**MONEY, "readOnly": True, "description": "IGST paid on the import, available as input tax credit once the duty is paid"},
+    "purchase_bill_id": NULLABLE(UUID), "igst_credit": {**MONEY, "readOnly": True, "description": "IGST paid on the import that is claimed as input tax credit: once the duty is paid, and only when igst_credit_status is eligible"},
+    "free_of_charge": B(description="A sample: nothing to pay the supplier, so it has no purchase bill. The duty and IGST are still paid."),
+    "igst_credit_status": ENUM("eligible", "blocked", "undecided", description="Whether the IGST is claimed. Left out when recording: eligible, or undecided when free_of_charge. Section 17(5)(h) blocks credit on goods given away as free samples; a CA decides."),
     "document_id": {**NULLABLE(UUID), "description": "The customs PDF in the document vault. Pass the id from readBillOfEntry when recording; it is linked to the bill of entry."},
     "new_supplier_name": S(writeOnly=True, description="Add this overseas supplier when supplier_party_id is not given. A supplier with the same name (ignoring Co., Ltd and punctuation) is reused."),
     "new_supplier_country": S(writeOnly=True, pattern="^[A-Z]{2}$")},
@@ -1116,7 +1374,8 @@ action(E + "/bills-of-entry/read", "Export & import", "readBillOfEntry", "Read a
            required=("document_id", "warnings", "boe_number", "boe_date", "port_code", "bcd", "sws", "igst", "other_duty", "status")),
        desc="Reads the assessed copy PDF from ICEGATE (it needs a text layer; scans are refused with 422 not_a_bill_of_entry), stores it in the vault under Purchases, and returns what it found. Nothing is recorded: show the figures to a person, then POST /bills-of-entry with document_id. warnings lists anything to check (a different company's GSTIN, a value that differs from the invoice). existing_boe_id is set when this bill is already recorded; the file is then linked to it.")
 _op("patch", E + "/bills-of-entry/{id}", "Export & import", "updateBillOfEntry", "Record assessment, duty paid and the purchase bill it belongs to", "trade:write",
-    body=schema("BillOfEntryUpdate", {"status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": DATE, "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "purchase_bill_id": UUID}),
+    body=schema("BillOfEntryUpdate", {"status": ENUM("filed", "assessed", "duty_paid", "cleared"), "duty_paid_on": DATE, "bcd": MONEY, "sws": MONEY, "igst": MONEY, "other_duty": MONEY, "purchase_bill_id": UUID,
+                                                  "free_of_charge": B(), "igst_credit_status": ENUM("eligible", "blocked", "undecided")}),
     resp=ref("BillOfEntry"))
 schema("TradeSummary", {
     "as_of": DATE, "financial_year_from": DATE, "iec": NULLABLE(S()),
@@ -1124,7 +1383,8 @@ schema("TradeSummary", {
     "exports": schema("ExportTotals", {"bills": I(), "value_inr": MONEY, "drafts": I(description="Shipping bills opened from export invoices that still need the customs details")}),
     "realisation": schema("RealisationTotals", {"outstanding_bills": I(), "outstanding_inr": MONEY, "overdue_bills": I(), "overdue_inr": MONEY, "awaiting_export": I()}),
     "claims": schema("ClaimTotals", {"rodtep_pending": MONEY, "drawback_pending": MONEY}),
-    "imports": schema("ImportTotals", {"bills": I(), "duty_inr": MONEY, "igst_credit_inr": MONEY})})
+    "imports": schema("ImportTotals", {"bills": I(), "duty_inr": MONEY, "igst_credit_inr": {**MONEY, "description": "Eligible IGST on bills whose duty is paid"},
+                              "igst_undecided_inr": {**MONEY, "description": "IGST paid where it is not yet decided whether to claim it"}, "igst_not_claimed_inr": {**MONEY, "description": "IGST paid that is not claimed (blocked)"}})})
 _op("get", E + "/trade/summary", "Export & import", "getTradeSummary", "Where exports and imports stand this financial year", "trade:read", resp=ref("TradeSummary"),
     desc="Exports and imports are counted from 1 April. The LUT is read from the company's LUT registration.")
 
@@ -1174,6 +1434,59 @@ action(E + "/depreciation/run", "Fixed assets", "runDepreciation", "Post depreci
        body=schema("DepreciationRun", {"period": S(pattern="^[0-9]{4}-(0[1-9]|1[0-2])$")}, required=("period",)),
        resp=schema("DepreciationRunResult", {"period": S(), "total": MONEY, "journals": ARR(schema("DepreciationJournal", {"month": DATE, "journal_entry_id": UUID, "entry_no": S(), "total": MONEY, "assets": I()}))}),
        desc="One journal per month not yet posted, covering all assets. Running a month that is already posted posts nothing.")
+
+# =================================================================== INVENTORY
+tag("Inventory", "Stock of the items marked as tracked: what is on hand and what it is worth, every movement, counts, write-offs, opening stock and the valuation as of a date. "
+                 "Weighted average cost per item. A booked purchase bill brings stock in and an issued invoice takes it out; those happen by themselves.")
+QTY = S(pattern=r"^-?[0-9]+\.[0-9]{3}$", description="A quantity with three decimals", examples=["12.000"])
+UNIT_COST = S(pattern=r"^[0-9]+\.[0-9]{4}$", description="Rupees per unit, four decimals", examples=["115.0000"])
+schema("Warehouse", {"id": RO_UUID, "code": S(pattern="^[A-Za-z0-9-]{1,12}$"), "name": S(), "is_default": B(description="Bills receive into it and invoices ship from it"), "is_active": B(readOnly=True)},
+       required=("code", "name"))
+_op("get", E + "/warehouses", "Inventory", "listWarehouses", "List warehouses", "inventory:read", resp=schema("WarehouseList", {"data": ARR(ref("Warehouse"))}),
+    desc="The first stock movement creates the default warehouse (MAIN) when there is none.")
+_op("post", E + "/warehouses", "Inventory", "createWarehouse", "Add a warehouse", "inventory:write", body=ref("Warehouse"), resp=ref("Warehouse"), status="201")
+schema("InventorySettings", {"allow_negative_stock": B(description="Whether a sale may take stock below zero. Off unless the company turns it on."),
+                             "valuation_method": ENUM("weighted_average", readOnly=True)}, required=("allow_negative_stock",))
+_op("get", E + "/inventory/settings", "Inventory", "getInventorySettings", "Inventory settings", "inventory:read", resp=ref("InventorySettings"))
+_op("put", E + "/inventory/settings", "Inventory", "updateInventorySettings", "Allow or refuse negative stock", "inventory:approve", body=ref("InventorySettings"), resp=ref("InventorySettings"))
+schema("StockLevel", {"warehouse_id": UUID, "code": S(), "name": S(), "qty": QTY})
+schema("StockItem", {"item_id": UUID, "sku": S(), "name": S(), "uqc": S(), "hsn_sac": HSN, "is_active": B(), "sale_rate": NULLABLE(MONEY),
+                     "qty": {**QTY, "description": "On hand in all warehouses"}, "average_cost": {**UNIT_COST, "description": "What one unit will leave stock at"},
+                     "value": MONEY, "last_moved_on": NULLABLE(DATE), "levels": ARR(ref("StockLevel"))})
+_op("get", E + "/stock-items", "Inventory", "listStockItems", "Tracked items with stock on hand and its value", "inventory:read", params=[P("Q")],
+    resp=schema("StockItemList", {"data": ARR(ref("StockItem")), "totals": schema("StockTotals", {"value": MONEY, "items": I(), "out_of_stock": I()}),
+                                  "allow_negative_stock": B(), "valuation_method": ENUM("weighted_average")}))
+STOCK_SOURCE = ENUM("purchase_bill", "sales_document", "adjustment", "opening", "transfer", "bill_of_entry")
+schema("StockMovement", {"id": I(), "item_id": UUID, "sku": S(), "item_name": S(), "uqc": S(), "warehouse_id": UUID, "warehouse_code": S(), "date": DATE,
+                         "qty_in": QTY, "qty_out": QTY, "unit_cost": UNIT_COST,
+                         "value": {**MONEY, "description": "Signed: what the movement added to or took from the value of stock"},
+                         "source_kind": STOCK_SOURCE, "source_id": NULLABLE(UUID), "reference": NULLABLE(S(description="The bill, document or bill of entry number")),
+                         "reason": NULLABLE(S()), "note": NULLABLE(S()), "journal_entry_id": NULLABLE(UUID), "entry_no": NULLABLE(S()), "created_at": RO_TS})
+_op("get", E + "/stock-movements", "Inventory", "listStockMovements", "Stock movements, newest first", "inventory:read",
+    params=[P("Limit"), P("Cursor"), q("item_id", UUID), q("warehouse_id", UUID), q("source_kind", STOCK_SOURCE), P("From"), P("To")], resp=page_of("StockMovement"))
+schema("StockChange", {"movements": ARR(ref("StockMovement")), "item": ref("StockItem"),
+                       "booking": ENUM("post", "in_opening_balances", description="Opening stock only: how it was booked")})
+action(E + "/stock-adjustments", "Inventory", "adjustStock", "Record opening stock, a stock count or a write-off", "inventory:write", idem=True, status="201", resp=ref("StockChange"),
+       body=schema("StockAdjustment", {
+           "item_id": UUID, "warehouse_id": NULLABLE({**UUID, "description": "The default warehouse when left out"}), "kind": ENUM("opening", "count", "write_off"), "date": DATE,
+           "qty": NULLABLE({"type": "string", "description": "opening and write_off: the quantity"}),
+           "counted_qty": NULLABLE({"type": "string", "description": "count: what is physically there in the warehouse"}),
+           "unit_cost": NULLABLE({"type": "string", "description": "opening: what one unit cost. count: only when stock is found and the item has no cost on record"}),
+           "booking": NULLABLE(ENUM("post", "in_opening_balances", description="opening: `post` books Dr Inventory, Cr Opening balance equity; `in_opening_balances` only records the stock because the opening trial balance already carries its value. Left out, it is `in_opening_balances` when an opening trial balance has been imported and `post` when not.")),
+           "reason": NULLABLE(S(maxLength=200, description="Required for a count and a write-off")), "note": NULLABLE(S(maxLength=500))}, required=("item_id", "kind", "date")),
+       desc="The journal is posted in the same transaction: a count or write-off against Stock adjustments at the average cost, opening stock against Opening balance equity. "
+            "`insufficient_stock` (409) when a write-off would take stock below zero and the company does not allow it; `item_not_tracked` (409) for an item that is not kept in stock; "
+            "`period_locked` (409) for a date in a locked period.")
+action(E + "/stock-transfers", "Inventory", "transferStock", "Move stock from one warehouse to another", "inventory:write", status="201", resp=ref("StockChange"),
+       body=schema("StockTransfer", {"item_id": UUID, "from_warehouse_id": UUID, "to_warehouse_id": UUID, "date": DATE, "qty": S(), "note": NULLABLE(S(maxLength=500))},
+                   required=("item_id", "from_warehouse_id", "to_warehouse_id", "date", "qty")),
+       desc="The cost moves with the stock, so the value of stock does not change and nothing is posted to the ledger.")
+_op("get", E + "/stock-valuation", "Inventory", "getStockValuation", "Stock valuation as of a date", "inventory:read", params=[q("as_of", DATE, "Today when left out")],
+    resp=schema("StockValuation", {"as_of": DATE, "valuation_method": ENUM("weighted_average"),
+                                   "items": ARR(schema("StockValuationItem", {"item_id": UUID, "sku": S(), "name": S(), "uqc": S(), "qty": QTY, "average_cost": UNIT_COST, "value": MONEY})),
+                                   "total_value": MONEY, "ledger_balance": {**MONEY, "description": "The Inventory account on the same date"},
+                                   "difference": {**MONEY, "description": "Ledger less stock. Not zero when stock was booked to another account or Inventory was posted to by hand"}}),
+    desc="Quantity and value from the movements dated up to the day, at weighted average cost.")
 
 # =================================================================== PORTALS & JOBS
 tag("Portals & jobs", "Government / bank connections, OTP sessions, sync jobs and the job resource")
@@ -1227,6 +1540,13 @@ _op("get", "/organizations/{id}", "Organizations", "getOrganization", "Get an or
 _op("get", "/organizations/{id}/entities", "Organizations", "listOrganizationEntities", "Entities the organisation owns or advises, with standing",
     params=[P("Limit"), P("Cursor"), q("filter", ENUM("all", "waiting_on_client", "overdue")), q("staff", UUID)], resp=page_of("EntityStanding"))
 schema("StaffLoad", {"user_id": UUID, "name": S(), "filings_due": I()})
+schema("ClientStaff", {
+    "clients": ARR(schema("FirmClient", {"entity_id": UUID, "legal_name": S(), "set_up_by_firm": B(), "services": ARR(S()), "staff": ARR(UUID, description="The staff assigned to this client")})),
+    "people": ARR(schema("FirmPerson", {"user_id": UUID, "name": S(), "role": ENUM("admin", "partner", "staff"), "sees_all": B(description="Partners and admins see every client")}))})
+_op("get", "/organizations/{id}/client-staff", "Organizations", "getClientStaff", "The firm's clients and which staff work on each", resp=ref("ClientStaff"))
+_op("put", "/organizations/{id}/client-staff/{entityId}", "Organizations", "setClientStaff", "Say which staff work on a client",
+    params=[{"name": "entityId", "in": "path", "required": True, "schema": UUID}], body=schema("ClientStaffIn", {"user_ids": ARR(UUID)}, required=("user_ids",)), resp=ref("ClientStaff"),
+    desc="Only a partner or admin of the firm can. Staff see only the clients they are assigned to; someone taken off a client stops seeing it at once.")
 _op("get", "/organizations/{id}/workload", "Organizations", "getStaffWorkload", "Filings assigned per staff member this week", resp=ARR(ref("StaffLoad")))
 action("/organizations/{id}/client-reminders", "Organizations", "chaseClients", "Send document / approval reminders to clients that are blocking filings",
        None, body=schema("ChaseClients", {"entity_ids": ARR(UUID, maxItems=200, description="Leave out to chase every client that has filings waiting on them.")}),
@@ -1272,6 +1592,17 @@ EVENTS = {
     "notice.received": "A notice arrived from an authority",
     "threshold.crossed": "A fact crossed a rule threshold",
     "sales_document.issued": "Invoice / note issued (IRN may follow)",
+    "stock.adjusted": "Opening stock, a stock count or a write-off was recorded",
+    "employee.onboarding_started": "A new hire was entered with a CTC",
+    "employee.activated": "Onboarding finished; the person is on payroll",
+    "leave.requested": "A leave request waits for a decision",
+    "leave.decided": "A leave request was approved, rejected or withdrawn",
+    "hr_policy.changed": "The HR policy or a handbook document changed",
+    "responsibilities.changed": "Who prepares or approves a kind of work changed",
+    "task.assigned": "A task was given to a person",
+    "engagement.invited": "A practitioner was invited to work for the company",
+    "engagement.accepted": "A practitioner accepted; their access has started",
+    "engagement.declined": "A practitioner declined an invitation",
     "sales_document.irn_generated": "IRP returned the IRN and signed QR",
     "sales_document.paid": "Fully settled",
     "receipt.created": "Money received and allocated",

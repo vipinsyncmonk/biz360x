@@ -10,6 +10,7 @@ import {
 import { isoDate } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
+import { PayslipList } from "@/components/HrForms";
 
 export default function Employees() {
   const { entity } = useSession();
@@ -62,6 +63,7 @@ export default function Employees() {
 
 function EmployeeRow({ e, st, entityId, open, onToggle, onSaved }: { e: Employee; st: { label: string; tone: "due" | "ok" | "wait" | "prep" }; entityId: string; open: boolean; onToggle: () => void; onSaved: () => void }) {
   const s = e.current_structure;
+  const [slips, setSlips] = useState(false);
   return (
     <>
       <tr>
@@ -69,9 +71,10 @@ function EmployeeRow({ e, st, entityId, open, onToggle, onSaved }: { e: Employee
         <td><Pill tone={st.tone}>{st.label}</Pill></td>
         <td className="t13">{shortDate(e.date_of_joining)}</td>
         <td className="mono" style={{ textAlign: "right" }}>{s ? formatInr(monthlyEarnings(s.components), { decimals: false }) : <span className="t13">No salary</span>}</td>
-        <td style={{ textAlign: "right" }}><button type="button" className="linkbtn" style={{ color: "var(--cobalt)" }} aria-expanded={open} onClick={onToggle}>{s ? "Revise salary" : "Set salary"}</button></td>
+        <td style={{ textAlign: "right" }}><button type="button" className="linkbtn" style={{ color: "var(--cobalt)" }} aria-expanded={open} onClick={onToggle}>{s ? "Revise salary" : "Set salary"}</button><button type="button" className="linkbtn" style={{ color: "var(--cobalt)", marginLeft: 12 }} aria-expanded={slips} aria-label={`Payslips of ${e.full_name}`} onClick={() => setSlips(!slips)}>Payslips</button></td>
       </tr>
       {open && <tr><td colSpan={5} style={{ background: "var(--surface-2)" }}><SalaryForm e={e} entityId={entityId} onSaved={onSaved} /></td></tr>}
+      {slips && <tr><td colSpan={5} style={{ background: "var(--surface-2)" }}><PayslipList entityId={entityId} employeeId={e.id} name={e.full_name} /></td></tr>}
     </>
   );
 }

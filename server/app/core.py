@@ -23,6 +23,8 @@ from psycopg_pool import ConnectionPool
 
 # ------------------------------------------------------------------ settings
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres@localhost:5432/biz360x")
+from . import roles
+
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-only-secret-change-me-in-every-environment")
 ENV = os.environ.get("BIZ_ENV", "dev")
 ACCESS_TTL = dt.timedelta(minutes=15)
@@ -77,6 +79,10 @@ CONSTRAINT_CODES = {
     "number_len": (400, "number_too_long", "Document numbers are limited to 16 characters"),
     "two_person_rule": (403, "two_person_rule", "You cannot decide a request you raised"),
     "share_allotments_check": (400, "allotment_late", "Shares must be allotted within 60 days of receiving the money"),
+    "stock_not_negative": (409, "insufficient_stock", "Not enough stock"),
+    "audit_engagement_read_only": (400, "audit_read_only", "An audit engagement can only read and raise queries, and needs an end date"),
+    "leave_within_employment": (400, "validation_failed", "The leave falls outside your time with the company"),
+    "engagement_independence": (409, "independence_conflict", "The same practitioner cannot audit the company and keep its books"),
 }
 
 
@@ -177,6 +183,30 @@ ROLE_ACTIONS = {
 ADVISOR_ACTIONS = {"read": {"read"}, "comment": {"read"}, "prepare": {"read", "write"}, "certify": {"read", "write", "file"}}
 
 
+def is_owner(cur, entity_id: uuid.UUID) -> bool:
+    cur.execute("SELECT 1 FROM memberships WHERE entity_id = %s AND user_id = app.current_user_id() AND role = 'owner' AND revoked_at IS NULL", (entity_id,))
+    return cur.fetchone() is not None
+
+
+def require_owner(cur, entity_id: uuid.UUID) -> None:
+    """Managing who has access is the owner's alone: 404 when the entity is invisible, 403 for anyone else, API keys included."""
+    cur.execute("SELECT 1 FROM entities WHERE id = %s", (entity_id,))
+    if cur.fetchone() is None:
+        raise ApiError(404, "not_found", "Not found")
+    cur.execute("SELECT 1 FROM api_keys WHERE acts_as_user = app.current_user_id()")
+    if cur.fetchone() or not is_owner(cur, entity_id):
+        raise ApiError(403, "permission_denied", "Only an owner can manage who has access")
+
+
+def allowed(cur, entity_id: uuid.UUID, permission: str) -> bool:
+    """Whether the caller holds a permission, for a response that shows more to those who do."""
+    try:
+        require(cur, entity_id, permission)
+        return True
+    except ApiError:
+        return False
+
+
 def require(cur, entity_id: uuid.UUID, permission: str) -> None:
     """404 when the entity is invisible, 403 when visible but not allowed."""
     module, action = permission.split(":")
@@ -190,17 +220,15 @@ def require(cur, entity_id: uuid.UUID, permission: str) -> None:
             raise ApiError(404, "not_found", "Not found")
         if permission not in key["permissions"] and f"{module}:*" not in key["permissions"]:
             raise ApiError(403, "permission_denied", f"This API key lacks {permission}")
-    cur.execute("""SELECT role::text, modules FROM memberships
+    cur.execute("""SELECT scopes FROM memberships
                     WHERE entity_id = %s AND user_id = app.current_user_id() AND revoked_at IS NULL""", (entity_id,))
     m = cur.fetchone()
-    if m and action in ROLE_ACTIONS[m["role"]] and ("*" in m["modules"] or module in m["modules"] or module in ("approvals", "tasks")):
+    if m and roles.allows(m["scopes"], module, action):          # a member holds a level per module (migration 37)
         return
-    cur.execute("""SELECT g.scopes FROM advisor_grants g JOIN org_members om ON om.organization_id = g.advisor_org_id
-                    WHERE g.entity_id = %s AND om.user_id = app.current_user_id() AND g.status = 'active'""", (entity_id,))
-    for g in cur.fetchall():
-        level = g["scopes"].get(module)
-        if level and action in ADVISOR_ACTIONS.get(level, set()):
-            return
+    # a practitioner: the engagements that reach them, as themselves or through their firm (staff only for clients they are assigned to)
+    cur.execute("SELECT scopes FROM app.my_grant_scopes(%s)", (entity_id,))
+    if any(roles.grant_allows(g["scopes"], module, action) for g in cur.fetchall()):
+        return
     raise ApiError(403, "permission_denied", f"Missing permission {permission}")
 
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  type BoeRead, boeFormFrom, readSummary, blankBoe, blankRealisation, blankSb, boeBody, boeProblem, claimsBody, claimsForm, claimsPending, claimsProblem, clockText, lutText, previewInr, previewText, realisationBody, realisationProblem, receivedText,
+  type BoeRead, creditImplication, boeFormFrom, readSummary, blankBoe, blankRealisation, blankSb, boeBody, boeProblem, claimsBody, claimsForm, claimsPending, claimsProblem, clockText, lutText, previewInr, previewText, realisationBody, realisationProblem, receivedText,
   sbBody, sbProblem,
 } from "./trade";
 
@@ -93,7 +93,7 @@ describe("exports and imports", () => {
     expect(boeProblem(f, TODAY)).toBeNull();
     expect(boeBody(f)).toEqual({
       boe_number: "2260434", boe_date: "2025-05-24", port_code: "INBLR4", currency: "USD", cif_foreign: "2272.80", exchange_rate: "86.4", bcd: "2134.50", sws: "213.50", igst: "35769.00", other_duty: "1.00",
-      status: "assessed", document_id: "doc1", new_supplier_name: "FURUNO ELECTRIC CO., LTD", new_supplier_country: "JP",
+      status: "assessed", free_of_charge: false, igst_credit_status: "eligible", document_id: "doc1", new_supplier_name: "FURUNO ELECTRIC CO., LTD", new_supplier_country: "JP",
     });
     expect(readSummary(read)).toBe("USD 2272.80 · at 86.4 · invoice FECS25-I-050M · CIF · challan 2055012136");
     expect(boeBody({ ...f, addSupplier: false })).not.toHaveProperty("new_supplier_name");                       // the person unticked it
@@ -113,5 +113,20 @@ describe("exports and imports", () => {
     expect(boeBody(f)).toMatchObject({ boe_number: "5500123", port_code: "INBLR4", currency: "USD", igst: "216000", bcd: "0" });
     expect(boeBody(f)).not.toHaveProperty("status");
     expect(boeBody({ ...f, paidOn: "2026-10-25" })).toMatchObject({ status: "duty_paid", duty_paid_on: "2026-10-25" });
+  });
+});
+
+describe("an import that is free of charge", () => {
+  it("is sent as a sample with the decision made on the form", () => {
+    const f = { ...blankBoe(), number: "7001", date: "2026-05-01", port: "INBLR4", cif: "100.00", rate: "86.4", igst: "1000.00", freeOfCharge: true, creditStatus: "undecided" as const };
+    expect(boeProblem(f, TODAY)).toBeNull();
+    expect(boeBody(f)).toMatchObject({ free_of_charge: true, igst_credit_status: "undecided" });
+    expect(boeBody({ ...f, freeOfCharge: false, creditStatus: "eligible" })).toMatchObject({ free_of_charge: false, igst_credit_status: "eligible" });
+  });
+  it("tells the person what each choice means, and that the CA will look at a sample", () => {
+    expect(creditImplication("eligible", "1000.00", false)).toBe("The ₹1,000 of IGST is claimed as input tax credit and shows in your GST credit.");
+    expect(creditImplication("blocked", "1000.00", true)).toMatch(/not claimed.*cost of the goods.*17\(5\)\(h\).*Your CA is asked to review/);
+    expect(creditImplication("undecided", "1000.00", true)).toMatch(/not counted as credit until you decide/);
+    expect(creditImplication("undecided", "1000.00", false)).not.toMatch(/CA/);                       // an ordinary import is not flagged
   });
 });

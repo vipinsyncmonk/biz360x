@@ -14,11 +14,12 @@ function Stop-All {
 try {
   Stop-All
   Write-Host "Starting the database, API and worker in WSL..."
-  wsl bash "$wslRoot/scripts/e2e-stack.sh" start
+  $apiPort = if ($env:API_PORT) { $env:API_PORT } else { "8000" }       # set API_PORT when something else already uses 8000
+  wsl env "API_PORT=$apiPort" bash "$wslRoot/scripts/e2e-stack.sh" start
   if ($LASTEXITCODE -ne 0) { throw "The API did not start" }
 
   $ip = ((wsl hostname -I) -split ' ')[0]
-  $env:API_URL = "http://${ip}:8000"
+  $env:API_URL = "http://${ip}:$apiPort"
   Remove-Item -Recurse -Force "$root\web\.next" -ErrorAction SilentlyContinue
   Write-Host "Building and starting the web app on :3100 (API at $env:API_URL)..."
   Push-Location "$root\web"

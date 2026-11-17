@@ -135,6 +135,29 @@ test.describe.serial("exports and imports", () => {
     expect(problems()).toEqual([]);
   });
 
+  test("a free sample import leaves its IGST to be decided, says what that means, and flags it for the CA", async () => {
+    await page.getByRole("tab", { name: "Imports" }).click();
+    await page.getByRole("button", { name: "+ Bill of entry" }).click();
+    await page.getByLabel("Bill of entry no.").fill("5500124");
+    await page.getByLabel("Bill of entry date").fill(daysAgo(5));
+    await page.getByLabel("Port code").fill("INBLR4");
+    await page.getByLabel("CIF value (foreign)").fill("500");
+    await page.getByLabel("Customs exchange rate").fill("86.4");
+    await page.getByLabel("IGST (₹)").fill("9000");
+    await page.getByLabel(/Free of charge \(a sample\)/).check();
+    await expect(page.getByLabel("IGST on this import")).toHaveValue("undecided");
+    await expect(page.getByText(/section 17\(5\)\(h\).*Your CA is asked to review/)).toBeVisible();
+    await page.getByRole("button", { name: "Record bill of entry" }).click();
+    await expect(page.getByText("Free of charge", { exact: true })).toBeVisible();
+    await expect(page.getByText(/IGST ₹9,000: credit not decided yet · your CA is asked to review/)).toBeVisible();
+    await page.getByRole("button", { name: "Decide the IGST credit on 5500124" }).click();
+    await page.getByLabel("IGST on 5500124").selectOption("blocked");
+    await expect(page.getByText(/₹9,000 of IGST is not claimed/)).toBeVisible();
+    await page.getByRole("button", { name: "Save the decision" }).click();
+    await expect(page.getByText(/IGST ₹9,000 not claimed \(part of the cost\)/)).toBeVisible();
+    expect(problems()).toEqual([]);
+  });
+
   test("the screen fits a phone", async () => {
     await page.setViewportSize({ width: 375, height: 812 });
     for (const tab of ["Exports", "Imports"]) {

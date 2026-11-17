@@ -1,10 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api, unwrap, unwrapEmpty } from "@/lib/api";
 import { shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { PortalsSection, WebhooksSection } from "@/components/IntegrationsPanels";
-import { AddCertificate, CreateApiKey, GrantAdvisor, InvitePerson } from "@/components/SettingsForms";
+import { AccessEditor } from "@/components/RoleForms";
+import { WhoDoesWhat } from "@/components/WorkPanels";
+import { EngagePractitioner } from "@/components/EngagementPanels";
+import { AddCertificate, CreateApiKey } from "@/components/SettingsForms";
+import { ENGAGEMENT_STATUS, engagementLine, type Engagement } from "@/lib/engagements";
+import { scopesText, type Presets } from "@/lib/roles";
 import { ApiKeyRow, CHANNELS, CONN_STATUS, Dsc, EVENTS, GRANT_STATUS, Grant, KIND_LABEL, Member, PORTAL_LABEL, PortalConn, Pref, ROLE_LABEL, SCOPE_LABEL, dscStatus, modulesLabel, permissionLabel, prefBody, prefKey, prefState } from "@/lib/settings";
 import { useSession } from "@/lib/session";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
@@ -16,7 +21,7 @@ export default function Settings() {
   const { entity, me } = useSession();
   const id = entity?.id ?? null;
   const members = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/members", { params: { path: { entityId: id! } } })).data as unknown as Member[], id);
-  const grants = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/advisor-grants", { params: { path: { entityId: id! } } })).data as unknown as Grant[], id);
+  const grants = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/advisor-grants", { params: { path: { entityId: id! } } })).data as unknown as Engagement[], id);
   const dsc = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/dsc-certificates", { params: { path: { entityId: id! } } })).data as unknown as Dsc[], id);
   const prefs = useLoad(async () => unwrap(await api.GET("/me/notification-preferences")) as unknown as Pref[], id);
   const keys = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/api-keys", { params: { path: { entityId: id! } } })).data as unknown as ApiKeyRow[], id);
@@ -27,6 +32,9 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
   const [panel, setPanel] = useState<PanelKey>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const presets = useLoad(async () => unwrap(await api.GET("/role-presets")) as unknown as Presets, id);
+  const isOwner = entity?.role === "owner";
   const [confirm, setConfirm] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -73,21 +81,23 @@ export default function Settings() {
       <section className="card" style={{ overflow: "hidden" }}>
         <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <h2 style={{ margin: 0 }}>People{members.data ? ` · ${members.data.length}` : ""}</h2>
-          <button type="button" className="btn" onClick={() => setPanel(panel === "invite" ? null : "invite")}>+ Invite person</button>
+          {isOwner && <button type="button" className="btn" aria-expanded={panel === "invite"} onClick={() => setPanel(panel === "invite" ? null : "invite")}>+ Invite person</button>}
         </div>
         <div style={{ padding: "0 20px" }}><ErrorNote error={members.error ?? actionError} /></div>
-        {panel === "invite" && <div style={{ padding: 16 }}><InvitePerson entityId={id!} onDone={done(members.reload)} onCancel={() => setPanel(null)} /></div>}
+        {panel === "invite" && presets.data && <div style={{ padding: 16 }}><AccessEditor entityId={id!} presets={presets.data} onDone={done(members.reload)} onCancel={() => setPanel(null)} /></div>}
+        {!isOwner && <div className="t13" style={{ padding: "8px 20px" }}>Only an owner can invite people or change what they may do.</div>}
         {members.loading ? <Loading what="people" /> : (
           <div className="tablewrap">
             <table style={{ minWidth: 640 }}>
-              <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Modules</th><th scope="col">Sign-in</th><th scope="col"><span className="sr">Actions</span></th></tr></thead>
+              <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">May</th><th scope="col">Sign-in</th><th scope="col"><span className="sr">Actions</span></th></tr></thead>
               <tbody>
                 {(members.data ?? []).map((m) => (
-                  <tr key={m.id}>
+                  <Fragment key={m.id}><tr>
                     <td><span style={{ fontWeight: 500 }}>{m.full_name}</span><span className="t13" style={{ display: "block" }}>{m.email}{m.accepted_at ? "" : " · invited"}</span></td>
-                    <td>{ROLE_LABEL[m.role] ?? m.role}</td><td>{modulesLabel(m.modules)}</td><td className="t13">{m.auth}</td>
-                    <td style={{ textAlign: "right" }}>{m.email !== me?.email && <Confirm rowId={m.id} what="Remove access" reload={members.reload} path="members" />}</td>
+                    <td>{m.title ?? ROLE_LABEL[m.role] ?? m.role}{m.title && <span className="t13" style={{ display: "block" }}>{ROLE_LABEL[m.role] ?? m.role}</span>}</td><td className="t13">{m.scopes ? scopesText(m.scopes, presets.data?.modules) : modulesLabel(m.modules)}</td><td className="t13">{m.auth}</td>
+                    <td style={{ textAlign: "right" }}>{isOwner && m.email !== me?.email && <><button type="button" className="linkbtn" style={{ color: "var(--cobalt)", marginRight: 12 }} aria-expanded={editing === m.id} aria-label={`Change access of ${m.full_name}`} onClick={() => setEditing(editing === m.id ? null : m.id)}>Change access</button><Confirm rowId={m.id} what="Remove access" reload={members.reload} path="members" /></>}</td>
                   </tr>
+                  {editing === m.id && presets.data && <tr><td colSpan={5}><AccessEditor entityId={id!} presets={presets.data} member={{ id: m.id, name: m.full_name, title: m.title ?? null, preset: m.preset ?? null, role: m.role, scopes: m.scopes ?? {} }} onDone={() => { setEditing(null); members.reload(); }} onCancel={() => setEditing(null)} /></td></tr>}</Fragment>
                 ))}
               </tbody>
             </table>
@@ -95,19 +105,23 @@ export default function Settings() {
         )}
       </section>
 
+      {id && <WhoDoesWhat entityId={id} isOwner={isOwner} />}
+
       <div className="cols">
         <div className="col-main">
           <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><h2 style={{ margin: 0 }}>Advisors</h2><button type="button" className="btn" onClick={() => setPanel(panel === "grant" ? null : "grant")}>+ Add advisor</button></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><h2 style={{ margin: 0 }}>Practitioners</h2>
+              {isOwner && <button type="button" className="btn" aria-expanded={panel === "grant"} onClick={() => setPanel(panel === "grant" ? null : "grant")}>+ Engage practitioner</button>}</div>
+            <span className="t13">Your CA, CS, auditor and consultants. Each sees only what their engagement gives, from the day they accept until it ends.</span>
             <ErrorNote error={grants.error} />
-            {panel === "grant" && <GrantAdvisor entityId={id!} onDone={done(grants.reload)} onCancel={() => setPanel(null)} />}
-            {!grants.loading && (grants.data ?? []).length === 0 && <span className="t13">No advisor has access.</span>}
+            {panel === "grant" && <EngagePractitioner entityId={id!} presets={presets.data} onDone={done(grants.reload)} onCancel={() => setPanel(null)} />}
+            {!grants.loading && (grants.data ?? []).length === 0 && <span className="t13">No practitioner is engaged.</span>}
             {(grants.data ?? []).map((g) => {
-              const st = GRANT_STATUS[g.status] ?? { label: g.status, tone: "prep" as const };
+              const st = ENGAGEMENT_STATUS[g.status] ?? { label: g.status, tone: "prep" as const };
               return (
                 <div key={g.id} style={{ borderTop: "1px solid var(--line-2)", paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 }}>
-                  <span>{g.advisor_name}<span className="t13" style={{ display: "block" }}>{KIND_LABEL[g.advisor_kind] ?? g.advisor_kind} · {Object.entries(g.scopes).map(([k, v]) => `${k.replace(/_/g, " ")}: ${SCOPE_LABEL[v] ?? v}`).join(", ")}{g.expires_on ? ` · until ${shortDate(g.expires_on)}` : ""}</span></span>
-                  <span style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}><Pill tone={st.tone}>{st.label}</Pill>{(g.status === "active" || g.status === "invited") && <Confirm rowId={g.id} what="Revoke access" reload={grants.reload} path="advisor-grants" />}</span>
+                  <span>{g.advisor_name}{g.audit && <span className="t13"> · read only</span>}<span className="t13" style={{ display: "block" }}>{engagementLine(g, shortDate)}</span></span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}><Pill tone={st.tone}>{st.label}</Pill>{isOwner && (g.status === "active" || g.status === "invited") && <Confirm rowId={g.id} what={g.status === "invited" ? "Withdraw invitation" : "End engagement"} reload={grants.reload} path="advisor-grants" />}</span>
                 </div>
               );
             })}

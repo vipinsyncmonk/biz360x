@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import adapters, ledger, tax, taxcalc
+from . import adapters, inventory, ledger, tax, taxcalc
 from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, jsonable, money, require, tx
 from .routes_orders import js, next_number, offset_of, page
 from .routes_sales import LineIn
@@ -200,17 +200,21 @@ def book_bill(entity_id: uuid.UUID, bill_id: uuid.UUID, p: Principal = Auth,
             raise ApiError(404, "not_found", "Not found")
         if b["status"] != "draft":
             raise ApiError(409, "conflict", f"Bill is already {b['status']}")
-        cur.execute("SELECT expense_account_id, taxable_value FROM purchase_bill_lines WHERE bill_id = %s ORDER BY line_no", (bill_id,))
+        stock = inventory.bill_stock_lines(cur, entity_id, b)                    # lines for tracked goods: they go to Inventory, not to an expense
+        stock_ids = {l["id"] for l in stock}
+        cur.execute("SELECT id, expense_account_id, taxable_value FROM purchase_bill_lines WHERE bill_id = %s ORDER BY line_no", (bill_id,))
         split: dict[str, Decimal] = {}
         for l in cur.fetchall():
-            key = "account:" + str(l["expense_account_id"]) if l["expense_account_id"] else "purchases"
+            key = "inventory" if l["id"] in stock_ids else "account:" + str(l["expense_account_id"]) if l["expense_account_id"] else "purchases"
             split[key] = split.get(key, Decimal(0)) + l["taxable_value"]
+        own_tax = {"inventory": sum((l["cost"] - l["taxable_value"] for l in stock), Decimal(0))} if stock else None
         try:
-            lines = ledger.purchase_bill_lines({**b, "itc_eligibility": b["itc_eligibility"]}, list(split.items()))
+            lines = ledger.purchase_bill_lines({**b, "itc_eligibility": b["itc_eligibility"]}, list(split.items()), own_tax)
         except ledger.PostingError as e:
             raise ApiError(409, "conflict", str(e))
         jid = ledger.post_journal(cur, entity_id, b["bill_date"], "purchase_bill", bill_id, f"Bill {b['bill_no']}", lines)
         cur.execute("UPDATE purchase_bills SET status = 'booked', journal_entry_id = %s WHERE id = %s", (jid, bill_id))
+        inventory.receive_bill(cur, entity_id, b, stock, jid)
         if b["tds_section"] and b["tds_amount"] > 0:
             cur.execute("SELECT pan FROM parties WHERE id = %s", (b["party_id"],))
             pan = cur.fetchone()["pan"]

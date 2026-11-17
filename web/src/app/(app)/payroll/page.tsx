@@ -5,6 +5,7 @@ import { api, newIdempotencyKey, unwrap } from "@/lib/api";
 import { formatInr, shortDate } from "@/lib/format";
 import { useLoad } from "@/lib/hooks";
 import { LABOUR_STATUS, Labour, RUN_STATUS, Run, STEPS, Slip, WAGE_FLAG, nextAction, nextRunMonth, runName, stepIndex } from "@/lib/payroll";
+import { Readiness, openPayslipPdf, peopleText, readinessLine } from "@/lib/hr";
 import { useSession } from "@/lib/session";
 import { ErrorNote, Loading, Pill } from "@/components/ui";
 
@@ -22,6 +23,9 @@ export default function Payroll() {
   const run = list.find((r) => r.id === picked) ?? list[0];
   const slips = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/payroll-runs/{id}/payslips", { params: { path: { entityId: id!, id: run!.id }, query: { limit: 200, ...(flagged ? { flag: WAGE_FLAG } : {}) } } })).data as unknown as Slip[], id && run ? `${id}|${run.id}|${run.status}|${flagged}` : null);
   const labour = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/payroll/labour-compliance", { params: { path: { entityId: id! } } })) as unknown as Labour, id);
+
+  const open = !!run && (run.status === "inputs_open" || run.status === "computed");
+  const ready = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/payroll-runs/{id}/readiness", { params: { path: { entityId: id!, id: run!.id } } })) as unknown as Readiness, id && open ? `${id}|${run!.id}|${run!.status}` : null);
 
   async function act(what: "start" | "compute" | "submit") {
     setBusy(true); setFailure(null); setNote("");
@@ -64,6 +68,9 @@ export default function Payroll() {
           )}
           <button type="button" className="btn" disabled={busy || runs.loading} onClick={() => void act("start")}>Start {runName(nextRunMonth(list))} run</button>
           <Link href="/payroll/employees" className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Employees</Link>
+          <Link href="/payroll/onboard" className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>New hires</Link>
+          <Link href="/payroll/leave" className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Leave</Link>
+          <Link href="/payroll/policy" className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>HR policy</Link>
           {run && (run.status === "inputs_open" || run.status === "computed") && <Link href={`/payroll/inputs/${run.id}`} className="btn" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Enter inputs</Link>}
           {action === "compute" && <button type="button" className="btn primary" disabled={busy} onClick={() => void act("compute")}>{busy ? "Computing…" : "Compute pay"}</button>}
           {action === "submit" && <button type="button" className="btn primary" disabled={busy} onClick={() => void act("submit")}>{busy ? "Sending…" : "Send for approval"}</button>}
@@ -102,7 +109,7 @@ export default function Payroll() {
                 {slips.loading ? <Loading what="payslips" /> : (
                   <div className="tablewrap">
                     <table style={{ minWidth: 820 }}>
-                      <thead><tr><th scope="col">Employee</th>{["Gross", "PF", "ESI", "PT", "TDS", "Net pay"].map((h) => <th key={h} scope="col" style={{ textAlign: "right" }}>{h}</th>)}</tr></thead>
+                      <thead><tr><th scope="col">Employee</th>{["Gross", "PF", "ESI", "PT", "TDS", "Net pay"].map((h) => <th key={h} scope="col" style={{ textAlign: "right" }}>{h}</th>)}<th scope="col"><span className="sr">Payslip</span></th></tr></thead>
                       <tbody>
                         {rows.map((s) => (
                           <tr key={s.id}>
@@ -113,6 +120,7 @@ export default function Payroll() {
                             <td className="mono" style={{ textAlign: "right" }}>{formatInr(s.professional_tax, { decimals: false })}</td>
                             <td className="mono" style={{ textAlign: "right" }}>{formatInr(s.tds, { decimals: false })}</td>
                             <td className="mono" style={{ textAlign: "right", fontWeight: 600 }}>{formatInr(s.net_pay, { decimals: false })}</td>
+                            <td style={{ textAlign: "right" }}><button type="button" className="linkbtn" style={{ color: "var(--cobalt)" }} aria-label={`Payslip of ${s.employee_name}`} onClick={() => { setFailure(null); openPayslipPdf(id!, s.id).catch(setFailure); }}>Payslip</button></td>
                           </tr>
                         ))}
                       </tbody>
@@ -124,6 +132,18 @@ export default function Payroll() {
             </div>
 
             <aside className="col-side">
+              {open && ready.data && (
+                <section className="card card-pad" aria-label="Before you compute" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <h2 style={{ margin: 0 }}>Before you compute</h2>
+                  <span role="status"><Pill tone={ready.data.blockers.length ? "due" : ready.data.warnings.length ? "wait" : "ok"}>{readinessLine(ready.data)}</Pill></span>
+                  {[...ready.data.blockers, ...ready.data.warnings].map((w) => (
+                    <div key={w.code} style={{ padding: "8px 0", borderTop: "1px solid var(--line-2)", fontSize: 14 }}>{w.title}<span className="t13" style={{ display: "block" }}>{peopleText(w.employees)}</span></div>
+                  ))}
+                  {ready.data.lop_from_leave.length > 0 && <div style={{ padding: "8px 0", borderTop: "1px solid var(--line-2)", fontSize: 14 }}>Unpaid leave already filled in<span className="t13" style={{ display: "block" }}>{ready.data.lop_from_leave.map((x) => `${x.name} ${x.lop_days}`).join(", ")}</span></div>}
+                  {ready.data.joiners.length > 0 && <span className="t13">Joining this month: {peopleText(ready.data.joiners)}</span>}
+                  {ready.data.leavers.length > 0 && <span className="t13">Leaving this month: {peopleText(ready.data.leavers)}</span>}
+                </section>
+              )}
               {run.status === "approved" && <BankFile entityId={id!} runId={run.id} onDone={() => { runs.reload(); setNote("The bank file is being prepared. The run moves on once it is sent."); }} />}
               <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <h2 style={{ margin: 0 }}>Statutory deposits</h2>

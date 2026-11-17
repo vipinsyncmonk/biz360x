@@ -76,8 +76,15 @@ def run_recurring(cur, entity_id, today: dt.date | None = None) -> dict:
                 payment_terms_days=t["payment_terms_days"], lines=lines))
             made.append(doc_id)
             if r["auto_issue"]:
-                issue_core(cur, entity_id, doc_id)
-                issued += 1
+                cur.execute("SAVEPOINT recurring_issue")
+                try:
+                    issue_core(cur, entity_id, doc_id)
+                    issued += 1
+                except ApiError as e:
+                    if e.code != "insufficient_stock":
+                        raise
+                    cur.execute("ROLLBACK TO SAVEPOINT recurring_issue")        # not enough stock: the invoice stays a draft for a person to issue
+                cur.execute("RELEASE SAVEPOINT recurring_issue")
             run_on = _add_months_date(run_on, MONTHS[r["frequency"]])
         cur.execute("UPDATE recurring_invoices SET next_run_on = %s, is_active = %s WHERE id = %s",
                     (run_on, not (r["ends_on"] and run_on > r["ends_on"]), r["id"]))

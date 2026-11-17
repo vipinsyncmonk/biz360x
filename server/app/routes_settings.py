@@ -11,7 +11,8 @@ from typing import Literal
 from fastapi import APIRouter, Header, Query, Response
 from pydantic import BaseModel, Field
 
-from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, require, tx
+from . import roles
+from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, require, require_owner, tx
 from .routes_orders import js, offset_of, page
 
 router = APIRouter()
@@ -27,7 +28,7 @@ def list_members(entity_id: uuid.UUID, p: Principal = Auth, limit: int = Query(d
     off = offset_of(cursor)
     with tx(p.user_id) as cur:
         require(cur, entity_id, "settings:read")
-        cur.execute("""SELECT m.id, m.user_id, u.email, u.full_name, m.role::text, m.modules, m.accepted_at, u.auth_provider, u.mfa_enabled
+        cur.execute("""SELECT m.id, m.user_id, u.email, u.full_name, m.role::text, m.modules, m.scopes, m.title, m.preset, m.home, m.accepted_at, u.auth_provider, u.mfa_enabled
                          FROM memberships m JOIN users u ON u.id = m.user_id
                         WHERE m.entity_id = %s AND m.revoked_at IS NULL AND u.auth_provider <> 'service'
                         ORDER BY m.role, u.full_name LIMIT %s OFFSET %s""", (entity_id, limit + 1, off))
@@ -44,10 +45,8 @@ def list_advisor_grants(entity_id: uuid.UUID, p: Principal = Auth, limit: int = 
     off = offset_of(cursor)
     with tx(p.user_id) as cur:
         require(cur, entity_id, "settings:read")
-        cur.execute("""SELECT id, advisor_org_id, advisor_name, advisor_kind, scopes, document_folders, expires_on,
-                              CASE WHEN status IN ('invited', 'active') AND expires_on < current_date THEN 'expired' ELSE status END AS status
-                         FROM advisor_grants WHERE entity_id = %s ORDER BY created_at DESC, id LIMIT %s OFFSET %s""", (entity_id, limit + 1, off))
-        return page(js(cur.fetchall()), limit, off)
+        cur.execute(GRANT_SQL + " WHERE g.entity_id = %s ORDER BY g.created_at DESC, g.id LIMIT %s OFFSET %s", (entity_id, limit + 1, off))
+        return page([_grant_out(g) for g in cur.fetchall()], limit, off)
 
 
 @router.get(E + "/dsc-certificates", tags=["Entities"])
@@ -61,16 +60,74 @@ def list_dsc(entity_id: uuid.UUID, p: Principal = Auth, limit: int = Query(defau
         return page(js(cur.fetchall()), limit, off)
 
 
+@router.get("/role-presets", tags=["Entities"])
+def role_presets(p: Principal = Auth):
+    """The presets a person can be invited with (CEO, CFO, Accountant, HR Manager…) and the ones a practitioner's grant can start from, with the
+    modules and the scale of levels. A preset is a starting point: every line can be changed."""
+    return {"presets": roles.presets_out(), "levels": list(roles.LEVELS),
+            "modules": [{"key": m, "label": roles.MODULE_LABELS[m]} for m in roles.MODULES if m not in roles.SHARED]}
+
+
 # ------------------------------------------------------------------ writes: people, advisors, certificates
 class MemberIn(BaseModel):
     email: str = Field(pattern=EMAIL_PATTERN, max_length=254)
     full_name: str | None = Field(default=None, max_length=120)
-    role: Literal["owner", "approver", "maker", "viewer"]
-    modules: list[str] = Field(default=["*"], min_length=1, max_length=40)
+    preset: str | None = Field(default=None, pattern=r"^[a-z_]{1,40}$")       # a starting point from GET /role-presets
+    scopes: dict[str, str] | None = None                                       # a level per module; overrides the preset's
+    owner: bool | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    home: Literal["leadership", "finance", "people", "general"] | None = None
+    role: Literal["owner", "approver", "maker", "viewer"] | None = None        # the earlier way: one level for a list of modules
+    modules: list[str] | None = Field(default=None, min_length=1, max_length=40)
+
+
+class MemberPatch(BaseModel):
+    preset: str | None = Field(default=None, pattern=r"^[a-z_]{1,40}$")
+    scopes: dict[str, str] | None = None
+    owner: bool | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    home: Literal["leadership", "finance", "people", "general"] | None = None
+
+
+LEGACY_LEVEL = {"owner": "file", "approver": "file", "maker": "write", "viewer": "read"}
+
+
+def _bad(field: str, message: str):
+    return ApiError(400, "validation_failed", message, errors=[{"field": field, "message": message}])
+
+
+def resolve_access(*, preset: str | None, scopes: dict | None, owner: bool | None, title: str | None, home: str | None,
+                   role: str | None = None, modules: list[str] | None = None) -> dict:
+    """What a person gets, from a preset, explicit scopes, or the earlier role and module list. Explicit values win over the preset."""
+    base = None
+    if preset:
+        base = roles.PRESETS.get(preset)
+        if not base or base["kind"] != "member":
+            raise _bad("preset", f"'{preset}' is not a preset for a team member")
+    if scopes is None and base is None and role is None:
+        raise _bad("scopes", "Choose a preset or give the modules this person may use")
+    is_owner = owner if owner is not None else (base["owner"] if base else role == "owner")
+    if scopes is None:
+        if base:
+            scopes = base["scopes"]
+        else:
+            for m in modules or ["*"]:
+                if m != "*" and not MODULE_RE.match(m):
+                    raise _bad("modules", f"'{m}' is not a module name")
+            scopes = {m: LEGACY_LEVEL[role] for m in (["*"] if "*" in (modules or ["*"]) else sorted(set(modules)))}
+    if is_owner:
+        scopes = {"*": "file"}
+    elif role is None or preset:                              # the earlier way took any module name; the new way checks them
+        try:
+            scopes = roles.clean_scopes(scopes)
+        except roles.ScopeError as e:
+            raise _bad("scopes", str(e))
+    return {"owner": is_owner, "scopes": scopes, "title": title or (base["title"] if base else None), "preset": preset,
+            "home": home or (base["home"] if base else roles.default_home(scopes, is_owner))}
 
 
 def _member_row(cur, entity_id, member_id) -> dict:
-    cur.execute("""SELECT m.id, m.user_id, u.email, u.full_name, m.role::text, m.modules, m.accepted_at, u.auth_provider, u.mfa_enabled
+    cur.execute("""SELECT m.id, m.user_id, u.email, u.full_name, m.role::text, m.modules, m.scopes, m.title, m.preset, m.home, m.accepted_at, u.auth_provider, u.mfa_enabled
                      FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.id = %s AND m.entity_id = %s""", (member_id, entity_id))
     r = cur.fetchone()
     provider, mfa = r.pop("auth_provider"), r.pop("mfa_enabled")
@@ -81,25 +138,74 @@ def _member_row(cur, entity_id, member_id) -> dict:
 @router.post(E + "/members", status_code=201, tags=["Entities"])
 def invite_member(entity_id: uuid.UUID, body: MemberIn, p: Principal = Auth):
     """Invite a person by email. They sign in with a one-time code to that address; nothing is emailed until the notification service exists."""
-    for m in body.modules:
-        if m != "*" and not MODULE_RE.match(m):
-            raise ApiError(400, "validation_failed", f"'{m}' is not a module name")
+    access = resolve_access(preset=body.preset, scopes=body.scopes, owner=body.owner, title=body.title, home=body.home, role=body.role, modules=body.modules)
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "settings:write")
-        cur.execute("SELECT app.invite_member(%s, %s, %s, %s::member_role, %s) AS id",
-                    (entity_id, str(body.email).lower(), body.full_name, body.role, ["*"] if "*" in body.modules else sorted(set(body.modules))))
+        require_owner(cur, entity_id)
+        cur.execute("SELECT app.invite_member_scoped(%s, %s, %s, %s, %s::jsonb, %s, %s, %s) AS id",
+                    (entity_id, str(body.email).lower(), body.full_name, access["owner"], json.dumps(access["scopes"]), access["title"], access["preset"], access["home"]))
         mid = cur.fetchone()["id"]
         if mid is None:
             raise ApiError(409, "conflict", "That person already has access to this entity")
-        audit(cur, entity_id, "member.invited", "memberships", mid, after={"email": str(body.email).lower(), "role": body.role})
-        return _member_row(cur, entity_id, mid)
+        out = _member_row(cur, entity_id, mid)
+        from .routes_work import fill_from_preset
+        out["work_taken_on"] = fill_from_preset(cur, entity_id, out["user_id"], access["preset"], out["scopes"])
+        audit(cur, entity_id, "member.invited", "memberships", mid, after={"email": str(body.email).lower(), "role": out["role"], "scopes": out["scopes"], "preset": access["preset"]})
+        return out
+
+
+@router.patch(E + "/members/{member_id}", tags=["Entities"])
+def update_member(entity_id: uuid.UUID, member_id: uuid.UUID, body: MemberPatch, p: Principal = Auth):
+    """Change what a person may do: a preset, a level per module, their title or their home screen. Only an owner can, never for themselves,
+    and a company keeps at least one owner."""
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        raise ApiError(400, "validation_failed", "Nothing to change")
+    with tx(p.user_id) as cur:
+        require_owner(cur, entity_id)
+        cur.execute("""SELECT m.id, m.user_id, m.role::text AS role, m.scopes, m.title, m.preset, m.home FROM memberships m JOIN users u ON u.id = m.user_id
+                        WHERE m.id = %s AND m.entity_id = %s AND m.revoked_at IS NULL AND u.auth_provider <> 'service' FOR UPDATE OF m""", (member_id, entity_id))
+        m = cur.fetchone()
+        if not m:
+            raise ApiError(404, "not_found", "Not found")
+        cur.execute("SELECT app.current_user_id() AS me")
+        if m["user_id"] == cur.fetchone()["me"]:
+            raise ApiError(409, "conflict", "You cannot change your own access", "Ask another owner to do it.")
+        access_changed = any(k in changes for k in ("preset", "scopes", "owner"))
+        if access_changed:
+            was_owner = m["role"] == "owner"
+            given = changes.get("scopes") is not None                # an empty object is given, and refused below; it must not fall back to what they had
+            owner = changes.get("owner", False if changes.get("preset") or given else was_owner)
+            if was_owner and not owner and not (given or changes.get("preset")):
+                raise _bad("scopes", "Say what this person may do once they are no longer an owner")
+            access = resolve_access(preset=changes.get("preset"), scopes=changes["scopes"] if given else (None if changes.get("preset") else m["scopes"]),
+                                    owner=owner, title=changes.get("title") or m["title"], home=changes.get("home"))
+            if was_owner and not access["owner"]:
+                cur.execute("SELECT count(*) AS n FROM memberships WHERE entity_id = %s AND role = 'owner' AND revoked_at IS NULL AND id <> %s", (entity_id, member_id))
+                if cur.fetchone()["n"] == 0:
+                    raise ApiError(409, "conflict", "An entity needs at least one owner")
+            cur.execute("UPDATE memberships SET role = %s::member_role, scopes = %s::jsonb, preset = %s, home = %s, title = %s WHERE id = %s",
+                        (roles.role_for(access["scopes"], access["owner"]), json.dumps(access["scopes"]), access["preset"] if "preset" in changes else m["preset"],
+                         access["home"], access["title"], member_id))
+        else:
+            cur.execute("UPDATE memberships SET title = coalesce(%s, title), home = coalesce(%s, home) WHERE id = %s", (changes.get("title"), changes.get("home"), member_id))
+        out = _member_row(cur, entity_id, member_id)
+        if changes.get("preset"):
+            from .routes_work import fill_from_preset
+            out["work_taken_on"] = fill_from_preset(cur, entity_id, out["user_id"], changes["preset"], out["scopes"])
+        # someone who can no longer approve a kind of work cannot stay its named approver: those slots are freed
+        from . import routing
+        lost = [k for k in routing.KINDS if not roles.allows(out["scopes"], routing.approve_module(k), "approve")]
+        cur.execute("DELETE FROM responsibilities WHERE entity_id = %s AND user_id = %s AND step = 'approve' AND work_kind = ANY(%s)", (entity_id, out["user_id"], lost))
+        audit(cur, entity_id, "member.access_changed", "memberships", member_id, before={"role": m["role"], "scopes": m["scopes"], "title": m["title"]},
+              after={"role": out["role"], "scopes": out["scopes"], "title": out["title"]})
+        return out
 
 
 @router.delete(E + "/members/{member_id}", status_code=204, tags=["Entities"])
 def remove_member(entity_id: uuid.UUID, member_id: uuid.UUID, p: Principal = Auth):
     """Revokes access. The person's name stays on past work."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "settings:write")
+        require_owner(cur, entity_id)
         cur.execute("""SELECT m.id, m.user_id, m.role::text AS role FROM memberships m JOIN users u ON u.id = m.user_id
                         WHERE m.id = %s AND m.entity_id = %s AND m.revoked_at IS NULL AND u.auth_provider <> 'service'""", (member_id, entity_id))
         m = cur.fetchone()
@@ -112,6 +218,7 @@ def remove_member(entity_id: uuid.UUID, member_id: uuid.UUID, p: Principal = Aut
             cur.execute("SELECT count(*) AS n FROM memberships WHERE entity_id = %s AND role = 'owner' AND revoked_at IS NULL AND id <> %s", (entity_id, member_id))
             if cur.fetchone()["n"] == 0:
                 raise ApiError(409, "conflict", "An entity needs at least one owner")
+        cur.execute("DELETE FROM responsibilities WHERE entity_id = %s AND user_id = %s", (entity_id, m["user_id"]))       # their work goes back to unassigned
         cur.execute("UPDATE memberships SET revoked_at = now() WHERE id = %s", (member_id,))
         audit(cur, entity_id, "member.removed", "memberships", member_id, after={"role": m["role"]})
     return Response(status_code=204)
@@ -119,41 +226,97 @@ def remove_member(entity_id: uuid.UUID, member_id: uuid.UUID, p: Principal = Aut
 
 class GrantIn(BaseModel):
     advisor_name: str = Field(min_length=1, max_length=120)
-    advisor_kind: Literal["chartered_accountant", "company_secretary", "counsel", "lender", "investor", "auditor"]
+    advisor_kind: Literal["chartered_accountant", "company_secretary", "counsel", "lender", "investor", "auditor"] | None = None
     invite_email: str | None = Field(default=None, pattern=EMAIL_PATTERN, max_length=254)
-    scopes: dict[str, Literal["read", "comment", "prepare", "certify"]] = Field(min_length=1)
+    service: Literal["bookkeeping", "gst", "tds", "pf_esi", "payroll", "secretarial", "trade", "statutory_audit", "tax_audit", "internal_audit", "virtual_cfo", "legal"] | None = None
+    preset: str | None = Field(default=None, pattern=r"^[a-z_]{1,40}$")
+    scopes: dict[str, str] | None = None
+    period_fy: str | None = Field(default=None, pattern=r"^[0-9]{4}-[0-9]{2}$")
+    membership_no: str | None = Field(default=None, min_length=3, max_length=20)
     document_folders: list[str] | None = None
     expires_on: dt.date | None = None
 
 
-GRANT_COLS = "id, advisor_org_id, advisor_name, advisor_kind, scopes, document_folders, expires_on, status"
+GRANT_SQL = """SELECT g.id, g.advisor_org_id, g.advisor_name, g.advisor_kind, g.service, g.preset, g.scopes, g.document_folders, g.period_fy::text AS period_fy, g.expires_on,
+                      g.invited_email::text AS invited_email, g.membership_no, g.practitioner_user_id, g.accepted_at, g.created_at,
+                      CASE WHEN g.status IN ('invited', 'active') AND g.expires_on < current_date THEN 'expired' ELSE g.status END AS status,
+                      CASE WHEN g.advisor_org_id IS NOT NULL THEN 'firm' WHEN g.practitioner_user_id IS NOT NULL THEN 'person' ELSE 'record' END AS party
+                 FROM advisor_grants g"""
+
+
+def _grant_out(g: dict) -> dict:
+    out = js(g)
+    out["audit"] = g["service"] in roles.AUDIT_SERVICES
+    return out
 
 
 @router.post(E + "/advisor-grants", status_code=201, tags=["Entities"])
 def create_advisor_grant(entity_id: uuid.UUID, body: GrantIn, p: Principal = Auth):
-    """Invites an advisor. The grant starts as `invited` and becomes active when their firm accepts."""
-    for k in body.scopes:
-        if not MODULE_RE.match(k):
-            raise ApiError(400, "validation_failed", f"'{k}' is not a module name")
-    if body.expires_on and body.expires_on <= dt.date.today():
-        raise ApiError(400, "validation_failed", "expires_on must be in the future")
+    """Engage a practitioner. With `invite_email` the person is invited and access starts when they accept, as themselves or for their
+    firm; without it the engagement is only a record. An audit engagement can only read and raise queries and needs an end date."""
+    base = None
+    if body.preset:
+        base = roles.PRESETS.get(body.preset)
+        if not base or base["kind"] != "practitioner":
+            raise _bad("preset", f"'{body.preset}' is not a preset for a practitioner")
+    service = body.service or (base["service"] if base else None)
+    kind = body.advisor_kind or (base["advisor_kind"] if base else None)
+    if not kind:
+        raise _bad("advisor_kind", "Say what kind of advisor this is, or choose a preset")
+    scopes = body.scopes if body.scopes is not None else (base["scopes"] if base else None)
+    if scopes is None:
+        raise _bad("scopes", "Choose a preset or give the modules this practitioner may use")
+    try:
+        scopes = roles.clean_grant_scopes(scopes, service)
+    except roles.ScopeError as e:
+        raise _bad("scopes", str(e))
+    today = dt.date.today()
+    if body.expires_on and body.expires_on <= today:
+        raise _bad("expires_on", "The engagement must end after today")
+    if service in roles.AUDIT_SERVICES and not body.expires_on:
+        raise _bad("expires_on", "An audit engagement needs an end date")
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "settings:write")
-        cur.execute(f"""INSERT INTO advisor_grants (entity_id, advisor_name, advisor_kind, scopes, document_folders, expires_on)
-                        VALUES (%s, %s, %s, %s, %s, %s) RETURNING {GRANT_COLS}""",
-                    (entity_id, body.advisor_name.strip(), body.advisor_kind, json.dumps(body.scopes), body.document_folders, body.expires_on))
-        g = cur.fetchone()
-        audit(cur, entity_id, "advisor_grant.created", "advisor_grants", g["id"], after={"advisor": body.advisor_name, "scopes": body.scopes})
-        return js(g)
+        require_owner(cur, entity_id)
+        user_id = None
+        if body.invite_email:
+            cur.execute("SELECT app.invite_practitioner(%s, %s, %s) AS id", (entity_id, str(body.invite_email).lower(), body.advisor_name))
+            user_id = cur.fetchone()["id"]
+            cur.execute("SELECT 1 FROM memberships WHERE entity_id = %s AND user_id = %s AND revoked_at IS NULL", (entity_id, user_id))
+            if cur.fetchone():
+                raise ApiError(409, "conflict", "That person is already on your team", "Change what they may do under People, or remove them there first.")
+            cur.execute("SELECT 1 FROM advisor_grants WHERE entity_id = %s AND practitioner_user_id = %s AND status IN ('invited', 'active') AND service IS NOT DISTINCT FROM %s",
+                        (entity_id, user_id, service))
+            if cur.fetchone():
+                raise ApiError(409, "conflict", "That practitioner is already engaged for this")
+        cur.execute("""INSERT INTO advisor_grants (entity_id, advisor_name, advisor_kind, service, preset, scopes, document_folders, period_fy, expires_on, invited_email,
+                                                   membership_no, practitioner_user_id, invited_by)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, app.current_user_id()) RETURNING id""",
+                    (entity_id, body.advisor_name.strip(), kind, service, body.preset if body.scopes is None else None, json.dumps(scopes), body.document_folders, body.period_fy,
+                     body.expires_on, str(body.invite_email).lower() if body.invite_email else None, body.membership_no, user_id))
+        gid = cur.fetchone()["id"]
+        cur.execute(GRANT_SQL + " WHERE g.id = %s", (gid,))
+        out = _grant_out(cur.fetchone())
+        audit(cur, entity_id, "advisor_grant.created", "advisor_grants", gid, after={"advisor": body.advisor_name, "service": service, "scopes": scopes, "invited": bool(user_id)})
+        if user_id:
+            emit(cur, entity_id, "engagement.invited", "advisor_grants", gid, {"advisor": body.advisor_name, "service": service})
+        return out
 
 
 @router.delete(E + "/advisor-grants/{grant_id}", status_code=204, tags=["Entities"])
 def revoke_advisor_grant(entity_id: uuid.UUID, grant_id: uuid.UUID, p: Principal = Auth):
+    """End an engagement, or withdraw an invitation. Access stops at once, and work the practitioner was named for goes back to unassigned."""
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "settings:write")
-        cur.execute("UPDATE advisor_grants SET status = 'revoked' WHERE id = %s AND entity_id = %s RETURNING id", (grant_id, entity_id))
-        if not cur.fetchone():
+        require_owner(cur, entity_id)
+        cur.execute("UPDATE advisor_grants SET status = 'revoked' WHERE id = %s AND entity_id = %s AND status IN ('invited', 'active') RETURNING practitioner_user_id",
+                    (grant_id, entity_id))
+        g = cur.fetchone()
+        if not g:
             raise ApiError(404, "not_found", "Not found")
+        if g["practitioner_user_id"]:
+            cur.execute("""DELETE FROM responsibilities r WHERE r.entity_id = %s AND r.user_id = %s
+                              AND NOT EXISTS (SELECT 1 FROM advisor_grants g WHERE g.entity_id = r.entity_id AND g.practitioner_user_id = r.user_id AND g.status = 'active')
+                              AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.entity_id = r.entity_id AND m.user_id = r.user_id AND m.revoked_at IS NULL)""",
+                        (entity_id, g["practitioner_user_id"]))
         audit(cur, entity_id, "advisor_grant.revoked", "advisor_grants", grant_id)
     return Response(status_code=204)
 

@@ -11,8 +11,8 @@ from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import adapters, ledger, payroll as pr, secretbox
-from .core import ApiError, Auth, Principal, audit, emit, idempotency_begin, idempotency_finish, jsonable, money, require, tx
+from . import adapters, hrdb, ledger, payroll as pr, secretbox, taxdecl
+from .core import ApiError, Auth, Principal, allowed as may, audit, emit, idempotency_begin, idempotency_finish, jsonable, money, require, tx
 from .routes_orders import js, offset_of, page
 
 router = APIRouter()
@@ -115,7 +115,7 @@ def update_employee(entity_id: uuid.UUID, employee_id: uuid.UUID, body: dict, p:
     allowed = {"full_name", "pan", "uan", "esic_ip_no", "email", "date_of_leaving", "designation", "department", "work_state", "employment_type",
                "tax_regime", "status", "bank_account"}
     with tx(p.user_id) as cur:
-        require(cur, entity_id, "payroll:write")
+        require(cur, entity_id, "payroll:write" if may(cur, entity_id, "payroll:write") else "hr:write")      # a person's details are HR's too; their pay is not here
         cur.execute("SELECT * FROM employees WHERE id = %s AND entity_id = %s FOR UPDATE", (employee_id, entity_id))
         e = cur.fetchone()
         if not e:
@@ -134,7 +134,10 @@ def update_employee(entity_id: uuid.UUID, employee_id: uuid.UUID, body: dict, p:
                     (new.full_name, new.pan, new.uan, new.esic_ip_no, new.email, new.date_of_leaving, new.designation, new.department, new.work_state,
                      new.employment_type, new.tax_regime, new.status, secretbox.encrypt(bank.account_no) if bank else None, bank.ifsc if bank else None, employee_id))
         audit(cur, entity_id, "employee.updated", "employees", employee_id, after={k: v for k, v in body.items() if k != "bank_account"})
-        return load_employee(cur, entity_id, employee_id)
+        out = load_employee(cur, entity_id, employee_id)
+        if not may(cur, entity_id, "payroll:read"):
+            out["current_structure"] = None
+        return out
 
 
 class ComponentIn(BaseModel):
@@ -148,7 +151,7 @@ class ComponentIn(BaseModel):
 class StructureIn(BaseModel):
     effective_from: dt.date
     ctc_annual: Decimal = Field(gt=0)
-    components: list[ComponentIn] = Field(min_length=1)
+    components: list[ComponentIn] | None = Field(default=None, min_length=1)      # left out: worked out from the CTC by the company's HR policy
 
 
 @router.post(E + "/employees/{employee_id}/salary-structures", status_code=201, tags=["Payroll & HR"])
@@ -159,25 +162,17 @@ def create_structure(entity_id: uuid.UUID, employee_id: uuid.UUID, body: Structu
         e = cur.fetchone()
         if not e:
             raise ApiError(404, "not_found", "Not found")
-        if len({c.code for c in body.components}) != len(body.components):
-            raise ApiError(400, "validation_failed", "Duplicate component codes")
-        if not any(c.kind == "earning" and c.in_wages for c in body.components):
-            raise ApiError(400, "validation_failed", "At least one earning must count as wages (basic pay)")
-        monthly = sum((c.monthly_amount for c in body.components), ZERO)
-        if abs(monthly * 12 - body.ctc_annual) > 12:
-            raise ApiError(400, "validation_failed", f"Components add up to {monthly * 12} a year, not the stated CTC {body.ctc_annual}")
-        cur.execute("SELECT id, lower(effective) AS lo FROM salary_structures WHERE employee_id = %s AND upper(effective) IS NULL FOR UPDATE", (employee_id,))
-        prev = cur.fetchone()
-        if prev:
-            if body.effective_from <= prev["lo"]:
-                raise ApiError(409, "conflict", f"A structure effective from {prev['lo']} already exists; the revision must start after it")
-            cur.execute("UPDATE salary_structures SET effective = daterange(lower(effective), %s) WHERE id = %s", (body.effective_from, prev["id"]))
-        cur.execute("""INSERT INTO salary_structures (employee_id, effective, ctc_annual, approved_by) VALUES (%s, daterange(%s, NULL), %s, app.current_user_id())
-                       RETURNING id""", (employee_id, body.effective_from, body.ctc_annual))
-        sid = cur.fetchone()["id"]
-        for c in body.components:
-            cur.execute("INSERT INTO salary_components (structure_id, code, monthly_amount, kind, in_wages, taxable) VALUES (%s, %s, %s, %s, %s, %s)",
-                        (sid, c.code, c.monthly_amount, c.kind, c.in_wages, c.taxable))
+        comps = None
+        if body.components is not None:
+            if len({c.code for c in body.components}) != len(body.components):
+                raise ApiError(400, "validation_failed", "Duplicate component codes")
+            if not any(c.kind == "earning" and c.in_wages for c in body.components):
+                raise ApiError(400, "validation_failed", "At least one earning must count as wages (basic pay)")
+            monthly = sum((c.monthly_amount for c in body.components), ZERO)
+            if abs(monthly * 12 - body.ctc_annual) > 12:
+                raise ApiError(400, "validation_failed", f"Components add up to {monthly * 12} a year, not the stated CTC {body.ctc_annual}")
+            comps = [c.model_dump() for c in body.components]
+        sid, _ = hrdb.insert_structure(cur, entity_id, employee_id, body.effective_from, body.ctc_annual, comps)
         audit(cur, entity_id, "salary_structure.created", "employees", employee_id, after={"ctc": body.ctc_annual, "from": body.effective_from})
         return structure_out(cur, sid)
 
@@ -243,6 +238,7 @@ def create_run(entity_id: uuid.UUID, body: RunIn, p: Principal = Auth):
                           AND (date_of_leaving IS NULL OR date_of_leaving >= %s)""", (entity_id, _month_end(body.period_month), body.period_month))
         cur.execute("INSERT INTO payroll_runs (entity_id, period_month, headcount) VALUES (%s, %s, %s) RETURNING id", (entity_id, body.period_month, cur.fetchone()["n"]))
         rid = cur.fetchone()["id"]
+        hrdb.pull_leave_lop(cur, entity_id, {"id": rid, "period_month": body.period_month, "status": "inputs_open"})      # unpaid leave already approved for the month
         audit(cur, entity_id, "payroll_run.created", "payroll_runs", rid, after={"month": body.period_month})
         return load_run(cur, entity_id, rid)
 
@@ -333,6 +329,21 @@ def _history(cur, entity_id, employee_id, month_start: dt.date) -> dict:
     return {"prior_payslips": h["n"], "prior_gross": h["gross"], "tds_so_far": h["tds"]}
 
 
+def _declared(cur, entity_id, employee_id, month_start: dt.date, default_regime: str):
+    """The regime and verified deductions from the employee's declaration for the month's financial year (taxdecl.py); none when they made none."""
+    fy = taxdecl.fy_of(month_start)
+    cur.execute("SELECT id, regime, status FROM tax_declarations WHERE employee_id = %s AND fy = %s AND entity_id = %s", (employee_id, fy, entity_id))
+    d = cur.fetchone()
+    if not d:
+        return default_regime, None
+    cur.execute("SELECT section, status, verified_amount, declared_amount FROM tax_declaration_items WHERE declaration_id = %s", (d["id"],))
+    items = cur.fetchall()
+    cur.execute("SELECT code, annual_cap FROM tax_deduction_sections WHERE fy = %s", (fy,))
+    caps = {r["code"]: r["annual_cap"] for r in cur.fetchall()}
+    dec = taxdecl.declared_for_payroll(d["regime"], d["status"], items, caps)
+    return dec.regime or default_regime, dec
+
+
 def compute_run(cur, entity_id, run: dict) -> dict:
     month = run["period_month"]
     cur.execute("SELECT 1 FROM entity_registrations WHERE entity_id = %s AND kind = 'epf' AND status = 'active' LIMIT 1", (entity_id,))
@@ -356,9 +367,10 @@ def compute_run(cur, entity_id, run: dict) -> dict:
         comps = [pr.Component(c["code"], c["monthly_amount"], c["kind"], c["in_wages"], c["taxable"]) for c in cur.fetchall()]
         raw = stored.get(str(e["id"]), {})
         inp = pr.Inputs(**{k: Decimal(v) for k, v in raw.items() if k in ("lop_days", "overtime", "bonus", "reimbursements", "other_deductions")})
+        regime, declared = _declared(cur, entity_id, e["id"], month, e["tax_regime"])
         slips.append((e, pr.compute_payslip(month_start=month, joined=e["date_of_joining"], left=e["date_of_leaving"], work_state=e["work_state"],
-                                            regime=e["tax_regime"], components=comps, inputs=inp, pf_applicable=pf_on, esi_applicable=esi_on,
-                                            tds_history=_history(cur, entity_id, e["id"], month))))
+                                            regime=regime, components=comps, inputs=inp, pf_applicable=pf_on, esi_applicable=esi_on,
+                                            tds_history=_history(cur, entity_id, e["id"], month), declared=declared)))
     if missing:
         raise ApiError(409, "conflict", "Some employees have no salary structure for this month", ", ".join(missing))
     cur.execute("DELETE FROM payslips WHERE run_id = %s", (run["id"],))
@@ -510,7 +522,7 @@ def list_payslips(entity_id: uuid.UUID, run_id: uuid.UUID, p: Principal = Auth, 
             pct = r.pop("wage_pct")
             r["flags"] = ["wage_below_50pct"] if pct is not None and pct < 50 else []
             r["paid_days"], r["lop_days"] = float(r["paid_days"]), float(r["lop_days"])
-            r["pdf_url"] = None
+            r["pdf_url"] = f"/v1/entities/{entity_id}/payslips/{r['id']}/pdf"
             if flag is None or flag in r["flags"]:
                 rows.append(r)
         return {"data": js(rows[off:off + limit]), "next_cursor": str(off + limit) if len(rows) > off + limit else None}

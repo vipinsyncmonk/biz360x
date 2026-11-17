@@ -1,5 +1,7 @@
 /** Navigation from the design. `built` marks the screens that exist; the rest open a placeholder so the whole map is visible. */
-export interface NavItem { t: string; href: string; icon: string; built: boolean }
+/** `modules`: shown to a person who can open any of them (left out: shown to everyone). `unless`: hidden from a person who can open any of these.
+ *  `firmOnly`: for people who belong to a firm or group. The server decides access; this only keeps the sidebar to what a person can use. */
+export interface NavItem { t: string; href: string; icon: string; built: boolean; modules?: string[]; unless?: string[]; firmOnly?: boolean }
 export interface NavGroup { h: string; items: NavItem[] }
 
 const I = {
@@ -14,6 +16,7 @@ const I = {
   legal: "M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z",
   rocket: "M5 15c-1 1-2 5-2 5s4-1 5-2M9 15l-3-3c1-4 5-9 12-9 0 7-5 11-9 12zM14 10h.01",
   factory: "M3 21V10l6 4V10l6 4V6h6v15z",
+  box: "M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10",
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   ship: "M3 17l2 3h14l2-3M5 17l-1-6h16l-1 6M12 11V4l5 4M12 4L7 8",
   group: "M3 21V9l6-4 6 4v12M15 21V13h6v8M7 13h4M7 17h4",
@@ -25,18 +28,18 @@ const soon = (t: string, slug: string, icon: string): NavItem => ({ t, href: `/m
 export const NAV: NavGroup[] = [
   { h: "WORKSPACE", items: [
     { t: "Today", href: "/", icon: I.today, built: true },
-    { t: "Compliance", href: "/compliance", icon: I.shield, built: true },
-    { t: "Notice desk", href: "/notices", icon: I.legal, built: true },
-    { t: "Copilot", href: "/copilot", icon: I.spark, built: true },
-    { t: "Documents", href: "/documents", icon: I.folder, built: true },
+    { t: "Compliance", href: "/compliance", icon: I.shield, built: true, modules: ["compliance"] },
+    { t: "Notice desk", href: "/notices", icon: I.legal, built: true, modules: ["compliance", "legal"] },
+    { t: "Copilot", href: "/copilot", icon: I.spark, built: true, modules: ["copilot"] },
+    { t: "Documents", href: "/documents", icon: I.folder, built: true, modules: ["documents"] },
   ] },
   { h: "RUN", items: [
-    { t: "Sales & Billing", href: "/billing", icon: I.bill, built: true },
-    { t: "Finance & Books", href: "/finance", icon: I.book, built: true }, { t: "Fixed assets", href: "/assets", icon: I.factory, built: true },{ t: "GST & Tax", href: "/gst", icon: I.gst, built: true }, { t: "TDS & Advance tax", href: "/tds", icon: I.gst, built: true },
-    { t: "Payroll & HR", href: "/payroll", icon: I.people, built: true }, { t: "Exports & imports", href: "/trade", icon: I.ship, built: true }, { t: "Legal & Contracts", href: "/legal", icon: I.legal, built: true }, { t: "Board & resolutions", href: "/board", icon: I.book, built: true },
+    { t: "Sales & Billing", href: "/billing", icon: I.bill, built: true, modules: ["sales"] },
+    { t: "Finance & Books", href: "/finance", icon: I.book, built: true, modules: ["finance"] }, { t: "Fixed assets", href: "/assets", icon: I.factory, built: true, modules: ["finance"] }, { t: "Inventory", href: "/inventory", icon: I.box, built: true, modules: ["inventory"] }, { t: "GST & Tax", href: "/gst", icon: I.gst, built: true, modules: ["gst"] }, { t: "TDS & Advance tax", href: "/tds", icon: I.gst, built: true, modules: ["tds"] },
+    { t: "Payroll & HR", href: "/payroll", icon: I.people, built: true, modules: ["payroll"] }, { t: "HR", href: "/payroll/leave", icon: I.people, built: true, modules: ["hr"], unless: ["payroll"] }, { t: "Exports & imports", href: "/trade", icon: I.ship, built: true, modules: ["trade"] }, { t: "Legal & Contracts", href: "/legal", icon: I.legal, built: true, modules: ["legal"] }, { t: "Board & resolutions", href: "/board", icon: I.book, built: true, modules: ["legal"] },
   ] },
-  { h: "TRACKS", items: [{ t: "Startup", href: "/startup", icon: I.rocket, built: true }, { t: "MSME", href: "/msme", icon: I.factory, built: true }, { t: "All modules", href: "/modules", icon: I.grid, built: true }] },
-  { h: "ADMIN", items: [{ t: "Group view", href: "/group", icon: I.group, built: true }, { t: "Settings", href: "/settings", icon: I.cog, built: true }] },
+  { h: "TRACKS", items: [{ t: "Startup", href: "/startup", icon: I.rocket, built: true, modules: ["capital"] }, { t: "MSME", href: "/msme", icon: I.factory, built: true, modules: ["schemes"] }, { t: "All modules", href: "/modules", icon: I.grid, built: true }] },
+  { h: "ADMIN", items: [{ t: "Group view", href: "/group", icon: I.group, built: true, firmOnly: true }, { t: "Settings", href: "/settings", icon: I.cog, built: true, modules: ["settings"] }] },
 ];
 
 export const SOON_TITLES: Record<string, string> = Object.fromEntries(
