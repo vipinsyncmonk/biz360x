@@ -1020,7 +1020,7 @@ action(E + "/employees/{id}/activate", "Payroll & HR", "activateEmployee", "Fini
 _op("get", E + "/hr/people", "Payroll & HR", "listHrPeople", "The company's people for HR work, without anything about pay", "hr:read", params=[q("status", ENUM("onboarding", "active", "notice", "exited"))],
     resp=schema("HrPeople", {"data": ARR(schema("HrPerson", {"id": UUID, "employee_code": S(), "full_name": S(), "designation": NULLABLE(S()), "department": NULLABLE(S()),
                                                             "date_of_joining": DATE, "date_of_leaving": NULLABLE(DATE), "status": S(), "has_pan": B(), "has_bank_account": B(),
-                                                            "email": NULLABLE(S()), "self_service": ENUM("off", "invited", "active")}))}))
+                                                            "email": NULLABLE(S()), "self_service": ENUM("off", "invited", "active"), "manager_id": NULLABLE(UUID), "manager_name": NULLABLE(S())}))}))
 schema("Holiday", {"id": RO_UUID, "date": DATE, "name": S()}, required=("date", "name"))
 _op("get", E + "/holidays", "Payroll & HR", "listHolidays", "Company holidays", "hr:read", params=[q("year", I())], resp=schema("HolidayList", {"data": ARR(ref("Holiday"))}))
 _op("post", E + "/holidays", "Payroll & HR", "createHoliday", "Add a holiday", "hr:write", body=ref("Holiday"), resp=ref("Holiday"), status="201")
@@ -1030,7 +1030,8 @@ schema("LeaveRequest", {"id": RO_UUID, "employee_id": UUID, "employee_name": S(r
                         "days": {**DAYS, "readOnly": True, "description": "Working days in the range: not the weekly off, not a holiday"},
                         "lop_days": {**DAYS, "readOnly": True, "description": "The days of it that are not paid"},
                         "status": ENUM("pending", "approved", "rejected", "cancelled", readOnly=True), "requested_at": RO_TS, "decided_at": NULLABLE(RO_TS), "decision_note": NULLABLE(S(readOnly=True)),
-                        "payroll_note": NULLABLE(S(readOnly=True, description="Set when a month the leave touches already has an approved payroll"))},
+                        "payroll_note": NULLABLE(S(readOnly=True, description="Set when a month the leave touches already has an approved payroll")),
+                        "decided_by_manager": NULLABLE(S(readOnly=True, description="The manager who decided it, when HR did not"))},
        required=("employee_id", "leave_type", "from", "to"))
 collection(E + "/leave-requests", "Payroll & HR", "LeaveRequest", "hr", filters=[q("status", ENUM("pending", "approved", "rejected", "cancelled")), q("employee_id", UUID), P("From"), P("To")])
 LEAVE_DECISION = schema("LeaveDecision", {"note": NULLABLE(S(maxLength=300))})
@@ -1153,6 +1154,66 @@ action(E + "/employee-detail-requests/{id}/confirm", "Payroll & HR", "confirmEmp
        desc="Check it against their documents first: the bank account is where salary is paid. `two_person_rule` (403) for the person who raised it.")
 action(E + "/employee-detail-requests/{id}/reject", "Payroll & HR", "rejectEmployeeDetailRequest", "Refuse an employee's requested change", "hr:write",
        body=schema("DetailReject", {"note": S(maxLength=300)}, required=("note",)), resp=ref("DetailRequest"))
+
+# ---- the rest of self-service (migration 44): contact, proofs, tasks, the team, the emailed invitation
+schema("Contact", {"address_line1": NULLABLE(S(maxLength=120)), "address_line2": NULLABLE(S(maxLength=120)), "city": NULLABLE(S(maxLength=60)),
+                   "state_code": NULLABLE(S(pattern="^[0-9]{2}$", description="GST state code")), "pincode": NULLABLE(S(pattern="^[1-9][0-9]{5}$")),
+                   "emergency_name": NULLABLE(S(maxLength=80)), "emergency_relation": NULLABLE(S(maxLength=40)),
+                   "emergency_mobile": NULLABLE(S(pattern="^\\+[1-9][0-9]{7,14}$", description="With the country code")), "updated_at": NULLABLE(RO_TS)})
+_op("get", "/self/{employeeId}/contact", "Employee self-service", "getMyContact", "My address and emergency contact", params=[EMP], resp=ref("Contact"))
+_op("put", "/self/{employeeId}/contact", "Employee self-service", "saveMyContact", "Save my address and emergency contact", params=[EMP], body=ref("Contact"), resp=ref("Contact"),
+    desc="Mine to keep, so it takes effect at once. The address is all of line 1, city, state and PIN or none; the emergency contact is all of name, relation and mobile or none. A part left empty is cleared.")
+_op("get", E + "/employees/{id}/contact", "Payroll & HR", "getEmployeeContact", "A person's address and emergency contact", "hr:read", resp=ref("Contact"))
+_op("put", E + "/employees/{id}/contact", "Payroll & HR", "correctEmployeeContact", "Correct a person's address or emergency contact", "hr:write", body=ref("Contact"), resp=ref("Contact"))
+PROOF_KIND = ENUM("identity", "address", "education", "bank", "tax", "other")
+schema("Proof", {"id": RO_UUID, "kind": PROOF_KIND, "label": S(maxLength=80), "file_name": S(), "mime_type": S(readOnly=True), "size_bytes": I(readOnly=True),
+                 "status": ENUM("pending", "accepted", "rejected", readOnly=True), "uploaded_at": RO_TS, "decided_at": NULLABLE(RO_TS), "hr_note": NULLABLE(S(readOnly=True))})
+schema("ProofList", {"data": ARR(ref("Proof"))})
+schema("ProofUpload", {"kind": PROOF_KIND, "label": S(maxLength=80, description="What it is, like 'Aadhaar card'"), "file_name": S(maxLength=200),
+                       "content_base64": S(description="The file, base64-encoded. A PDF, JPEG or PNG of up to 5 MB; the type is read from the bytes")}, required=("kind", "label", "file_name", "content_base64"))
+_op("get", "/self/{employeeId}/proofs", "Employee self-service", "listMyProofs", "The files I have uploaded and what HR decided about each", params=[EMP], resp=ref("ProofList"))
+_op("post", "/self/{employeeId}/proofs", "Employee self-service", "uploadMyProof", "Upload a proof for HR to accept", params=[EMP], body=ref("ProofUpload"), resp=ref("Proof"), status="201",
+    desc="`unsupported_file` (422) for anything but a PDF, JPEG or PNG; 400 when empty or over 5 MB; `proofs_limit` (409) at 30 files.")
+_op("delete", "/self/{employeeId}/proofs/{id}", "Employee self-service", "removeMyProof", "Take back a file nobody has decided on", params=[EMP], resp=ref("ProofList"),
+    desc="An accepted or refused file stays (409): HR's decision is part of the record.")
+_op("get", "/self/{employeeId}/proofs/{id}/file", "Employee self-service", "getMyProofFile", "One of my uploaded files", params=[EMP, q("download", B())], desc="The file itself, with its own content type.")
+_op("get", E + "/employees/{id}/proofs", "Payroll & HR", "listEmployeeProofs", "The files a person has uploaded", "hr:read", resp=ref("ProofList"))
+_op("get", E + "/employees/{id}/proofs/{proofId}/file", "Payroll & HR", "getEmployeeProofFile", "Open one of a person's files", "hr:read",
+    params=[{"name": "proofId", "in": "path", "required": True, "schema": UUID}, q("download", B())], desc="The file itself. Opening it is written to the audit log.")
+action(E + "/employees/{id}/proofs/{proofId}/accept", "Payroll & HR", "acceptEmployeeProof", "Accept an uploaded file", "hr:write",
+       params=[{"name": "proofId", "in": "path", "required": True, "schema": UUID}], body=schema("ProofAccept", {"note": NULLABLE(S(maxLength=300))}), resp=ref("Proof"))
+action(E + "/employees/{id}/proofs/{proofId}/reject", "Payroll & HR", "rejectEmployeeProof", "Refuse an uploaded file, with the reason the person will see", "hr:write",
+       params=[{"name": "proofId", "in": "path", "required": True, "schema": UUID}], body=schema("ProofReject", {"note": S(maxLength=300)}, required=("note",)), resp=ref("Proof"))
+schema("EmployeeTask", {"id": RO_UUID, "title": S(maxLength=120), "detail": NULLABLE(S(maxLength=600)), "due_on": NULLABLE(DATE), "status": ENUM("open", "done", "cancelled", readOnly=True),
+                        "created_at": RO_TS, "done_at": NULLABLE(RO_TS), "employee_id": UUID, "employee_name": S(readOnly=True), "employee_code": S(readOnly=True)}, required=("title",))
+schema("MyTasks", {"data": ARR(schema("MyTask", {"id": UUID, "title": S(), "detail": NULLABLE(S()), "due_on": NULLABLE(DATE), "status": ENUM("open", "done"), "created_at": TS, "done_at": NULLABLE(TS)})),
+                   "open": I()})
+_op("get", "/self/{employeeId}/tasks", "Employee self-service", "listMyTasks", "What HR has asked me to do", params=[EMP], resp=ref("MyTasks"))
+_op("put", "/self/{employeeId}/tasks/{id}", "Employee self-service", "setMyTask", "Mark a task done, or open it again", params=[EMP], body=schema("MyTaskDone", {"done": B()}, required=("done",)), resp=ref("MyTasks"))
+_op("get", E + "/employee-tasks", "Payroll & HR", "listEmployeeTasks", "Tasks handed to people", "hr:read", params=[q("status", ENUM("open", "done", "cancelled")), q("employee_id", UUID)],
+    resp=schema("EmployeeTaskList", {"data": ARR(ref("EmployeeTask"))}))
+_op("post", E + "/employee-tasks", "Payroll & HR", "createEmployeeTask", "Ask a person to do something", "hr:write",
+    body=schema("EmployeeTaskIn", {"employee_id": UUID, "title": S(maxLength=120), "detail": NULLABLE(S(maxLength=600)), "due_on": NULLABLE(DATE)}, required=("employee_id", "title")),
+    resp=ref("EmployeeTask"), status="201")
+action(E + "/employee-tasks/{id}/cancel", "Payroll & HR", "cancelEmployeeTask", "Withdraw a task that is still open", "hr:write", resp=ref("EmployeeTask"))
+_op("put", E + "/employees/{id}/manager", "Payroll & HR", "setEmployeeManager", "Name the person this one reports to", "hr:write",
+    body=schema("ManagerIn", {"manager_id": NULLABLE(UUID)}), resp=schema("ManagerSet", {"employee_id": UUID, "manager_id": NULLABLE(UUID), "manager_name": NULLABLE(S())}),
+    desc="The manager decides their team's leave from their own page. `manager_cycle` (409) when the line of managers would loop.")
+schema("TeamLeave", {"id": UUID, "employee_id": UUID, "employee_name": S(), "leave_type": S(), "leave_type_name": S(), "from": DATE, "to": DATE, "days": DAYS, "lop_days": DAYS,
+                     "half_day": B(), "reason": NULLABLE(S()), "status": ENUM("pending", "approved", "rejected", "cancelled"), "requested_at": TS, "decided_at": NULLABLE(TS),
+                     "decision_note": NULLABLE(S()), "decided_by_me": B(), "mine_to_approve": B(description="Pending and with no unpaid days: unpaid days are decided by HR")})
+schema("MyTeam", {"manager": NULLABLE(schema("MyManager", {"id": UUID, "full_name": S(), "designation": NULLABLE(S())})),
+                  "reports": ARR(schema("MyReport", {"id": UUID, "employee_code": S(), "full_name": S(), "designation": NULLABLE(S())})),
+                  "leave": ARR(ref("TeamLeave")), "pending": I()})
+_op("get", "/self/{employeeId}/team", "Employee self-service", "getMyTeam", "Who I report to, who reports to me and their leave", params=[EMP], resp=ref("MyTeam"))
+action("/self/{employeeId}/team/leave/{id}/approve", "Employee self-service", "approveTeamLeave", "Approve leave of someone who reports to me", None, params=[EMP],
+       body=schema("TeamDecision", {"note": NULLABLE(S(maxLength=300))}), resp=ref("MyTeam"),
+       desc="`leave_unpaid_is_hr` (409) for leave with unpaid days: it changes pay, which HR decides. Someone else's report, or my own request: 404.")
+action("/self/{employeeId}/team/leave/{id}/reject", "Employee self-service", "rejectTeamLeave", "Refuse leave of someone who reports to me", None, params=[EMP],
+       body=ref("TeamDecision"), resp=ref("MyTeam"))
+action(E + "/employees/{id}/self-service/invitation", "Payroll & HR", "resendEmployeeInvitation", "Send the invitation email again", "hr:write", status="202",
+       resp=schema("InvitationQueued", {"employee_id": UUID, "queued": B(), "email": S()}),
+       desc="Only for a person who has not accepted. `invitation_recent` (409) within ten minutes of the last one. The worker sends it.")
 
 # =================================================================== YEAR-END TAX DECLARATIONS
 tag("Tax declarations", "An employee chooses a tax regime for the financial year and declares deductions; HR verifies each figure; payroll deducts TDS on the verified ones. "

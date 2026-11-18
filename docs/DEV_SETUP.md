@@ -59,6 +59,7 @@ Development needs only `DATABASE_URL`. Everything else has a development default
 | `BIZ_ENV` | `dev` (default), `test`, `staging`, `production`; anything else counts as production |
 | `JWT_SECRET`, `BIZ_FIELD_KEY` | Token signing, and the Fernet key for encrypted columns. Required in production |
 | `BIZ_OTP_PROVIDER`, `BIZ_IDP_PROVIDER` | Sign-in providers; `sandbox` by default (dev code `000000`, identity code `sandbox:<email>`) |
+| `BIZ_MAIL_PROVIDER`, `BIZ_WEB_URL` | Outgoing email (invitations to employees); `sandbox` by default, which delivers nothing. `BIZ_WEB_URL` is the address the invitation tells people to sign in at (default `http://localhost:3000`) |
 | `BIZ_ADAPTERS` | Portal adapters, e.g. `gsp=acme,irp=acme` |
 | `BIZ_COMPANY_PROFILES` | Path to a JSON file describing your own company, so onboarding can find it (development only; see below) |
 | `BIZ_ALERT_WEBHOOK` | Where the audit-chain check posts a failure |

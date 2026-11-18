@@ -9755,6 +9755,812 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
       x-permission: hr:write
+  /self/{employeeId}/contact:
+    get:
+      tags:
+      - Employee self-service
+      operationId: getMyContact
+      summary: My address and emergency contact
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+    put:
+      tags:
+      - Employee self-service
+      operationId: saveMyContact
+      summary: Save my address and emergency contact
+      description: Mine to keep, so it takes effect at once. The address is all of line 1, city, state and PIN or none; the
+        emergency contact is all of name, relation and mobile or none. A part left empty is cleared.
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Contact'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /entities/{entityId}/employees/{id}/contact:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: getEmployeeContact
+      summary: A person's address and emergency contact
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:read
+    put:
+      tags:
+      - Payroll & HR
+      operationId: correctEmployeeContact
+      summary: Correct a person's address or emergency contact
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Contact'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:write
+  /self/{employeeId}/proofs:
+    get:
+      tags:
+      - Employee self-service
+      operationId: listMyProofs
+      summary: The files I have uploaded and what HR decided about each
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProofList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+    post:
+      tags:
+      - Employee self-service
+      operationId: uploadMyProof
+      summary: Upload a proof for HR to accept
+      description: '`unsupported_file` (422) for anything but a PDF, JPEG or PNG; 400 when empty or over 5 MB; `proofs_limit`
+        (409) at 30 files.'
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProofUpload'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proof'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /self/{employeeId}/proofs/{id}:
+    delete:
+      tags:
+      - Employee self-service
+      operationId: removeMyProof
+      summary: Take back a file nobody has decided on
+      description: 'An accepted or refused file stays (409): HR''s decision is part of the record.'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProofList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /self/{employeeId}/proofs/{id}/file:
+    get:
+      tags:
+      - Employee self-service
+      operationId: getMyProofFile
+      summary: One of my uploaded files
+      description: The file itself, with its own content type.
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      - name: download
+        in: query
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /entities/{entityId}/employees/{id}/proofs:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: listEmployeeProofs
+      summary: The files a person has uploaded
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProofList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:read
+  /entities/{entityId}/employees/{id}/proofs/{proofId}/file:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: getEmployeeProofFile
+      summary: Open one of a person's files
+      description: The file itself. Opening it is written to the audit log.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: proofId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: download
+        in: query
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:read
+  /entities/{entityId}/employees/{id}/proofs/{proofId}/accept:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: acceptEmployeeProof
+      summary: Accept an uploaded file
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: proofId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProofAccept'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proof'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
+  /entities/{entityId}/employees/{id}/proofs/{proofId}/reject:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: rejectEmployeeProof
+      summary: Refuse an uploaded file, with the reason the person will see
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      - name: proofId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProofReject'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proof'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
+  /self/{employeeId}/tasks:
+    get:
+      tags:
+      - Employee self-service
+      operationId: listMyTasks
+      summary: What HR has asked me to do
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyTasks'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /self/{employeeId}/tasks/{id}:
+    put:
+      tags:
+      - Employee self-service
+      operationId: setMyTask
+      summary: Mark a task done, or open it again
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MyTaskDone'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyTasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /entities/{entityId}/employee-tasks:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: listEmployeeTasks
+      summary: Tasks handed to people
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - open
+          - done
+          - cancelled
+      - name: employee_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeTaskList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:read
+    post:
+      tags:
+      - Payroll & HR
+      operationId: createEmployeeTask
+      summary: Ask a person to do something
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeTaskIn'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeTask'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
+  /entities/{entityId}/employee-tasks/{id}/cancel:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: cancelEmployeeTask
+      summary: Withdraw a task that is still open
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeTask'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
+  /entities/{entityId}/employees/{id}/manager:
+    put:
+      tags:
+      - Payroll & HR
+      operationId: setEmployeeManager
+      summary: Name the person this one reports to
+      description: The manager decides their team's leave from their own page. `manager_cycle` (409) when the line of managers
+        would loop.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagerIn'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagerSet'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:write
+  /self/{employeeId}/team:
+    get:
+      tags:
+      - Employee self-service
+      operationId: getMyTeam
+      summary: Who I report to, who reports to me and their leave
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyTeam'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /self/{employeeId}/team/leave/{id}/approve:
+    post:
+      tags:
+      - Employee self-service
+      operationId: approveTeamLeave
+      summary: Approve leave of someone who reports to me
+      description: '`leave_unpaid_is_hr` (409) for leave with unpaid days: it changes pay, which HR decides. Someone else''s
+        report, or my own request: 404.'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamDecision'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyTeam'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /self/{employeeId}/team/leave/{id}/reject:
+    post:
+      tags:
+      - Employee self-service
+      operationId: rejectTeamLeave
+      summary: Refuse leave of someone who reports to me
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamDecision'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyTeam'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /entities/{entityId}/employees/{id}/self-service/invitation:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: resendEmployeeInvitation
+      summary: Send the invitation email again
+      description: Only for a person who has not accepted. `invitation_recent` (409) within ten minutes of the last one. The
+        worker sends it.
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '202':
+          description: Accepted — follow the job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          headers:
+            Location:
+              schema:
+                type: string
+              description: /jobs/{jobId}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
   /self/{employeeId}/tax-declaration:
     get:
       tags:
@@ -17272,19 +18078,54 @@ components:
     Contact:
       type: object
       properties:
-        name:
-          type: string
-        email:
-          type: string
-          format: email
-        mobile_e164:
-          type: string
-        whatsapp_opt_in:
-          type: boolean
-        is_billing_contact:
-          type: boolean
-      required:
-      - name
+        address_line1:
+          oneOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+        address_line2:
+          oneOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+        city:
+          oneOf:
+          - type: string
+            maxLength: 60
+          - type: 'null'
+        state_code:
+          oneOf:
+          - type: string
+            pattern: ^[0-9]{2}$
+            description: GST state code
+          - type: 'null'
+        pincode:
+          oneOf:
+          - type: string
+            pattern: ^[1-9][0-9]{5}$
+          - type: 'null'
+        emergency_name:
+          oneOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+        emergency_relation:
+          oneOf:
+          - type: string
+            maxLength: 40
+          - type: 'null'
+        emergency_mobile:
+          oneOf:
+          - type: string
+            pattern: ^\+[1-9][0-9]{7,14}$
+            description: With the country code
+          - type: 'null'
+        updated_at:
+          oneOf:
+          - type: string
+            format: date-time
+            readOnly: true
+          - type: 'null'
     Party:
       type: object
       properties:
@@ -21306,6 +22147,15 @@ components:
           - 'off'
           - invited
           - active
+        manager_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        manager_name:
+          oneOf:
+          - type: string
+          - type: 'null'
     HrPeople:
       type: object
       properties:
@@ -21409,6 +22259,12 @@ components:
           - type: string
             readOnly: true
             description: Set when a month the leave touches already has an approved payroll
+          - type: 'null'
+        decided_by_manager:
+          oneOf:
+          - type: string
+            readOnly: true
+            description: The manager who decided it, when HR did not
           - type: 'null'
       required:
       - employee_id
@@ -22376,6 +23232,373 @@ components:
           maxLength: 300
       required:
       - note
+    Proof:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        kind:
+          type: string
+          enum:
+          - identity
+          - address
+          - education
+          - bank
+          - tax
+          - other
+        label:
+          type: string
+          maxLength: 80
+        file_name:
+          type: string
+        mime_type:
+          type: string
+          readOnly: true
+        size_bytes:
+          type: integer
+          readOnly: true
+        status:
+          type: string
+          enum:
+          - pending
+          - accepted
+          - rejected
+          readOnly: true
+        uploaded_at:
+          type: string
+          format: date-time
+          readOnly: true
+        decided_at:
+          oneOf:
+          - type: string
+            format: date-time
+            readOnly: true
+          - type: 'null'
+        hr_note:
+          oneOf:
+          - type: string
+            readOnly: true
+          - type: 'null'
+    ProofList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Proof'
+    ProofUpload:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - identity
+          - address
+          - education
+          - bank
+          - tax
+          - other
+        label:
+          type: string
+          maxLength: 80
+          description: What it is, like 'Aadhaar card'
+        file_name:
+          type: string
+          maxLength: 200
+        content_base64:
+          type: string
+          description: The file, base64-encoded. A PDF, JPEG or PNG of up to 5 MB; the type is read from the bytes
+      required:
+      - kind
+      - label
+      - file_name
+      - content_base64
+    ProofAccept:
+      type: object
+      properties:
+        note:
+          oneOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+    ProofReject:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 300
+      required:
+      - note
+    EmployeeTask:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          maxLength: 120
+        detail:
+          oneOf:
+          - type: string
+            maxLength: 600
+          - type: 'null'
+        due_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - open
+          - done
+          - cancelled
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        done_at:
+          oneOf:
+          - type: string
+            format: date-time
+            readOnly: true
+          - type: 'null'
+        employee_id:
+          type: string
+          format: uuid
+        employee_name:
+          type: string
+          readOnly: true
+        employee_code:
+          type: string
+          readOnly: true
+      required:
+      - title
+    MyTask:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        detail:
+          oneOf:
+          - type: string
+          - type: 'null'
+        due_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - open
+          - done
+        created_at:
+          type: string
+          format: date-time
+        done_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+    MyTasks:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyTask'
+        open:
+          type: integer
+    MyTaskDone:
+      type: object
+      properties:
+        done:
+          type: boolean
+      required:
+      - done
+    EmployeeTaskList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeTask'
+    EmployeeTaskIn:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 120
+        detail:
+          oneOf:
+          - type: string
+            maxLength: 600
+          - type: 'null'
+        due_on:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+      required:
+      - employee_id
+      - title
+    ManagerIn:
+      type: object
+      properties:
+        manager_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+    ManagerSet:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        manager_id:
+          oneOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        manager_name:
+          oneOf:
+          - type: string
+          - type: 'null'
+    TeamLeave:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        employee_id:
+          type: string
+          format: uuid
+        employee_name:
+          type: string
+        leave_type:
+          type: string
+        leave_type_name:
+          type: string
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        days:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+        lop_days:
+          type: string
+          description: 'Leave days as text, in half days: 2, 0.5, 7.5'
+          examples:
+          - '2'
+        half_day:
+          type: boolean
+        reason:
+          oneOf:
+          - type: string
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          - cancelled
+        requested_at:
+          type: string
+          format: date-time
+        decided_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        decision_note:
+          oneOf:
+          - type: string
+          - type: 'null'
+        decided_by_me:
+          type: boolean
+        mine_to_approve:
+          type: boolean
+          description: 'Pending and with no unpaid days: unpaid days are decided by HR'
+    MyManager:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        designation:
+          oneOf:
+          - type: string
+          - type: 'null'
+    MyReport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        employee_code:
+          type: string
+        full_name:
+          type: string
+        designation:
+          oneOf:
+          - type: string
+          - type: 'null'
+    MyTeam:
+      type: object
+      properties:
+        manager:
+          oneOf:
+          - $ref: '#/components/schemas/MyManager'
+          - type: 'null'
+        reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyReport'
+        leave:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamLeave'
+        pending:
+          type: integer
+    TeamDecision:
+      type: object
+      properties:
+        note:
+          oneOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+    InvitationQueued:
+      type: object
+      properties:
+        employee_id:
+          type: string
+          format: uuid
+        queued:
+          type: boolean
+        email:
+          type: string
     TaxSection:
       type: object
       properties:

@@ -82,6 +82,9 @@ CONSTRAINT_CODES = {
     "stock_not_negative": (409, "insufficient_stock", "Not enough stock"),
     "audit_engagement_read_only": (400, "audit_read_only", "An audit engagement can only read and raise queries, and needs an end date"),
     "leave_within_employment": (400, "validation_failed", "The leave falls outside your time with the company"),
+    "leave_already_decided": (409, "conflict", "This request has already been decided"),
+    "leave_unpaid_is_hr": (409, "leave_unpaid_is_hr", "Leave with unpaid days is decided by HR"),
+    "proofs_limit": (409, "proofs_limit", "Too many files; ask HR to clear old ones"),
     "engagement_independence": (409, "independence_conflict", "The same practitioner cannot audit the company and keep its books"),
 }
 

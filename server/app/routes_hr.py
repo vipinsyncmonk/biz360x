@@ -17,7 +17,7 @@ from typing import Literal
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel, Field
 
-from . import hr, hrdb, payroll as pr, secretbox
+from . import hr, hrdb, mailer, payroll as pr, secretbox
 from .core import ApiError, Auth, Principal, allowed, audit, emit, money, require, tx
 from .routes_orders import js, offset_of, page
 from .routes_payroll import BankDetails, _month_end, _run_for_update, load_employee, structure_out
@@ -320,13 +320,25 @@ def hr_people(entity_id: uuid.UUID, p: Principal = Auth, status: Literal["onboar
     with tx(p.user_id) as cur:
         require(cur, entity_id, "hr:read")
         cur.execute("""SELECT id, employee_code, full_name, designation, department, date_of_joining, date_of_leaving, status, pan IS NOT NULL AS has_pan,
-                              bank_account_enc IS NOT NULL AS has_bank_account, email,
+                              bank_account_enc IS NOT NULL AS has_bank_account, email, manager_id,
+                              (SELECT m.full_name FROM employees m WHERE m.id = employees.manager_id) AS manager_name,
                               CASE WHEN user_id IS NOT NULL THEN 'active' WHEN self_invited_at IS NOT NULL THEN 'invited' ELSE 'off' END AS self_service
                          FROM employees WHERE entity_id = %s AND (%s::text IS NULL OR status = %s) ORDER BY employee_code""", (entity_id, status, status))
         return {"data": js(cur.fetchall())}
 
 
 # ================================================================== the employee's own sign-in
+def queue_invitation(cur, entity_id, e: dict, user_id) -> None:
+    """Queue the invitation email (a notification and a `mail.send` job for the worker). The email holds no secret: they sign in with a code sent to it."""
+    cur.execute("SELECT legal_name FROM entities WHERE id = %s", (entity_id,))
+    subject, body = mailer.invitation(cur.fetchone()["legal_name"], e["full_name"], e["email"])
+    cur.execute("""INSERT INTO notifications (user_id, entity_id, event_type, channel, subject, subject_id, payload)
+                   VALUES (%s, %s, 'employee_invitation', 'email', %s, %s, %s) RETURNING id""",
+                (user_id, entity_id, subject, e["id"], json.dumps({"to": e["email"], "subject": subject, "body": body})))
+    cur.execute("INSERT INTO jobs (entity_id, kind, subject, subject_id, payload, created_by) VALUES (%s, 'mail.send', 'employees', %s, %s, app.current_user_id())",
+                (entity_id, e["id"], json.dumps({"notification_id": cur.fetchone()["id"]})))
+
+
 def _self_service(entity_id, employee_id, p: Principal, on: bool):
     with tx(p.user_id) as cur:
         require(cur, entity_id, "hr:write")
@@ -338,7 +350,8 @@ def _self_service(entity_id, employee_id, p: Principal, on: bool):
             if not e["email"]:
                 raise ApiError(409, "employee_email_missing", "Add the person's email first", "They sign in with the email on their record, so the record needs one.")
             if before == "off":
-                cur.execute("SELECT app.invite_employee(%s)", (employee_id,))             # also makes the account they will sign in with, if there is none
+                cur.execute("SELECT app.invite_employee(%s) AS user_id", (employee_id,))  # also makes the account they will sign in with, if there is none
+                queue_invitation(cur, entity_id, e, cur.fetchone()["user_id"])            # and emails them, through the worker
                 hrdb.ensure_leave_types(cur, entity_id)                                   # so their leave page has the starter types even if HR never opened Leave
         elif before != "off":
             cur.execute("UPDATE employees SET user_id = NULL, self_invited_at = NULL, self_invited_by = NULL, self_accepted_at = NULL WHERE id = %s", (employee_id,))
@@ -352,7 +365,7 @@ def _self_service(entity_id, employee_id, p: Principal, on: bool):
 @router.post(E + "/employees/{employee_id}/self-service", tags=["Payroll & HR"])
 def open_self_service(entity_id: uuid.UUID, employee_id: uuid.UUID, p: Principal = Auth):
     """Let a person sign in to see their own payslips, leave and policies. They sign in with the email on their record and accept;
-    until then the record is `invited`. Nothing is emailed yet. Doing it twice changes nothing."""
+    until then the record is `invited`. The invitation is emailed by the worker (resend it with POST …/self-service/invitation). Doing it twice changes nothing."""
     return _self_service(entity_id, employee_id, p, True)
 
 
@@ -423,7 +436,8 @@ class AdjustmentIn(BaseModel):
 
 
 LEAVE_SQL = """SELECT r.id, r.employee_id, e.full_name AS employee_name, e.employee_code, t.code AS leave_type, t.name AS leave_type_name, lower(r.dates) AS d_from,
-                      upper(r.dates) - 1 AS d_to, r.days, r.lop_days, r.half_day, r.reason, r.status, r.requested_at, r.decided_at, r.decision_note
+                      upper(r.dates) - 1 AS d_to, r.days, r.lop_days, r.half_day, r.reason, r.status, r.requested_at, r.decided_at, r.decision_note,
+                      (SELECT m.full_name FROM employees m WHERE m.id = r.decided_by_manager) AS decided_by_manager
                  FROM leave_requests r JOIN employees e ON e.id = r.employee_id JOIN leave_types t ON t.id = r.leave_type_id"""
 
 
@@ -431,7 +445,8 @@ def _leave_out(r: dict) -> dict:
     return {"id": str(r["id"]), "employee_id": str(r["employee_id"]), "employee_name": r["employee_name"], "employee_code": r["employee_code"], "leave_type": r["leave_type"],
             "leave_type_name": r["leave_type_name"], "from": r["d_from"].isoformat(), "to": r["d_to"].isoformat(), "days": d1(r["days"]), "lop_days": d1(r["lop_days"]),
             "half_day": r["half_day"], "reason": r["reason"], "status": r["status"], "requested_at": r["requested_at"].isoformat(),
-            "decided_at": r["decided_at"].isoformat() if r["decided_at"] else None, "decision_note": r["decision_note"]}
+            "decided_at": r["decided_at"].isoformat() if r["decided_at"] else None, "decision_note": r["decision_note"],
+            "decided_by_manager": r["decided_by_manager"]}
 
 
 def _load_leave(cur, entity_id, rid, *, lock=False) -> dict:

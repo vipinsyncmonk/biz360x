@@ -353,6 +353,7 @@ export function SelfServicePanel({ entityId }: { entityId: string }) {
   const people = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/hr/people", { params: { path: { entityId } } })).data as unknown as HrPerson[], entityId);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const rows = (people.data ?? []).filter((p) => p.status !== "exited" || p.self_service !== "off");
 
   async function change(p: HrPerson, open: boolean) {
@@ -365,13 +366,19 @@ export function SelfServicePanel({ entityId }: { entityId: string }) {
     } catch (e) { setError(e); } finally { setBusy(null); }
   }
 
+  async function resend(p: HrPerson) {
+    setBusy(p.id); setError(null); setSentTo(null);
+    try { unwrap(await api.POST("/entities/{entityId}/employees/{id}/self-service/invitation", { params: { path: { entityId, id: p.id } } })); setSentTo(p.full_name); }
+    catch (e) { setError(e); } finally { setBusy(null); }
+  }
+
   return (
     <section className="card" style={{ overflow: "hidden" }} aria-label="Employees' own sign-in">
       <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--line-2)" }}>
         <h2 style={{ margin: 0 }}>Employees&apos; own sign-in</h2>
-        <span className="t13">A person you open this for signs in with the email on their record and sees only their own payslips, leave, policies and joining checklist. They are not a member of the company and see nothing else. Nothing is emailed yet, so tell them to sign in.</span>
+        <span className="t13">A person you open this for signs in with the email on their record and sees only their own payslips, leave, policies and joining checklist. They are not a member of the company and see nothing else. Opening it emails them an invitation.</span>
       </div>
-      <div style={{ padding: "0 20px" }}><ErrorNote error={people.error ?? error} /></div>
+      <div style={{ padding: "0 20px" }}><ErrorNote error={people.error ?? error} />{sentTo && <div role="status" className="t13">Invitation to {sentTo} is on its way.</div>}</div>
       {people.loading && !people.data ? <Loading what="people" /> : rows.length === 0 ? <div className="empty">No employees yet.</div> : rows.map((p) => {
         const a = selfServiceAction(p);
         return (
@@ -379,8 +386,9 @@ export function SelfServicePanel({ entityId }: { entityId: string }) {
             <span style={{ fontWeight: 600 }}>{p.full_name}<span className="t13 mono" style={{ display: "block", fontWeight: 400 }}>{p.employee_code}{p.email ? ` · ${p.email}` : ""}</span></span>
             <span><Pill tone={p.self_service === "active" ? "ok" : p.self_service === "invited" ? "wait" : "prep"}>{SELF_SERVICE[p.self_service].label}</Pill>
               <span className="t13" style={{ display: "block" }}>{SELF_SERVICE[p.self_service].hint}</span></span>
-            <span>{"blocked" in a ? <span className="t13">{a.blocked}</span>
-              : <button type="button" className={a.open ? "btn primary" : "btn"} disabled={busy === p.id} aria-label={`${a.label} for ${p.full_name}`} onClick={() => void change(p, a.open)}>{a.label}</button>}</span>
+            <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{"blocked" in a ? <span className="t13">{a.blocked}</span>
+              : <button type="button" className={a.open ? "btn primary" : "btn"} disabled={busy === p.id} aria-label={`${a.label} for ${p.full_name}`} onClick={() => void change(p, a.open)}>{a.label}</button>}
+              {p.self_service === "invited" && <button type="button" className="btn" disabled={busy === p.id} aria-label={`Send the invitation again to ${p.full_name}`} onClick={() => void resend(p)}>Send again</button>}</span>
           </div>
         );
       })}

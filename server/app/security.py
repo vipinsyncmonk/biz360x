@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from . import adapters, auth
+from . import adapters, auth, mailer
 from .core import ENV, JWT_SECRET, is_production
 
 DEFAULT_JWT_SECRET = "dev-only-secret-change-me-in-every-environment"
@@ -26,6 +26,8 @@ def problems() -> list[str]:
         out.append("BIZ_FIELD_KEY must be set (a Fernet key from the secret manager)")
     if auth.otp_provider_name() == "sandbox":
         out.append("BIZ_OTP_PROVIDER is 'sandbox': the development code 000000 would be accepted. Choose a real provider")
+    if mailer.provider_name() == "sandbox":
+        out.append("BIZ_MAIL_PROVIDER is 'sandbox': invitations and reminders would be queued and never delivered. Choose a real provider")
     try:
         sandboxes = [f for f, n in adapters.status().items() if n.startswith("Sandbox")]
     except RuntimeError as e:                    # the adapter registry already refuses a sandbox here

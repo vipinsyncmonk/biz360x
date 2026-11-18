@@ -3898,6 +3898,340 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/self/{employeeId}/contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My address and emergency contact */
+        get: operations["getMyContact"];
+        /**
+         * Save my address and emergency contact
+         * @description Mine to keep, so it takes effect at once. The address is all of line 1, city, state and PIN or none; the emergency contact is all of name, relation and mobile or none. A part left empty is cleared.
+         */
+        put: operations["saveMyContact"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A person's address and emergency contact */
+        get: operations["getEmployeeContact"];
+        /** Correct a person's address or emergency contact */
+        put: operations["correctEmployeeContact"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/self/{employeeId}/proofs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The files I have uploaded and what HR decided about each */
+        get: operations["listMyProofs"];
+        put?: never;
+        /**
+         * Upload a proof for HR to accept
+         * @description `unsupported_file` (422) for anything but a PDF, JPEG or PNG; 400 when empty or over 5 MB; `proofs_limit` (409) at 30 files.
+         */
+        post: operations["uploadMyProof"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/self/{employeeId}/proofs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Take back a file nobody has decided on
+         * @description An accepted or refused file stays (409): HR's decision is part of the record.
+         */
+        delete: operations["removeMyProof"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/self/{employeeId}/proofs/{id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One of my uploaded files
+         * @description The file itself, with its own content type.
+         */
+        get: operations["getMyProofFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/proofs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The files a person has uploaded */
+        get: operations["listEmployeeProofs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/proofs/{proofId}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open one of a person's files
+         * @description The file itself. Opening it is written to the audit log.
+         */
+        get: operations["getEmployeeProofFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/proofs/{proofId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept an uploaded file */
+        post: operations["acceptEmployeeProof"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/proofs/{proofId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refuse an uploaded file, with the reason the person will see */
+        post: operations["rejectEmployeeProof"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/self/{employeeId}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What HR has asked me to do */
+        get: operations["listMyTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/self/{employeeId}/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark a task done, or open it again */
+        put: operations["setMyTask"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employee-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tasks handed to people */
+        get: operations["listEmployeeTasks"];
+        put?: never;
+        /** Ask a person to do something */
+        post: operations["createEmployeeTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employee-tasks/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Withdraw a task that is still open */
+        post: operations["cancelEmployeeTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/manager": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Name the person this one reports to
+         * @description The manager decides their team's leave from their own page. `manager_cycle` (409) when the line of managers would loop.
+         */
+        put: operations["setEmployeeManager"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/self/{employeeId}/team": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who I report to, who reports to me and their leave */
+        get: operations["getMyTeam"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/self/{employeeId}/team/leave/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve leave of someone who reports to me
+         * @description `leave_unpaid_is_hr` (409) for leave with unpaid days: it changes pay, which HR decides. Someone else's report, or my own request: 404.
+         */
+        post: operations["approveTeamLeave"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/self/{employeeId}/team/leave/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refuse leave of someone who reports to me */
+        post: operations["rejectTeamLeave"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entityId}/employees/{id}/self-service/invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send the invitation email again
+         * @description Only for a person who has not accepted. `invitation_recent` (409) within ten minutes of the last one. The worker sends it.
+         */
+        post: operations["resendEmployeeInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/self/{employeeId}/tax-declaration": {
         parameters: {
             query?: never;
@@ -6903,12 +7237,15 @@ export interface components {
             country: string;
         };
         Contact: {
-            name: string;
-            /** Format: email */
-            email?: string;
-            mobile_e164?: string;
-            whatsapp_opt_in?: boolean;
-            is_billing_contact?: boolean;
+            address_line1?: string | null;
+            address_line2?: string | null;
+            city?: string | null;
+            state_code?: string | null;
+            pincode?: string | null;
+            emergency_name?: string | null;
+            emergency_relation?: string | null;
+            emergency_mobile?: string | null;
+            updated_at?: string | null;
         };
         Party: {
             /** Format: uuid */
@@ -8406,6 +8743,8 @@ export interface components {
             email?: string | null;
             /** @enum {string} */
             self_service?: "off" | "invited" | "active";
+            manager_id?: string | null;
+            manager_name?: string | null;
         };
         HrPeople: {
             data?: components["schemas"]["HrPerson"][];
@@ -8453,6 +8792,7 @@ export interface components {
             decided_at?: string | null;
             decision_note?: string | null;
             payroll_note?: string | null;
+            decided_by_manager?: string | null;
         };
         LeaveRequestPage: {
             data: components["schemas"]["LeaveRequest"][];
@@ -8883,6 +9223,156 @@ export interface components {
         };
         DetailReject: {
             note: string;
+        };
+        Proof: {
+            /** Format: uuid */
+            readonly id?: string;
+            /** @enum {string} */
+            kind?: "identity" | "address" | "education" | "bank" | "tax" | "other";
+            label?: string;
+            file_name?: string;
+            readonly mime_type?: string;
+            readonly size_bytes?: number;
+            /** @enum {string} */
+            readonly status?: "pending" | "accepted" | "rejected";
+            /** Format: date-time */
+            readonly uploaded_at?: string;
+            decided_at?: string | null;
+            hr_note?: string | null;
+        };
+        ProofList: {
+            data?: components["schemas"]["Proof"][];
+        };
+        ProofUpload: {
+            /** @enum {string} */
+            kind: "identity" | "address" | "education" | "bank" | "tax" | "other";
+            /** @description What it is, like 'Aadhaar card' */
+            label: string;
+            file_name: string;
+            /** @description The file, base64-encoded. A PDF, JPEG or PNG of up to 5 MB; the type is read from the bytes */
+            content_base64: string;
+        };
+        ProofAccept: {
+            note?: string | null;
+        };
+        ProofReject: {
+            note: string;
+        };
+        EmployeeTask: {
+            /** Format: uuid */
+            readonly id?: string;
+            title: string;
+            detail?: string | null;
+            due_on?: string | null;
+            /** @enum {string} */
+            readonly status?: "open" | "done" | "cancelled";
+            /** Format: date-time */
+            readonly created_at?: string;
+            done_at?: string | null;
+            /** Format: uuid */
+            employee_id?: string;
+            readonly employee_name?: string;
+            readonly employee_code?: string;
+        };
+        MyTask: {
+            /** Format: uuid */
+            id?: string;
+            title?: string;
+            detail?: string | null;
+            due_on?: string | null;
+            /** @enum {string} */
+            status?: "open" | "done";
+            /** Format: date-time */
+            created_at?: string;
+            done_at?: string | null;
+        };
+        MyTasks: {
+            data?: components["schemas"]["MyTask"][];
+            open?: number;
+        };
+        MyTaskDone: {
+            done: boolean;
+        };
+        EmployeeTaskList: {
+            data?: components["schemas"]["EmployeeTask"][];
+        };
+        EmployeeTaskIn: {
+            /** Format: uuid */
+            employee_id: string;
+            title: string;
+            detail?: string | null;
+            due_on?: string | null;
+        };
+        ManagerIn: {
+            manager_id?: string | null;
+        };
+        ManagerSet: {
+            /** Format: uuid */
+            employee_id?: string;
+            manager_id?: string | null;
+            manager_name?: string | null;
+        };
+        TeamLeave: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            employee_id?: string;
+            employee_name?: string;
+            leave_type?: string;
+            leave_type_name?: string;
+            /** Format: date */
+            from?: string;
+            /** Format: date */
+            to?: string;
+            /**
+             * @description Leave days as text, in half days: 2, 0.5, 7.5
+             * @example 2
+             */
+            days?: string;
+            /**
+             * @description Leave days as text, in half days: 2, 0.5, 7.5
+             * @example 2
+             */
+            lop_days?: string;
+            half_day?: boolean;
+            reason?: string | null;
+            /** @enum {string} */
+            status?: "pending" | "approved" | "rejected" | "cancelled";
+            /** Format: date-time */
+            requested_at?: string;
+            decided_at?: string | null;
+            decision_note?: string | null;
+            decided_by_me?: boolean;
+            /** @description Pending and with no unpaid days: unpaid days are decided by HR */
+            mine_to_approve?: boolean;
+        };
+        MyManager: {
+            /** Format: uuid */
+            id?: string;
+            full_name?: string;
+            designation?: string | null;
+        };
+        MyReport: {
+            /** Format: uuid */
+            id?: string;
+            employee_code?: string;
+            full_name?: string;
+            designation?: string | null;
+        };
+        MyTeam: {
+            manager?: components["schemas"]["MyManager"] | null;
+            reports?: components["schemas"]["MyReport"][];
+            leave?: components["schemas"]["TeamLeave"][];
+            pending?: number;
+        };
+        TeamDecision: {
+            note?: string | null;
+        };
+        InvitationQueued: {
+            /** Format: uuid */
+            employee_id?: string;
+            queued?: boolean;
+            email?: string;
         };
         TaxSection: {
             code?: string;
@@ -19441,6 +19931,707 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DetailRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getMyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    saveMyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Contact"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getEmployeeContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    correctEmployeeContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Contact"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listMyProofs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProofList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    uploadMyProof: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProofUpload"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proof"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    removeMyProof: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProofList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getMyProofFile: {
+        parameters: {
+            query?: {
+                download?: boolean;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listEmployeeProofs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProofList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getEmployeeProofFile: {
+        parameters: {
+            query?: {
+                download?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+                proofId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    acceptEmployeeProof: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+                proofId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProofAccept"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proof"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    rejectEmployeeProof: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+                proofId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProofReject"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proof"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listMyTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyTasks"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    setMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MyTaskDone"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyTasks"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listEmployeeTasks: {
+        parameters: {
+            query?: {
+                status?: "open" | "done" | "cancelled";
+                employee_id?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeTaskList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    createEmployeeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmployeeTaskIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeTask"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    cancelEmployeeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeTask"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    setEmployeeManager: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagerIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagerSet"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getMyTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyTeam"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    approveTeamLeave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamDecision"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyTeam"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    rejectTeamLeave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                /** @description The caller's own employee record at one company, from `/me/employments` */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamDecision"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyTeam"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    resendEmployeeInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Legal entity the call acts on */
+                entityId: components["parameters"]["EntityId"];
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted — follow the job */
+            202: {
+                headers: {
+                    /** @description /jobs/{jobId} */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
                 };
             };
             400: components["responses"]["BadRequest"];
