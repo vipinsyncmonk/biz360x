@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signInQuietly, watch } from "./helpers";
+import { apiGet, apiPost, apiToken, signInQuietly, watch } from "./helpers";
 
 // A maker can prepare books entries. Signs in without a code (see signInQuietly): the demo people's hourly codes are used up by other files.
 const MAKER = "priya@example.in";
@@ -71,6 +71,37 @@ test.describe.serial("fixed assets", () => {
     await page.getByRole("tab", { name: "Sold or written off" }).click();
     await expect(page.getByText("Dell laptop")).toBeVisible();
     await expect(page.getByText(/Received ₹90,000/)).toBeVisible();
+    expect(problems()).toEqual([]);
+  });
+
+  test("an asset can be registered from a line of a booked purchase bill, and the line is used up", async () => {
+    const token = await apiToken(page, MAKER);
+    const eid = (await apiGet<{ entities: Array<{ id: string }> }>(page, token, "/me")).entities[0]!.id;
+    const existing = (await apiGet<{ data: Array<{ party_id: string; registration_id: string }> }>(page, token, `/entities/${eid}/purchase-bills?limit=5`)).data[0]!;
+    const bill = await apiPost<{ id: string }>(page, token, `/entities/${eid}/purchase-bills`, {
+      party_id: existing.party_id, registration_id: existing.registration_id, bill_no: "E2E/DESK/1", bill_date: daysAgo(20), accepted_on: daysAgo(20), itc_eligibility: "ineligible",   // GST is not claimed, so it is part of the cost
+      lines: [{ description: "Standing desk", hsn_sac: "9403", qty: "1", rate: "40000.00", gst_rate: 18 }],
+    });
+    await apiPost(page, token, `/entities/${eid}/purchase-bills/${bill.id}/book`);
+
+    await page.goto("/assets");
+    await page.getByRole("button", { name: "+ Asset" }).click();
+    await page.getByLabel("Fill in from").selectOption("bill");
+    const option = page.getByLabel("Purchase bill").locator("option", { hasText: "E2E/DESK/1" });
+    await expect(option).toHaveCount(1);
+    await page.getByLabel("Purchase bill").selectOption((await option.getAttribute("value"))!);
+    await page.getByLabel("Line", { exact: true }).selectOption({ index: 1 });
+    await expect(page.getByLabel("Asset", { exact: true })).toHaveValue("Standing desk");
+    await expect(page.getByLabel(/^Cost/)).toHaveValue("47200.00");                      // 40,000 and the 18% GST that is not claimed
+    await expect(page.getByLabel("Acquired on")).toHaveValue(daysAgo(20));
+    await page.getByLabel("Category").selectOption("furniture");
+    await page.getByRole("button", { name: "Register asset" }).click();
+    await expect(page.getByText(/· from a purchase bill/)).toBeVisible();
+    await expect(page.getByLabel("Key numbers")).toContainText("₹47,200");
+
+    await page.getByRole("button", { name: "+ Asset" }).click();                                  // nothing is left on that line: the bill is no longer offered
+    await page.getByLabel("Fill in from").selectOption("bill");
+    await expect(page.getByLabel("Purchase bill").locator("option", { hasText: "E2E/DESK/1" })).toHaveCount(0);
     expect(problems()).toEqual([]);
   });
 

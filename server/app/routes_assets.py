@@ -23,7 +23,7 @@ E = "/entities/{entity_id}"
 Category = Literal["building", "plant_machinery", "furniture", "office_equipment", "computers", "servers_networks", "vehicles", "electrical", "software", "other"]
 ZERO = Decimal(0)
 
-ASSET_SQL = """SELECT a.id, a.asset_no, a.name, a.category, a.location, a.serial_no, a.party_id, a.purchase_bill_id, a.bill_of_entry_id, a.document_id,
+ASSET_SQL = """SELECT a.id, a.asset_no, a.name, a.category, a.location, a.serial_no, a.party_id, a.purchase_bill_id, a.purchase_bill_line_no, a.bill_of_entry_id, a.document_id,
                       a.acquired_on, a.put_to_use_on, a.cost, a.residual_value, a.method, a.life_months, a.rate_pct, a.booking, a.opening_accumulated,
                       a.opening_through, a.status, a.disposed_on, a.disposal_proceeds,
                       a.opening_accumulated * (a.booking = 'opening')::int + coalesce((SELECT sum(d.amount) FROM asset_depreciation d WHERE d.asset_id = a.id), 0) AS accumulated_depreciation
@@ -37,6 +37,7 @@ class AssetIn(BaseModel):
     serial_no: str | None = Field(default=None, max_length=60)
     party_id: uuid.UUID | None = None
     purchase_bill_id: uuid.UUID | None = None
+    purchase_bill_line_no: int | None = Field(default=None, ge=1, le=32000)
     bill_of_entry_id: uuid.UUID | None = None
     document_id: uuid.UUID | None = None
     acquired_on: dt.date
@@ -105,6 +106,43 @@ def _check_links(cur, entity_id, b: AssetIn) -> None:
                 raise _bad(field, f"{field} is not one of this company's records")
 
 
+BILL_LINES_SQL = """SELECT b.id AS bill_id, b.bill_no, b.bill_date, b.party_id, p.legal_name AS supplier_name, b.document_id, b.grand_total,
+                           l.line_no, l.description, l.hsn_sac, l.qty, l.expense_account_id, coalesce(ac.type = 'asset', false) AS booked_to_asset_account,
+                           l.taxable_value + CASE WHEN l.itc_eligibility::text = 'eligible' THEN 0 ELSE l.cgst_amount + l.sgst_amount + l.igst_amount END AS capitalisable,
+                           coalesce((SELECT sum(a.cost) FROM fixed_assets a WHERE a.purchase_bill_id = l.bill_id AND a.purchase_bill_line_no = l.line_no), 0) AS already
+                      FROM purchase_bills b JOIN purchase_bill_lines l ON l.bill_id = b.id JOIN parties p ON p.id = b.party_id
+                      LEFT JOIN ledger_accounts ac ON ac.id = l.expense_account_id
+                     WHERE b.entity_id = %s AND b.status NOT IN ('draft', 'cancelled')"""
+
+
+def _bill_lines(cur, entity_id, bill_id, line_no) -> list[dict]:
+    """One bill line with what can be capitalised on it: the taxable value, plus GST that is not claimed as credit."""
+    cur.execute(BILL_LINES_SQL + " AND b.id = %s AND l.line_no = %s", (entity_id, bill_id, line_no))
+    return cur.fetchall()
+
+
+@router.get(E + "/fixed-assets/capitalisable-bills", tags=["Fixed assets"])
+def capitalisable_bills(entity_id: uuid.UUID, q: str | None = None, limit: int = Query(default=100, ge=1, le=200), p: Principal = Auth):
+    """Booked purchase bills with the lines that still have something left to capitalise: the choice behind "register from a bill"."""
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "finance:read")
+        require(cur, entity_id, "purchases:read")
+        like = f"%{q.strip()}%" if q and q.strip() else None
+        cur.execute(BILL_LINES_SQL + " AND (%s::text IS NULL OR b.bill_no ILIKE %s OR p.legal_name ILIKE %s OR l.description ILIKE %s) ORDER BY b.bill_date DESC, b.bill_no, l.line_no",
+                    (entity_id, like, like, like, like))
+        rows = cur.fetchall()
+    bills: dict = {}
+    for r in rows:
+        left = r["capitalisable"] - r["already"]
+        if left <= 0:
+            continue
+        b = bills.setdefault(r["bill_id"], {"bill_id": r["bill_id"], "bill_no": r["bill_no"], "bill_date": r["bill_date"], "party_id": r["party_id"], "supplier_name": r["supplier_name"],
+                                            "document_id": r["document_id"], "grand_total": r["grand_total"], "lines": []})
+        b["lines"].append({"line_no": r["line_no"], "description": r["description"], "hsn_sac": r["hsn_sac"], "qty": r["qty"], "capitalisable": r["capitalisable"],
+                           "already_registered": r["already"], "remaining": left, "booked_to_asset_account": r["booked_to_asset_account"]})
+    return js({"data": list(bills.values())[:limit]})
+
+
 @router.get(E + "/fixed-asset-categories", tags=["Fixed assets"])
 def categories(entity_id: uuid.UUID, p: Principal = Auth):
     """The starter list: label, useful life under Schedule II and the income-tax block rate for reference. Needs a CA's review."""
@@ -166,18 +204,39 @@ def create_asset(entity_id: uuid.UUID, body: AssetIn, p: Principal = Auth, idemp
         elif body.opening_through is not None or body.opening_accumulated is not None:
             raise _bad("opening_through", "Depreciation so far goes only with an opening asset")
         _check_links(cur, entity_id, body)
+        credit_key = "purchases"
+        if body.purchase_bill_line_no is not None and not body.purchase_bill_id:
+            raise _bad("purchase_bill_id", "A bill line needs the bill")
+        if body.purchase_bill_id:
+            if body.purchase_bill_line_no is None:
+                raise _bad("purchase_bill_line_no", "Choose the line of the bill this asset was bought on")
+            cur.execute("SELECT status FROM purchase_bills WHERE id = %s AND entity_id = %s", (body.purchase_bill_id, entity_id))
+            if cur.fetchone()["status"] in ("draft", "cancelled"):
+                raise ApiError(409, "bill_not_booked", "Book the purchase bill before registering an asset from it",
+                               errors=[{"field": "purchase_bill_id", "message": "the bill is a draft or cancelled"}])
+            line = _bill_lines(cur, entity_id, body.purchase_bill_id, body.purchase_bill_line_no)
+            if not line:
+                raise _bad("purchase_bill_line_no", "That bill has no such line")
+            left = line[0]["capitalisable"] - line[0]["already"]
+            if body.cost > left:
+                raise _bad("cost", f"Only {left:.2f} is left on that line to capitalise (cost of the line {line[0]['capitalisable']:.2f}, already registered {line[0]['already']:.2f})")
+            if line[0]["booked_to_asset_account"] and body.booking == "reclassify":
+                raise _bad("booking", "That line was booked straight to an asset account; choose \"Already booked\"")
+            if line[0]["expense_account_id"] and not line[0]["booked_to_asset_account"]:
+                credit_key = f"account:{line[0]['expense_account_id']}"                       # the cost leaves the expense account the line was booked to
+            body = body.model_copy(update={"party_id": body.party_id or line[0]["party_id"], "document_id": body.document_id or line[0]["document_id"]})
         no = next_number(cur, entity_id, "fixed_assets", "asset_no", "FA-", 4)
         jid = None
         if body.booking == "reclassify":
             jid = ledger.post_journal(cur, entity_id, body.acquired_on, "asset", None, f"Capitalised {no} {body.name}",
-                                      [ledger.Line("fixed_assets", debit=body.cost, memo=body.name), ledger.Line("purchases", credit=body.cost, memo=body.name)])
-        cur.execute("""INSERT INTO fixed_assets (entity_id, asset_no, name, category, location, serial_no, party_id, purchase_bill_id, bill_of_entry_id, document_id,
-                                                 acquired_on, put_to_use_on, cost, residual_value, method, life_months, rate_pct, booking, opening_accumulated,
+                                      [ledger.Line("fixed_assets", debit=body.cost, memo=body.name), ledger.Line(credit_key, credit=body.cost, memo=body.name)])
+        cur.execute("""INSERT INTO fixed_assets (entity_id, asset_no, name, category, location, serial_no, party_id, purchase_bill_id, purchase_bill_line_no, bill_of_entry_id,
+                                                 document_id, acquired_on, put_to_use_on, cost, residual_value, method, life_months, rate_pct, booking, opening_accumulated,
                                                  opening_through, acquisition_journal_id, created_by)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,app.current_user_id()) RETURNING id""",
-                    (entity_id, no, body.name.strip(), body.category, body.location, body.serial_no, body.party_id, body.purchase_bill_id, body.bill_of_entry_id,
-                     body.document_id, body.acquired_on, use_on, body.cost, residual, body.method, life, rate, body.booking, body.opening_accumulated or ZERO,
-                     body.opening_through, jid))
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,app.current_user_id()) RETURNING id""",
+                    (entity_id, no, body.name.strip(), body.category, body.location, body.serial_no, body.party_id, body.purchase_bill_id, body.purchase_bill_line_no,
+                     body.bill_of_entry_id, body.document_id, body.acquired_on, use_on, body.cost, residual, body.method, life, rate, body.booking,
+                     body.opening_accumulated or ZERO, body.opening_through, jid))
         aid = cur.fetchone()["id"]
         out = _out(_load(cur, entity_id, aid))
         audit(cur, entity_id, "asset.registered", "fixed_assets", aid, after=out)

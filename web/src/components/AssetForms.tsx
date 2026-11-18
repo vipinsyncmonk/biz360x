@@ -1,25 +1,67 @@
 "use client";
 import { useState } from "react";
 import { api, newIdempotencyKey, unwrap } from "@/lib/api";
-import { Asset, AssetCategory, AssetForm, BOOKING, Preview, assetBody, assetProblem, blankAsset, currentPeriod, disposeProblem, lifeText, monthLabel, moneyText } from "@/lib/assets";
-import { formatInr, isoDate } from "@/lib/format";
+import { Asset, AssetCategory, AssetForm, BOOKING, BoeSource, CapBill, Preview, assetBody, assetProblem, blankAsset, boeDutyForCost, currentPeriod, disposeProblem, fromBillLine, fromBoe, lifeText, monthLabel, moneyText } from "@/lib/assets";
+import { formatInr, isoDate, shortDate } from "@/lib/format";
 import { ErrorNote } from "./ui";
 import { Field, Shell, grid } from "./TradeForms";
 
 const inr = (v: string) => formatInr(v);
 
 /** Register an asset. The category fills in the usual life and residual value; the person can change both. */
-export function AddAsset({ entityId, categories, onDone, onCancel }: { entityId: string; categories: AssetCategory[]; onDone: () => void; onCancel: () => void }) {
+export function AddAsset({ entityId, categories, bills, boes, onDone, onCancel }:
+  { entityId: string; categories: AssetCategory[]; bills: CapBill[]; boes: BoeSource[]; onDone: () => void; onCancel: () => void }) {
   const [f, setF] = useState<AssetForm>(blankAsset);
+  const [source, setSource] = useState<"hand" | "bill" | "boe">("hand");
   const set = (p: Partial<AssetForm>) => setF((x) => ({ ...x, ...p }));
   const today = isoDate(new Date());
   const cat = categories.find((c) => c.category === f.category);
   const problem = assetProblem(f, today);
   const help = BOOKING.find((b) => b[0] === f.booking)![2];
+  const bill = bills.find((b) => b.bill_id === f.billId);
+  const boe = boes.find((b) => b.id === f.boeId);
+  function pickSource(next: typeof source) {
+    setSource(next);
+    set({ billId: "", billLine: "", boeId: "", partyId: "", ...(next === "hand" ? {} : { booking: next === "boe" ? "already_booked" : "reclassify" }) });
+  }
   return (
     <Shell label="Register asset" problem={problem} started={!!f.name || !!f.cost} onCancel={onCancel} onSubmit={async () => {
       unwrap(await api.POST("/entities/{entityId}/fixed-assets", { params: { path: { entityId }, header: { "Idempotency-Key": newIdempotencyKey() } }, body: assetBody(f) as never })); onDone();
     }}>
+      <div style={grid}>
+        <Field id="fa-source" label="Fill in from">
+          <select id="fa-source" className="input" style={{ height: 40 }} value={source} onChange={(e) => pickSource(e.target.value as typeof source)}>
+            <option value="hand">Typed in by hand</option><option value="bill">A purchase bill</option><option value="boe">A bill of entry (import)</option>
+          </select>
+        </Field>
+        {source === "bill" && <>
+          <Field id="fa-bill" label="Purchase bill">
+            <select id="fa-bill" className="input" style={{ height: 40 }} value={f.billId} onChange={(e) => set({ billId: e.target.value, billLine: "" })}>
+              <option value="">Choose a bill…</option>
+              {bills.map((b) => <option key={b.bill_id} value={b.bill_id}>{b.bill_no} · {b.supplier_name} · {shortDate(b.bill_date)} · {formatInr(b.grand_total, { decimals: false })}</option>)}
+            </select>
+          </Field>
+          {bill && (
+            <Field id="fa-line" label="Line">
+              <select id="fa-line" className="input" style={{ height: 40 }} value={f.billLine} onChange={(e) => { const l = bill.lines.find((x) => String(x.line_no) === e.target.value); set(l ? fromBillLine(bill, l) : { billLine: "" }); }}>
+                <option value="">Choose a line…</option>
+                {bill.lines.map((l) => <option key={l.line_no} value={l.line_no}>{l.line_no}. {l.description} · {formatInr(l.remaining, { decimals: false })} left</option>)}
+              </select>
+            </Field>
+          )}
+        </>}
+        {source === "boe" && (
+          <Field id="fa-boe" label="Bill of entry">
+            <select id="fa-boe" className="input" style={{ height: 40 }} value={f.boeId} onChange={(e) => { const x = boes.find((b) => b.id === e.target.value); set(x ? fromBoe(x) : { boeId: "" }); }}>
+              <option value="">Choose a bill of entry…</option>
+              {boes.map((b) => <option key={b.id} value={b.id}>BoE {b.boe_number} · {b.supplier_name ?? "supplier not linked"} · {shortDate(b.boe_date)}</option>)}
+            </select>
+          </Field>
+        )}
+      </div>
+      {source === "bill" && bills.length === 0 && <span className="t13" role="status">No booked purchase bill has anything left to capitalise.</span>}
+      {source === "bill" && bill && f.billLine && <span className="t13" role="status">The cost is what is left on that line (the taxable value, plus GST you do not claim). Lower it to register one unit of several, then register the rest as another asset.</span>}
+      {boe && <span className="t13" role="status">The goods value is filled in. Customs duty of {formatInr(boeDutyForCost(boe), { decimals: false })} (without the IGST that comes back as credit) is also a cost of the asset, but this app does not post duty to the books yet: add it to the cost only if you book it yourself.</span>}
       <div style={grid}>
         <Field id="fa-name" label="Asset"><input id="fa-name" className="input" style={{ height: 40 }} autoComplete="off" value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field>
         <Field id="fa-cat" label="Category">
