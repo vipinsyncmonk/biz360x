@@ -11,7 +11,7 @@ export interface MyEmployee {
   employee_id: string; entity_id: string; legal_name: string; employee_code: string; full_name: string; email: string | null; designation: string | null; department: string | null;
   date_of_joining: string; date_of_leaving: string | null; status: string; pan_last4: string | null; uan: string | null; bank_ifsc: string | null; bank_on_file: boolean; has_salary: boolean;
 }
-export interface MyTask { key: string; title: string; required: boolean; auto: string | null; done: boolean }
+export interface MyTask { key: string; title: string; required: boolean; auto: string | null; done: boolean; by_employee?: boolean }
 export interface MyChecklist { checklist: MyTask[]; open_required: string[]; done: number; total: number; to_acknowledge: number }
 export interface MyRecord { employee: MyEmployee; onboarding: MyChecklist }
 
@@ -50,10 +50,46 @@ export function myToDo(rec: MyRecord): string[] {
   const n = rec.onboarding.to_acknowledge;
   if (n > 0) out.push(`Read and acknowledge ${n} ${n === 1 ? "policy" : "policies"}`);
   if (rec.employee.status === "onboarding") {
-    if (!rec.employee.pan_last4) out.push("Give HR your PAN");
-    if (!rec.employee.bank_on_file) out.push("Give HR your bank account for salary");
+    if (!rec.employee.pan_last4) out.push("Add your PAN under My details");
+    if (!rec.employee.bank_on_file) out.push("Add your bank account for salary under My details");
   }
   return out;
+}
+
+// ------------------------------------------------------------------ my own details: proposed here, confirmed by HR
+export interface MyDetails {
+  status: "none" | "pending" | "confirmed" | "rejected" | "withdrawn";
+  current: { pan_last4: string | null; bank_on_file: boolean; bank_ifsc: string | null; mobile: string | null };
+  request: { id: string; pan_last4: string | null; bank_last4: string | null; bank_ifsc: string | null; mobile: string | null; requested_at: string; decided_at: string | null; hr_note: string | null } | null;
+}
+export interface DetailsForm { pan: string; account: string; ifsc: string; mobile: string }
+export const blankDetails = (): DetailsForm => ({ pan: "", account: "", ifsc: "", mobile: "" });
+
+/** What is wrong with the form, or null. Anything left empty is not asked to change. */
+export function detailsProblem(f: DetailsForm): string | null {
+  const pan = f.pan.trim(), acct = f.account.trim(), ifsc = f.ifsc.trim(), mob = f.mobile.trim();
+  if (!pan && !acct && !ifsc && !mob) return "Fill in at least one thing to change.";
+  if (pan && !/^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/.test(pan)) return "A PAN is five letters, four digits and a letter, like ABCPR1234K.";
+  if ((acct || ifsc) && !(acct && ifsc)) return "Give the account number and the IFSC together.";
+  if (acct && !/^[0-9]{6,18}$/.test(acct)) return "An account number is 6 to 18 digits.";
+  if (ifsc && !/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/.test(ifsc)) return "An IFSC is four letters, a zero, then six letters or digits, like HDFC0001234.";
+  if (mob && !/^\+[1-9][0-9]{7,14}$/.test(mob)) return "Write the mobile number with the country code, like +919812345678.";
+  return null;
+}
+export function detailsBody(f: DetailsForm) {
+  const b: { pan?: string; bank_account?: { account_no: string; ifsc: string }; mobile?: string } = {};
+  if (f.pan.trim()) b.pan = f.pan.trim().toUpperCase();
+  if (f.account.trim()) b.bank_account = { account_no: f.account.trim(), ifsc: f.ifsc.trim().toUpperCase() };
+  if (f.mobile.trim()) b.mobile = f.mobile.trim();
+  return b;
+}
+/** "PAN ending 234K, bank account ending 9012 and a new mobile number" */
+export function requestWhat(r: NonNullable<MyDetails["request"]>): string {
+  const parts: string[] = [];
+  if (r.pan_last4) parts.push(`PAN ending ${r.pan_last4}`);
+  if (r.bank_last4) parts.push(`bank account ending ${r.bank_last4}`);
+  if (r.mobile) parts.push("a new mobile number");
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0] ?? "nothing";
 }
 
 /** "2 of 5 done" and whether HR is still waiting on something required. */

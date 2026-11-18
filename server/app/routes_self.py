@@ -16,9 +16,10 @@ import uuid
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel, Field
 
-from . import hr, hrdb
+from . import hr, hrdb, secretbox
 from .core import ApiError, Auth, Principal, tx
 from .routes_hr import _balance_out, _slip_out, d1
+from .routes_payroll import BankDetails
 from .routes_orders import js
 
 router = APIRouter()
@@ -271,3 +272,75 @@ def acknowledge_policy(employee_id: uuid.UUID, document_id: uuid.UUID, p: Princi
         _me(cur, employee_id)
         cur.execute("SELECT self.acknowledge(%s, %s)", (employee_id, document_id))
         return _my_doc(cur, employee_id, document_id)
+
+
+# ------------------------------------------------------------------ my own checklist items
+class TickIn(BaseModel):
+    done: bool
+
+
+@router.put(S + "/checklist/{key}", tags=["Employee self-service"])
+def tick_my_item(employee_id: uuid.UUID, key: str, body: TickIn, p: Principal = Auth):
+    """Tick or untick an item of my joining checklist that is mine to do. Items HR does, and items read from the record, are a 409."""
+    with tx(p.user_id, role=ROLE) as cur:
+        e = _me(cur, employee_id)
+        cur.execute("SELECT * FROM self.onboarding_tasks(%s)", (employee_id,))
+        t = next((x for x in cur.fetchall() if x["key"] == key), None)
+        if not t:
+            raise ApiError(404, "not_found", "Not found")
+        if not t["by_employee"] or t["auto"]:
+            raise ApiError(409, "conflict", "This item is not yours to tick", "HR ticks it, or it ticks itself when the record has what it needs.")
+        cur.execute("SELECT self.tick_task(%s, %s, %s)", (employee_id, key, body.done))
+        return _checklist(cur, e)
+
+
+# ------------------------------------------------------------------ my own details: proposed by me, applied by HR
+class DetailsIn(BaseModel):
+    pan: str | None = Field(default=None, pattern=r"^[A-Za-z]{5}[0-9]{4}[A-Za-z]$")
+    bank_account: BankDetails | None = None
+    mobile: str | None = Field(default=None, pattern=r"^\+[1-9][0-9]{7,14}$", description="With the country code, like +919812345678")
+
+
+def last4(v: str | None) -> str | None:
+    return v[-4:] if v else None
+
+
+def _details_out(cur, e: dict) -> dict:
+    cur.execute("SELECT * FROM self.detail_request(%s)", (e["employee_id"],))
+    r = cur.fetchone()
+    mine = {"pan_last4": e["pan_last4"], "bank_on_file": e["bank_on_file"], "bank_ifsc": e["bank_ifsc"], "mobile": e["mobile_e164"]}
+    if not r:
+        return {"status": "none", "current": mine, "request": None}
+    req = {"id": str(r["id"]), "pan_last4": last4(r["pan"]), "bank_last4": last4(secretbox.decrypt(r["bank_account_enc"])), "bank_ifsc": r["bank_ifsc"], "mobile": r["mobile_e164"],
+           "requested_at": r["requested_at"].isoformat(), "decided_at": r["decided_at"].isoformat() if r["decided_at"] else None, "hr_note": r["hr_note"]}
+    return {"status": r["status"], "current": mine, "request": req}
+
+
+@router.get(S + "/details", tags=["Employee self-service"])
+def my_details(employee_id: uuid.UUID, p: Principal = Auth):
+    """What is on my record (PAN's last four, whether a bank account is on file, my mobile) and the latest change I asked for."""
+    with tx(p.user_id, role=ROLE) as cur:
+        return _details_out(cur, _me(cur, employee_id))
+
+
+@router.put(S + "/details", tags=["Employee self-service"])
+def request_my_details(employee_id: uuid.UUID, body: DetailsIn, p: Principal = Auth):
+    """Ask for my PAN, salary bank account or mobile number to be changed. Nothing on my record changes until HR confirms; asking again
+    replaces a request that is still waiting. The bank account is stored encrypted."""
+    if not (body.pan or body.bank_account or body.mobile):
+        raise _bad("pan", "Give at least one thing to change")
+    with tx(p.user_id, role=ROLE) as cur:
+        e = _me(cur, employee_id)
+        cur.execute("SELECT self.request_detail_change(%s, %s, %s, %s, %s)",
+                    (employee_id, body.pan.upper() if body.pan else None, secretbox.encrypt(body.bank_account.account_no) if body.bank_account else None,
+                     body.bank_account.ifsc if body.bank_account else None, body.mobile))
+        return _details_out(cur, e)
+
+
+@router.delete(S + "/details", tags=["Employee self-service"])
+def withdraw_my_details(employee_id: uuid.UUID, p: Principal = Auth):
+    """Take back a change I asked for while it is still waiting."""
+    with tx(p.user_id, role=ROLE) as cur:
+        e = _me(cur, employee_id)
+        cur.execute("SELECT self.withdraw_detail_request(%s)", (employee_id,))
+        return _details_out(cur, e)

@@ -27,8 +27,8 @@ DEFAULT_CHECKLIST = [
     {"key": "id_proof", "title": "Identity and address proof collected", "required": True, "auto": None},
     {"key": "bank", "title": "Bank account for salary", "required": True, "auto": "bank"},
     {"key": "salary", "title": "Salary set from the CTC", "required": True, "auto": "salary"},
-    {"key": "pf_form", "title": "PF declaration (Form 11) and UAN", "required": False, "auto": None},
-    {"key": "tax_regime", "title": "Tax regime chosen by the employee", "required": False, "auto": None},
+    {"key": "pf_form", "title": "PF declaration (Form 11) and UAN", "required": False, "auto": None, "by_employee": True},
+    {"key": "tax_regime", "title": "Tax regime chosen by the employee", "required": False, "auto": None, "by_employee": True},
     {"key": "handbook", "title": "Company policies acknowledged", "required": False, "auto": "handbook"},
 ]
 DEFAULT_ONBOARDING = {"checklist": DEFAULT_CHECKLIST}
@@ -199,7 +199,7 @@ def checklist_state(tasks: list[dict], *, has_pan: bool, has_bank: bool, has_sal
     out, open_required = [], []
     for t in tasks:
         done = facts[t["auto"]] if t.get("auto") else t.get("done_at") is not None
-        out.append({"key": t["key"], "title": t["title"], "required": t["required"], "auto": t.get("auto"), "done": bool(done)})
+        out.append({"key": t["key"], "title": t["title"], "required": t["required"], "auto": t.get("auto"), "done": bool(done), "by_employee": bool(t.get("by_employee"))})
         if t["required"] and not done:
             open_required.append(t["title"])
     return out, open_required

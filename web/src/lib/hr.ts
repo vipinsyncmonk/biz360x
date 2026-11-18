@@ -7,7 +7,7 @@ import type { Employee } from "./payroll";
 
 // ------------------------------------------------------------------ policy
 export interface LeaveType { id: string; code: string; name: string; annual_quota: string | null; accrual: "yearly" | "monthly"; paid: boolean; carry_forward_max: string; encashable: boolean; is_active: boolean }
-export interface ChecklistItem { key: string; title: string; required: boolean; auto: "pan" | "bank" | "salary" | "handbook" | null }
+export interface ChecklistItem { key: string; title: string; required: boolean; auto: "pan" | "bank" | "salary" | "handbook" | null; by_employee?: boolean }
 export interface Policy {
   effective_from: string | null; is_default: boolean; next_change_on: string | null;
   salary: { basic_pct_of_ctc: string; hra_pct_of_basic: string; employer_pf_in_ctc: boolean; pf_on_full_basic: boolean; employer_esi_in_ctc: boolean; gratuity_in_ctc: boolean };
@@ -36,7 +36,7 @@ export function policyProblem(p: Policy): string | null {
 export function policyBody(p: Policy, effectiveFrom: string) {
   return { effective_from: effectiveFrom, salary: { ...p.salary, basic_pct_of_ctc: p.salary.basic_pct_of_ctc.trim(), hra_pct_of_basic: p.salary.hra_pct_of_basic.trim() },
     leave: { ...p.leave, week_off: [...p.leave.week_off].sort() }, payroll: p.payroll,
-    onboarding: { checklist: p.onboarding.checklist.map((c) => ({ key: c.key, title: c.title.trim(), required: c.required, auto: c.auto })) } };
+    onboarding: { checklist: p.onboarding.checklist.map((c) => ({ key: c.key, title: c.title.trim(), required: c.required, auto: c.auto, by_employee: !c.auto && !!c.by_employee })) } };
 }
 
 /** A key for a checklist item a person adds: lower-case letters, digits and underscores, unique in the list. */

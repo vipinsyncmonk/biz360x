@@ -65,6 +65,7 @@ class ChecklistItem(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     required: bool = True
     auto: Literal["pan", "bank", "salary", "handbook"] | None = None
+    by_employee: bool = False                  # the employee ticks this one themselves on their own page
 
 
 class OnboardingPolicy(BaseModel):
@@ -228,7 +229,7 @@ def _handbook_done(cur, entity_id, employee_id) -> bool:
 
 
 def _onboarding(cur, entity_id, e: dict) -> dict:
-    cur.execute("SELECT key, title, required, auto, done_at FROM onboarding_tasks WHERE employee_id = %s ORDER BY sort, key", (e["id"],))
+    cur.execute("SELECT key, title, required, auto, done_at, by_employee FROM onboarding_tasks WHERE employee_id = %s ORDER BY sort, key", (e["id"],))
     tasks = cur.fetchall()
     cur.execute("SELECT 1 FROM salary_structures WHERE employee_id = %s LIMIT 1", (e["id"],))
     has_salary = bool(cur.fetchone())
@@ -262,8 +263,8 @@ def onboard(entity_id: uuid.UUID, body: OnboardIn, p: Principal = Auth):
         eid = cur.fetchone()["id"]
         hrdb.insert_structure(cur, entity_id, eid, body.date_of_joining, body.ctc_annual, None)
         for i, c in enumerate(hrdb.current_policy(cur, entity_id)["onboarding"]["checklist"]):
-            cur.execute("INSERT INTO onboarding_tasks (entity_id, employee_id, key, title, required, auto, sort) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                        (entity_id, eid, c["key"], c["title"], c.get("required", True), c.get("auto"), i))
+            cur.execute("INSERT INTO onboarding_tasks (entity_id, employee_id, key, title, required, auto, sort, by_employee) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (entity_id, eid, c["key"], c["title"], c.get("required", True), c.get("auto"), i, bool(c.get("by_employee")) and not c.get("auto")))
         out = _onboarding(cur, entity_id, _employee_row(cur, entity_id, eid))
         audit(cur, entity_id, "employee.onboarding_started", "employees", eid, after={"code": code, "ctc": body.ctc_annual, "joining": body.date_of_joining})
         emit(cur, entity_id, "employee.onboarding_started", "employees", eid, {"code": code, "name": body.full_name.strip()})
@@ -793,3 +794,79 @@ def acknowledge(entity_id: uuid.UUID, document_id: uuid.UUID, body: AckIn, p: Pr
         if cur.rowcount:
             audit(cur, entity_id, "hr_policy_document.acknowledged", "hr_policy_documents", document_id, after={"employee_id": str(body.employee_id), "on": on.isoformat()})
         return _doc_out(cur, entity_id, d, full=True)
+
+
+# ================================================================== details an employee asked to change (migration 43)
+def _mask(v: str | None) -> str | None:
+    return f"…{v[-4:]}" if v else None
+
+
+def _request_out(r: dict) -> dict:
+    return {"id": str(r["id"]), "employee_id": str(r["employee_id"]), "employee_code": r["employee_code"], "employee_name": r["full_name"], "status": r["status"],
+            "requested_at": r["requested_at"].isoformat(), "decided_at": r["decided_at"].isoformat() if r["decided_at"] else None, "hr_note": r["hr_note"],
+            "pan": r["pan"], "current_pan": r["current_pan"], "bank_account": _mask(secretbox.decrypt(r["bank_account_enc"])), "bank_ifsc": r["bank_ifsc"],
+            "current_bank_account": _mask(secretbox.decrypt(r["current_bank"])), "current_bank_ifsc": r["current_ifsc"], "mobile": r["mobile_e164"], "current_mobile": r["current_mobile"]}
+
+
+DETAIL_SQL = """SELECT r.*, e.employee_code, e.full_name, e.pan AS current_pan, e.bank_account_enc AS current_bank, e.bank_ifsc AS current_ifsc, e.mobile_e164 AS current_mobile
+                  FROM employee_detail_requests r JOIN employees e ON e.id = r.employee_id WHERE r.entity_id = %s"""
+
+
+@router.get(E + "/employee-detail-requests", tags=["Payroll & HR"])
+def list_detail_requests(entity_id: uuid.UUID, p: Principal = Auth, status: Literal["pending", "confirmed", "rejected", "withdrawn"] = "pending"):
+    """Changes to PAN, bank account or mobile that employees asked for on their own page, next to what the record has now. The bank account shows its last four digits."""
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "hr:read")
+        cur.execute(DETAIL_SQL + " AND r.status = %s ORDER BY r.requested_at", (entity_id, status))
+        return {"data": [_request_out(r) for r in cur.fetchall()]}
+
+
+def _decide_request(cur, entity_id, request_id) -> dict:
+    cur.execute(DETAIL_SQL + " AND r.id = %s FOR UPDATE OF r", (entity_id, request_id))
+    r = cur.fetchone()
+    if not r:
+        raise ApiError(404, "not_found", "Not found")
+    if r["status"] != "pending":
+        raise ApiError(409, "conflict", "This request has already been decided", f"It is {r['status']}.")
+    cur.execute("SELECT app.current_user_id() AS u")
+    if cur.fetchone()["u"] == r["requested_by"]:
+        raise ApiError(403, "two_person_rule", "You cannot decide a request you raised")
+    return r
+
+
+class DetailDecision(BaseModel):
+    note: str | None = Field(default=None, max_length=300)
+
+
+@router.post(E + "/employee-detail-requests/{request_id}/confirm", tags=["Payroll & HR"])
+def confirm_detail_request(entity_id: uuid.UUID, request_id: uuid.UUID, body: DetailDecision, p: Principal = Auth):
+    """Apply what the employee asked for to their record. Check it against their documents first: the bank account is where salary is paid.
+    The person who raised the request cannot decide it."""
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "hr:write")
+        r = _decide_request(cur, entity_id, request_id)
+        cur.execute("""UPDATE employees SET pan = coalesce(%s, pan), bank_account_enc = coalesce(%s, bank_account_enc), bank_ifsc = coalesce(%s, bank_ifsc),
+                              mobile_e164 = coalesce(%s, mobile_e164) WHERE id = %s""", (r["pan"], r["bank_account_enc"], r["bank_ifsc"], r["mobile_e164"], r["employee_id"]))
+        cur.execute("""UPDATE employee_detail_requests SET status = 'confirmed', decided_by = app.current_user_id(), decided_at = now(), hr_note = %s WHERE id = %s""", (body.note, request_id))
+        audit(cur, entity_id, "employee_details.confirmed", "employees", r["employee_id"],
+              before={"pan": _mask(r["current_pan"]), "bank": _mask(secretbox.decrypt(r["current_bank"])), "mobile": r["current_mobile"]},
+              after={"pan": _mask(r["pan"]), "bank": _mask(secretbox.decrypt(r["bank_account_enc"])), "mobile": r["mobile_e164"], "request": str(request_id)})
+        emit(cur, entity_id, "employee_details.confirmed", "employees", r["employee_id"], {"request": str(request_id)})
+        cur.execute(DETAIL_SQL + " AND r.id = %s", (entity_id, request_id))
+        return _request_out(cur.fetchone())
+
+
+class DetailReject(BaseModel):
+    note: str = Field(min_length=1, max_length=300)
+
+
+@router.post(E + "/employee-detail-requests/{request_id}/reject", tags=["Payroll & HR"])
+def reject_detail_request(entity_id: uuid.UUID, request_id: uuid.UUID, body: DetailReject, p: Principal = Auth):
+    """Refuse the change, with the reason the employee will see. The record stays as it was."""
+    with tx(p.user_id) as cur:
+        require(cur, entity_id, "hr:write")
+        r = _decide_request(cur, entity_id, request_id)
+        cur.execute("""UPDATE employee_detail_requests SET status = 'rejected', decided_by = app.current_user_id(), decided_at = now(), hr_note = %s WHERE id = %s""", (body.note, request_id))
+        audit(cur, entity_id, "employee_details.rejected", "employees", r["employee_id"], after={"request": str(request_id), "note": body.note})
+        cur.execute(DETAIL_SQL + " AND r.id = %s", (entity_id, request_id))
+        return _request_out(cur.fetchone())

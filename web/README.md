@@ -84,6 +84,7 @@ Start the API first (see `CLAUDE.md`). Registry lookups are jobs, so for a compa
 | `src/lib/group.ts` | Chase targets and wording, the add-client link. Unit-tested |
 | `src/app/self` | The employee's own page, outside the company workspace: their record and joining checklist, leave (balances, apply, withdraw), payslips and the company's policies to read and acknowledge. Someone with no workspace and an employee record lands here. HR opens it from Leave, tab Employee sign-in |
 | `src/lib/taxdecl.ts`, `src/components/TaxPanels.tsx` | The tax declaration: the employee's form on `/self` (regime, deductions, send to HR, Form 16 Part B) and HR's review (Leave, tab Tax declarations: verify each figure or return it). `taxdecl.ts` is unit-tested |
+| `src/lib/self.ts` (details form), `src/components/SelfPanels.tsx` (`MyDetailsPanel`, `DetailRequestsPanel`) | The employee proposes a PAN, bank account or mobile and ticks their own checklist items; HR confirms or refuses on Leave, tab Detail changes |
 | `src/lib/self.ts`, `src/components/SelfPanels.tsx` | Which employment to show, the to-do list, the leave form and its refusals, the handbook state, HR's switch. `self.ts` is unit-tested |
 | `src/components/IntegrationsPanels.tsx` | Portal connections (connect, renew with the OTP flow, disconnect) and webhooks (add, pause, test, deliveries, delete) |
 | `src/components/SettingsForms.tsx` | The invite, advisor, certificate and API key forms |

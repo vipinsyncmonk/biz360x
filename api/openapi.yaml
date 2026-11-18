@@ -9491,6 +9491,270 @@ paths:
           $ref: '#/components/responses/TooMany'
         '409':
           $ref: '#/components/responses/Conflict'
+  /self/{employeeId}/details:
+    get:
+      tags:
+      - Employee self-service
+      operationId: getMyDetails
+      summary: What is on my record and the latest change I asked for
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyDetails'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+    put:
+      tags:
+      - Employee self-service
+      operationId: requestMyDetails
+      summary: Ask for my PAN, bank account or mobile to be changed
+      description: Nothing on my record changes until HR confirms. Asking again replaces a request that is still waiting.
+        The bank account is stored encrypted and shown back only as its last four digits.
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MyDetailsIn'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyDetails'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+    delete:
+      tags:
+      - Employee self-service
+      operationId: withdrawMyDetails
+      summary: Take back a change I asked for while it is waiting
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyDetails'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /self/{employeeId}/checklist/{key}:
+    put:
+      tags:
+      - Employee self-service
+      operationId: tickMyChecklistItem
+      summary: Tick or untick a checklist item that is mine to do
+      description: 409 for an item HR does or one read from the record.
+      parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: The caller's own employee record at one company, from `/me/employments`
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The checklist item's key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MyTick'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyChecklist'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+  /entities/{entityId}/employee-detail-requests:
+    get:
+      tags:
+      - Payroll & HR
+      operationId: listEmployeeDetailRequests
+      summary: Changes employees asked for to their PAN, bank account or mobile
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - pending
+          - confirmed
+          - rejected
+          - withdrawn
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailRequestList'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+      x-permission: hr:read
+  /entities/{entityId}/employee-detail-requests/{id}/confirm:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: confirmEmployeeDetailRequest
+      summary: Apply an employee's requested change to their record
+      description: 'Check it against their documents first: the bank account is where salary is paid. `two_person_rule` (403)
+        for the person who raised it.'
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetailDecision'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailRequest'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
+  /entities/{entityId}/employee-detail-requests/{id}/reject:
+    post:
+      tags:
+      - Payroll & HR
+      operationId: rejectEmployeeDetailRequest
+      summary: Refuse an employee's requested change
+      parameters:
+      - $ref: '#/components/parameters/EntityId'
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetailReject'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailRequest'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooMany'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      x-permission: hr:write
   /self/{employeeId}/tax-declaration:
     get:
       tags:
@@ -20746,6 +21010,9 @@ components:
             - handbook
             description: Read from the employee's record instead of ticked by a person
           - type: 'null'
+        by_employee:
+          type: boolean
+          description: The employee ticks this one themselves on their own page
       required:
       - key
       - title
@@ -20913,6 +21180,9 @@ components:
           - type: 'null'
         done:
           type: boolean
+        by_employee:
+          type: boolean
+          description: The employee ticks it themselves
     Onboarding:
       type: object
       properties:
@@ -21919,6 +22189,193 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MyPolicyDocument'
+    MyDetailsCurrent:
+      type: object
+      properties:
+        pan_last4:
+          oneOf:
+          - type: string
+          - type: 'null'
+        bank_on_file:
+          type: boolean
+        bank_ifsc:
+          oneOf:
+          - type: string
+          - type: 'null'
+        mobile:
+          oneOf:
+          - type: string
+          - type: 'null'
+    MyDetailsRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pan_last4:
+          oneOf:
+          - type: string
+          - type: 'null'
+        bank_last4:
+          oneOf:
+          - type: string
+          - type: 'null'
+        bank_ifsc:
+          oneOf:
+          - type: string
+          - type: 'null'
+        mobile:
+          oneOf:
+          - type: string
+          - type: 'null'
+        requested_at:
+          type: string
+          format: date-time
+        decided_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        hr_note:
+          oneOf:
+          - type: string
+          - type: 'null'
+    MyDetails:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - none
+          - pending
+          - confirmed
+          - rejected
+          - withdrawn
+        current:
+          $ref: '#/components/schemas/MyDetailsCurrent'
+        request:
+          oneOf:
+          - $ref: '#/components/schemas/MyDetailsRequest'
+          - type: 'null'
+    MyBankDetails:
+      type: object
+      properties:
+        account_no:
+          type: string
+          pattern: ^[0-9]{6,18}$
+        ifsc:
+          type: string
+          pattern: ^[A-Z]{4}0[A-Z0-9]{6}$
+      required:
+      - account_no
+      - ifsc
+    MyDetailsIn:
+      type: object
+      properties:
+        pan:
+          type: string
+          pattern: ^[A-Za-z]{5}[0-9]{4}[A-Za-z]$
+        bank_account:
+          $ref: '#/components/schemas/MyBankDetails'
+        mobile:
+          type: string
+          pattern: ^\+[1-9][0-9]{7,14}$
+          description: With the country code
+    MyTick:
+      type: object
+      properties:
+        done:
+          type: boolean
+      required:
+      - done
+    DetailRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        employee_id:
+          type: string
+          format: uuid
+        employee_code:
+          type: string
+        employee_name:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - confirmed
+          - rejected
+          - withdrawn
+        requested_at:
+          type: string
+          format: date-time
+        decided_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        hr_note:
+          oneOf:
+          - type: string
+          - type: 'null'
+        pan:
+          oneOf:
+          - type: string
+          - type: 'null'
+        current_pan:
+          oneOf:
+          - type: string
+          - type: 'null'
+        bank_account:
+          oneOf:
+          - type: string
+            description: Last four digits
+          - type: 'null'
+        bank_ifsc:
+          oneOf:
+          - type: string
+          - type: 'null'
+        current_bank_account:
+          oneOf:
+          - type: string
+          - type: 'null'
+        current_bank_ifsc:
+          oneOf:
+          - type: string
+          - type: 'null'
+        mobile:
+          oneOf:
+          - type: string
+          - type: 'null'
+        current_mobile:
+          oneOf:
+          - type: string
+          - type: 'null'
+    DetailRequestList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetailRequest'
+    DetailDecision:
+      type: object
+      properties:
+        note:
+          oneOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+    DetailReject:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 300
+      required:
+      - note
     TaxSection:
       type: object
       properties:

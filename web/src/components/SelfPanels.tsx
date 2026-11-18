@@ -6,8 +6,8 @@ import { LEAVE_STATUS, categoryLabel, daysText, weekOffText } from "@/lib/hr";
 import { useLoad } from "@/lib/hooks";
 import { runName } from "@/lib/payroll";
 import {
-  SELF_SERVICE, STATUS_WORDS, balanceLine, blankMyLeave, checklistLine, docState, inviteLine, leaveRefusal, myLeaveBody, myLeaveProblem, myToDo, openMyPayslipPdf, selfServiceAction,
-  upcomingHolidays, type MyDoc, type MyEmployments, type MyLeave, type MyLeaveForm, type MyRecord, type MySlip, type SelfService,
+  SELF_SERVICE, STATUS_WORDS, blankDetails, detailsBody, detailsProblem, requestWhat, balanceLine, blankMyLeave, checklistLine, docState, inviteLine, leaveRefusal, myLeaveBody, myLeaveProblem, myToDo, openMyPayslipPdf, selfServiceAction,
+  upcomingHolidays, type DetailsForm, type MyDetails, type MyDoc, type MyEmployments, type MyLeave, type MyLeaveForm, type MyRecord, type MySlip, type SelfService,
 } from "@/lib/self";
 import { ErrorNote, Loading, Pill } from "./ui";
 
@@ -44,8 +44,15 @@ export function EmploymentInvitations({ onAccepted }: { onAccepted: (employeeId:
 }
 
 /** Who I am here, and what is asked of me. */
-export function MyRecordCard({ rec }: { rec: MyRecord }) {
+export function MyRecordCard({ rec, onChanged }: { rec: MyRecord; onChanged?: () => void }) {
+  const [ticking, setTicking] = useState<string | null>(null);
+  const [tickError, setTickError] = useState<unknown>(null);
   const e = rec.employee;
+  async function tick(key: string, done: boolean) {
+    setTicking(key); setTickError(null);
+    try { unwrap(await api.PUT("/self/{employeeId}/checklist/{key}", { params: { path: { employeeId: e.employee_id, key } }, body: { done } })); onChanged?.(); }
+    catch (x) { setTickError(x); } finally { setTicking(null); }
+  }
   const todo = myToDo(rec);
   const c = rec.onboarding;
   return (
@@ -70,14 +77,118 @@ export function MyRecordCard({ rec }: { rec: MyRecord }) {
           <ul style={{ listStyle: "none", margin: "8px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             {c.checklist.map((t) => (
               <li key={t.key} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-                <span aria-hidden="true" className="mono" style={{ color: t.done ? "var(--green)" : "var(--ink-3)" }}>{t.done ? "✓" : "○"}</span>
-                <span>{t.title}<span className="sr">{t.done ? ": done" : ": not done yet"}</span>{!t.required && <span className="t13"> · optional</span>}</span>
+                {t.by_employee && !t.auto && e.status !== "exited" ? (
+                  <label style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                    <input type="checkbox" checked={t.done} disabled={ticking === t.key} onChange={(ev) => void tick(t.key, ev.target.checked)} />
+                    <span>{t.title}{!t.required && <span className="t13"> · optional</span>}<span className="t13"> · yours to tick</span></span>
+                  </label>
+                ) : (<>
+                  <span aria-hidden="true" className="mono" style={{ color: t.done ? "var(--green)" : "var(--ink-3)" }}>{t.done ? "✓" : "○"}</span>
+                  <span>{t.title}<span className="sr">{t.done ? ": done" : ": not done yet"}</span>{!t.required && <span className="t13"> · optional</span>}</span>
+                </>)}
               </li>
             ))}
           </ul>
-          <span className="t13" style={{ display: "block", marginTop: 6 }}>HR ticks these. Your PAN and bank account are entered by HR; tell them if something here is wrong.</span>
+          <span className="t13" style={{ display: "block", marginTop: 6 }}>You tick the items marked yours; HR ticks the rest. Add your PAN and bank account under My details below.</span>
+          <ErrorNote error={tickError} />
         </div>
       )}
+    </section>
+  );
+}
+
+/** My own details: I propose a PAN, salary bank account or mobile number, and HR confirms it before my record changes. */
+export function MyDetailsPanel({ employeeId, onChanged }: { employeeId: string; onChanged: () => void }) {
+  const d = useLoad(async () => unwrap(await api.GET("/self/{employeeId}/details", { params: { path: { employeeId } } })) as unknown as MyDetails, employeeId);
+  const [form, setForm] = useState<DetailsForm>(blankDetails());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [sent, setSent] = useState(false);
+  const data = d.data;
+  const problem = detailsProblem(form);
+  const touched = Object.values(form).some((v) => v.trim() !== "");
+
+  async function send() {
+    setBusy(true); setError(null); setSent(false);
+    try { unwrap(await api.PUT("/self/{employeeId}/details", { params: { path: { employeeId } }, body: detailsBody(form) as never })); setForm(blankDetails()); setSent(true); d.reload(); onChanged(); }
+    catch (e) { setError(e); } finally { setBusy(false); }
+  }
+  async function withdraw() {
+    setBusy(true); setError(null);
+    try { unwrap(await api.DELETE("/self/{employeeId}/details", { params: { path: { employeeId } } })); d.reload(); } catch (e) { setError(e); } finally { setBusy(false); }
+  }
+
+  return (
+    <section className="card" style={{ overflow: "hidden" }} aria-label="My details">
+      <div className="cardhead"><h2>My details</h2>{data && data.status === "pending" && <Pill tone="wait">With HR</Pill>}</div>
+      <div style={{ padding: "0 20px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <ErrorNote error={d.error ?? error} />
+        <span className="t13">Ask for your PAN, salary bank account or mobile number to be added or changed. Your record changes only when HR has checked it, because your salary is paid to this account.</span>
+        {data?.current && <span className="t13">On your record now: PAN {data.current.pan_last4 ? `ending ${data.current.pan_last4}` : "not on file"} · bank account {data.current.bank_on_file ? `on file${data.current.bank_ifsc ? ` (${data.current.bank_ifsc})` : ""}` : "not on file"} · mobile {data.current.mobile ?? "not on file"}</span>}
+        {data?.status === "pending" && data.request && (
+          <div role="status" style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12, display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", alignItems: "center" }}>
+            <span>Waiting for HR: {requestWhat(data.request)}.<span className="t13" style={{ display: "block" }}>Sent on {shortDate(data.request.requested_at)}. Sending again replaces it.</span></span>
+            <button type="button" className="btn" disabled={busy} onClick={() => void withdraw()}>Withdraw</button>
+          </div>
+        )}
+        {data?.status === "confirmed" && data.request && <span className="t13" role="status">HR confirmed your last change on {shortDate(data.request.decided_at)}.</span>}
+        {data?.status === "rejected" && data.request && <span role="status" style={{ fontWeight: 600 }}>HR did not accept your last change: {data.request.hr_note}</span>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }} role="group" aria-label="Details to change">
+          <div className="field"><label htmlFor="my-pan">PAN</label><input id="my-pan" className="input" maxLength={10} autoComplete="off" value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value })} /></div>
+          <div className="field"><label htmlFor="my-acct">Salary account number</label><input id="my-acct" className="input" inputMode="numeric" autoComplete="off" value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} /></div>
+          <div className="field"><label htmlFor="my-ifsc">IFSC</label><input id="my-ifsc" className="input" maxLength={11} autoComplete="off" value={form.ifsc} onChange={(e) => setForm({ ...form, ifsc: e.target.value })} /></div>
+          <div className="field"><label htmlFor="my-mobile">Mobile (with country code)</label><input id="my-mobile" className="input" inputMode="tel" placeholder="+919812345678" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} /></div>
+        </div>
+        {touched && problem && <span className="t13" role="alert">{problem}</span>}
+        {sent && <span className="t13" role="status">Sent to HR. Your record changes once they confirm it.</span>}
+        <span><button type="button" className="btn primary" disabled={busy || !!problem} onClick={() => void send()}>{busy ? "Sending…" : "Send to HR"}</button></span>
+      </div>
+    </section>
+  );
+}
+
+// ------------------------------------------------------------------ HR's side: changes employees asked for
+interface DetailRequest { id: string; employee_id: string; employee_code: string; employee_name: string; status: string; requested_at: string; pan: string | null; current_pan: string | null;
+  bank_account: string | null; bank_ifsc: string | null; current_bank_account: string | null; current_bank_ifsc: string | null; mobile: string | null; current_mobile: string | null }
+
+/** HR checks what an employee asked to change against their documents, then confirms or refuses it. */
+export function DetailRequestsPanel({ entityId }: { entityId: string }) {
+  const list = useLoad(async () => unwrap(await api.GET("/entities/{entityId}/employee-detail-requests", { params: { path: { entityId } } })).data as unknown as DetailRequest[], entityId);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const rows = list.data ?? [];
+
+  async function decide(id: string, confirm: boolean) {
+    setBusy(id); setError(null);
+    const params = { path: { entityId, id } };
+    try {
+      if (confirm) unwrap(await api.POST("/entities/{entityId}/employee-detail-requests/{id}/confirm", { params, body: {} }));
+      else unwrap(await api.POST("/entities/{entityId}/employee-detail-requests/{id}/reject", { params, body: { note: (reasons[id] ?? "").trim() } }));
+      list.reload();
+    } catch (e) { setError(e); } finally { setBusy(null); }
+  }
+  const line = (label: string, now: string | null | undefined, next: string | null) => next ? <span className="t13" style={{ display: "block" }}>{label}: {now ?? "not on file"} → <b>{next}</b></span> : null;
+
+  return (
+    <section className="card" style={{ overflow: "hidden" }} aria-label="Detail changes">
+      <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--line-2)" }}>
+        <h2 style={{ margin: 0 }}>Detail changes</h2>
+        <span className="t13">Employees can ask to add or change their PAN, salary bank account or mobile. Check it against their documents before you confirm: the bank account is where salary is paid. The bank account shows its last four digits.</span>
+      </div>
+      <div style={{ padding: "0 20px" }}><ErrorNote error={list.error ?? error} /></div>
+      {list.loading && !list.data ? <Loading what="requests" /> : rows.length === 0 ? <div className="empty">No changes waiting.</div> : rows.map((r) => (
+        <div key={r.id} style={{ ...row, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, alignItems: "start" }}>
+          <span style={{ fontWeight: 600 }}>{r.employee_name}<span className="t13 mono" style={{ display: "block", fontWeight: 400 }}>{r.employee_code} · asked on {shortDate(r.requested_at)}</span></span>
+          <span>{line("PAN", r.current_pan, r.pan)}{line("Bank account", r.current_bank_account ? `${r.current_bank_account} (${r.current_bank_ifsc})` : null, r.bank_account ? `${r.bank_account} (${r.bank_ifsc})` : null)}{line("Mobile", r.current_mobile, r.mobile)}</span>
+          <span style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <button type="button" className="btn primary" disabled={busy === r.id} aria-label={`Confirm change for ${r.employee_name}`} onClick={() => void decide(r.id, true)}>Confirm</button>
+            <label className="sr" htmlFor={`why-${r.id}`}>Reason for refusing {r.employee_name}</label>
+            <input id={`why-${r.id}`} className="input" placeholder="Reason, to refuse" maxLength={300} value={reasons[r.id] ?? ""} onChange={(e) => setReasons({ ...reasons, [r.id]: e.target.value })} />
+            <button type="button" className="btn" disabled={busy === r.id || !(reasons[r.id] ?? "").trim()} aria-label={`Refuse change for ${r.employee_name}`} onClick={() => void decide(r.id, false)}>Refuse</button>
+          </span>
+        </div>
+      ))}
     </section>
   );
 }
